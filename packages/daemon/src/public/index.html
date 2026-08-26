@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — Talent bench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="office-page">
+    <header class="appbar">
+      <a class="logo" href="/">Guild</a>
+      <nav>
+        <a class="nav-link on" href="/">Bench</a>
+        <a class="nav-link" href="/chat">訊息</a>
+        <a class="nav-link" href="/library">技能庫</a>
+        <a class="nav-link" href="/studio">Bot Studio</a>
+      </nav>
+    </header>
+    <main class="office-shell">
+      <div class="office-hud">
+        <p class="eyebrow">Guild HQ</p>
+        <h1>Talent bench</h1>
+        <p class="lede">點工位上的人就能改設定。空位去 Studio 招人。</p>
+        <p id="status" class="muted">Connecting…</p>
+      </div>
+      <div class="office">
+        <div class="wall">
+          <div class="window"></div>
+          <div class="window"></div>
+          <div class="window"></div>
+          <span class="banner">GUILD HQ</span>
+          <span class="clock">22:00</span>
+        </div>
+        <div class="nook nook-l">
+          <div class="prop plant" title="盆栽"></div>
+          <div class="prop cooler" title="飲水機"></div>
+        </div>
+        <div id="bench" class="floor"></div>
+        <div class="nook nook-r">
+          <div class="prop coffee" title="咖啡機"></div>
+          <div class="prop board" title="白板"></div>
+        </div>
+        <div class="dialogue" id="dialogue">滑過工位看介紹。點進去就能設定。</div>
+      </div>
+    </main>
+    <script>
+      function seedOf(key) {
+        let n = 0;
+        for (const ch of key) n = (n + ch.charCodeAt(0) * 17) % 997;
+        return n;
+      }
+      function shirtColor(key) {
+        const colors = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+        return colors[seedOf(key) % colors.length];
+      }
+      function px(ctx, x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+      }
+      function drawBuddy(canvas, shirt, seed) {
+        const ctx = canvas.getContext("2d");
+        canvas.width = 16;
+        canvas.height = 24;
+        ctx.imageSmoothingEnabled = false;
+        const skin = ["#f0c8a0", "#e2b184", "#c68642", "#8d5524"][seed % 4];
+        const hair = ["#2a1c12", "#c4a35a", "#1a1a1a", "#6b2d3c", "#3c4a6e"][seed % 5];
+        const outline = "#1b1510";
+        const pants = "#2a3140";
+        const style = seed % 3;
+
+        px(ctx, 4, 12, 8, 7, outline);
+        px(ctx, 5, 13, 6, 5, shirt);
+        px(ctx, 3, 13, 2, 5, shirt);
+        px(ctx, 11, 13, 2, 5, shirt);
+        px(ctx, 3, 18, 2, 1, skin);
+        px(ctx, 11, 18, 2, 1, skin);
+
+        px(ctx, 4, 4, 8, 8, outline);
+        px(ctx, 5, 5, 6, 6, skin);
+        px(ctx, 6, 7, 1, 1, outline);
+        px(ctx, 9, 7, 1, 1, outline);
+        px(ctx, 7, 9, 2, 1, "#c07070");
+
+        if (style === 0) {
+          px(ctx, 4, 3, 8, 3, hair);
+          px(ctx, 4, 5, 2, 3, hair);
+          px(ctx, 10, 5, 2, 3, hair);
+        } else if (style === 1) {
+          px(ctx, 4, 2, 8, 4, hair);
+          px(ctx, 3, 5, 2, 4, hair);
+          px(ctx, 11, 5, 2, 4, hair);
+        } else {
+          px(ctx, 5, 2, 6, 2, hair);
+          px(ctx, 4, 4, 8, 2, hair);
+          px(ctx, 7, 1, 2, 2, hair);
+        }
+
+        px(ctx, 5, 19, 3, 4, pants);
+        px(ctx, 8, 19, 3, 4, pants);
+        px(ctx, 5, 23, 3, 1, outline);
+        px(ctx, 8, 23, 3, 1, outline);
+      }
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      function stationHtml(bot) {
+        const line = bot.oneLiner || "點我設定";
+        return (
+          '<a class="station" href="/edit/' +
+          encodeURIComponent(bot.id) +
+          '" data-line="@' +
+          escapeHtml(bot.handle) +
+          " · " +
+          escapeHtml(line) +
+          '">' +
+          '<canvas class="buddy" data-handle="' +
+          escapeHtml(bot.handle) +
+          '"></canvas>' +
+          '<div class="desk-sprite"><span class="monitor"></span></div>' +
+          '<span class="nameplate">' +
+          escapeHtml(bot.name) +
+          "</span></a>"
+        );
+      }
+
+      function bindDialogue(root) {
+        const box = document.getElementById("dialogue");
+        const idle = "滑過工位看介紹。點進去就能設定。";
+        root.querySelectorAll(".station").forEach((el) => {
+          el.addEventListener("mouseenter", () => {
+            box.textContent = el.getAttribute("data-line") || idle;
+          });
+          el.addEventListener("focus", () => {
+            box.textContent = el.getAttribute("data-line") || idle;
+          });
+        });
+        root.addEventListener("mouseleave", () => {
+          box.textContent = idle;
+        });
+      }
+
+      Promise.all([fetch("/health").then((r) => r.json()), fetch("/bots").then((r) => r.json())])
+        .then(([health, bench]) => {
+          const status = document.getElementById("status");
+          status.className = "health";
+          status.textContent = health.service + " · " + health.status;
+          const root = document.getElementById("bench");
+          const bots = Array.isArray(bench) ? bench : [];
+          if (bots.length === 0) {
+            root.innerHTML =
+              '<a class="station vacant" href="/studio" data-line="到 Bot Studio 招人">' +
+              '<div class="desk-sprite"><span class="monitor"></span></div>' +
+              '<span class="nameplate">空位</span></a>';
+            bindDialogue(root);
+            return;
+          }
+          root.innerHTML =
+            bots.map(stationHtml).join("") +
+            '<a class="station vacant" href="/studio" data-line="到 Bot Studio 招人">' +
+            '<div class="desk-sprite"><span class="monitor"></span></div>' +
+            '<span class="nameplate">空位</span></a>';
+          root.querySelectorAll("canvas.buddy").forEach((canvas) => {
+            const handle = canvas.getAttribute("data-handle") || "";
+            drawBuddy(canvas, shirtColor(handle), seedOf(handle));
+          });
+          bindDialogue(root);
+        })
+        .catch((err) => {
+          document.getElementById("status").className = "error";
+          document.getElementById("status").textContent = err.message;
+        });
+    </script>
+  </body>
+</html>

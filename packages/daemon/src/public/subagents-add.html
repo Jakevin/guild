@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — 新增子代理</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="app skills-add-page" data-i18n-page="subagentsAdd">
+    <aside class="sidebar">
+      <div class="side-brand"><a class="logo" href="/">Guild</a></div>
+      <nav class="side-nav">
+        <a href="/" data-i18n="nav.chat">訊息</a>
+        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/library" data-i18n="nav.library">技能庫</a>
+        <a class="on" href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a href="/settings" data-i18n="nav.settings">模型</a>
+      </nav>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <h1 data-i18n="subagentsAdd.title">新增子代理</h1>
+      </header>
+      <div class="page-body">
+      <p class="lede" data-i18n="subagentsAdd.lede">寫成 Codex 相容的 TOML（name / description / developer_instructions）。存進 Guild 之後，對話裡 spawn 那個名字即可。也可把檔案放到 ~/.codex/agents/ 給 Codex 用。</p>
+      <p id="flash" class="muted"></p>
+
+      <div class="tabs">
+        <button type="button" class="tab on" data-tab="ai" data-i18n="skillsAdd.tabAi">AI 生成</button>
+        <button type="button" class="tab" data-tab="paste" data-i18n="subagentsAdd.tabPaste">貼上 TOML</button>
+      </div>
+
+      <section class="card tab-pane" id="pane-ai">
+        <h2 data-i18n="subagentsAdd.aiTitle">描述角色，請 AI 生成 TOML</h2>
+        <label data-i18n="subagentsAdd.what">這個子代理要做什麼？</label>
+        <input id="ai-prompt" placeholder="唯讀搜尋 auth 流程，回絕對路徑" data-i18n-placeholder="subagentsAdd.whatPh" />
+        <button type="button" class="secondary" id="ai-generate" data-i18n="subagentsAdd.gen">用 AI 生成 SUBAGENT.toml</button>
+        <label data-i18n="skillsAdd.name">名稱</label>
+        <input id="ai-name" placeholder="explorer-auth" />
+        <label>SUBAGENT.toml</label>
+        <textarea id="ai-body" class="body" placeholder='name = "explorer"&#10;description = "..."&#10;developer_instructions = """&#10;...&#10;"""'></textarea>
+        <button type="button" id="ai-save" data-i18n="subagentsAdd.save">加入子代理庫</button>
+      </section>
+
+      <section class="card tab-pane hidden" id="pane-paste">
+        <h2 data-i18n="subagentsAdd.pasteTitle">貼上現成的 Codex / Grok agent</h2>
+        <p class="muted" data-i18n="subagentsAdd.pasteHint">TOML（Codex ~/.codex/agents）或 Markdown frontmatter（Grok / Claude agents）。</p>
+        <label data-i18n="skillsAdd.name">名稱</label>
+        <input id="paste-name" placeholder="my-reviewer" />
+        <label>檔案內容</label>
+        <textarea id="paste-body" class="body"></textarea>
+        <button type="button" id="paste-save" data-i18n="subagentsAdd.save">加入子代理庫</button>
+      </section>
+      </div>
+    </section>
+    <script>
+      const flash = document.getElementById("flash");
+      function setFlash(kind, text) {
+        flash.className = kind;
+        flash.textContent = text;
+      }
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach((t) => t.classList.remove("on"));
+          tab.classList.add("on");
+          const id = tab.getAttribute("data-tab");
+          document.querySelectorAll(".tab-pane").forEach((pane) => {
+            pane.classList.toggle("hidden", pane.id !== "pane-" + id);
+          });
+        });
+      });
+      async function saveAgent(name, body) {
+        const response = await fetch("/library/subagents", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: name, body: body }),
+        });
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error || "save failed");
+        return json;
+      }
+      document.getElementById("ai-generate").addEventListener("click", async () => {
+        const prompt = document.getElementById("ai-prompt").value.trim();
+        if (!prompt) {
+          setFlash("error", t("studio.needPrompt", { kind: "subagent" }));
+          return;
+        }
+        const button = document.getElementById("ai-generate");
+        button.disabled = true;
+        try {
+          const response = await fetch("/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ kind: "subagent", prompt: prompt }),
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            setFlash("error", body.error || "generate failed");
+            return;
+          }
+          document.getElementById("ai-name").value = body.name || "";
+          document.getElementById("ai-body").value = body.body || "";
+          setFlash(
+            "health",
+            body.source === "llm"
+              ? t("studio.generated", { kind: "subagent" })
+              : t("studio.generatedLocal", { kind: "subagent" }),
+          );
+        } catch (err) {
+          setFlash("error", err.message);
+        } finally {
+          button.disabled = false;
+        }
+      });
+      document.getElementById("ai-save").addEventListener("click", async () => {
+        try {
+          const saved = await saveAgent(
+            document.getElementById("ai-name").value,
+            document.getElementById("ai-body").value,
+          );
+          setFlash("health", t("subagentsAdd.saved", { name: saved.name || saved.slug }));
+        } catch (err) {
+          setFlash("error", err.message);
+        }
+      });
+      document.getElementById("paste-save").addEventListener("click", async () => {
+        try {
+          const saved = await saveAgent(
+            document.getElementById("paste-name").value,
+            document.getElementById("paste-body").value,
+          );
+          setFlash("health", t("subagentsAdd.saved", { name: saved.name || saved.slug }));
+        } catch (err) {
+          setFlash("error", err.message);
+        }
+      });
+    </script>
+  </body>
+</html>

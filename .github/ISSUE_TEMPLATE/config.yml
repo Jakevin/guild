@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 現況 vs 設計
+    url: https://github.com/Jakevin/guild/discussions
+    about: Design docs are a target, not a changelog. Ask here before opening a wishlist issue.

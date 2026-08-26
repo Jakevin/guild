@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.vite/
+apps/desktop/src-tauri/target/
+.turbo/
+.env
+.env.*
+docs/_demo-work/

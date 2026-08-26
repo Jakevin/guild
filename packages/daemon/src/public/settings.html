@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — 模型</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="app settings-page" data-i18n-page="settings" data-section="main">
+    <script>
+      (function () {
+        var p = location.pathname;
+        document.body.setAttribute(
+          "data-section",
+          /\/keys\/?$/.test(p) ? "keys" : /\/subs\/?$/.test(p) ? "subs" : "main",
+        );
+      })();
+    </script>
+    <aside class="sidebar">
+      <div class="side-brand"><a class="logo" href="/">Guild</a></div>
+      <nav class="side-nav">
+        <a href="/" data-i18n="nav.chat">訊息</a>
+        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/library" data-i18n="nav.library">技能庫</a>
+        <a href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <div class="side-group">
+          <span class="side-group-label" data-i18n="nav.settings">模型</span>
+          <a class="side-sub" href="/settings" data-sec="main" data-i18n="settings.sub.main">主模型</a>
+          <a class="side-sub" href="/settings/subs" data-sec="subs" data-i18n="settings.sub.subs">訂閱</a>
+          <a class="side-sub" href="/settings/keys" data-sec="keys" data-i18n="settings.sub.keys">API Key</a>
+        </div>
+      </nav>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <h1 data-i18n="settings.title">模型</h1>
+        <div class="locale-switch">
+          <button type="button" data-locale="zh-Hant" data-i18n="lang.zh">中</button>
+          <button type="button" data-locale="en" data-i18n="lang.en">EN</button>
+        </div>
+      </header>
+      <div class="page-body">
+      <p id="flash" class="muted"></p>
+
+      <section class="panel" data-sec-panel="main">
+        <h2 data-i18n="settings.main">主模型</h2>
+        <p class="sub" data-i18n="settings.mainHint">新對話預設用這個。下面每一列會寫出實際在跑的模型。</p>
+        <div class="row pick">
+          <div>
+            <label data-i18n="settings.provider">供應商</label>
+            <select id="provider"></select>
+          </div>
+          <div>
+            <label data-i18n="model">模型</label>
+            <select id="model"></select>
+          </div>
+          <button type="button" id="apply" data-i18n="settings.apply">套用</button>
+        </div>
+        <p class="main-now" id="main-now"></p>
+        <div class="toggles">
+          <span>Reasoning</span>
+          <select id="reasoning">
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <label><input type="checkbox" id="fast" /> Fast</label>
+        </div>
+        <div class="panel-head" style="margin-top:1rem">
+          <h2 data-i18n="settings.aux">輔助模型</h2>
+          <button type="button" class="linkish" id="reset-aux" data-i18n="settings.auxReset">全部改回主模型</button>
+        </div>
+        <p class="sub" data-i18n="settings.auxHint">Vision、Web extract、Compression 等每一列都寫出實際模型。跟主模型時仍顯示名稱，不是空白。</p>
+        <div id="aux"></div>
+      </section>
+
+      <section class="panel" data-sec-panel="subs">
+        <h2 data-i18n="settings.accounts">連接帳號</h2>
+        <p class="sub" data-i18n="settings.accountsHint">用訂閱登入，不必複製金鑰。瀏覽器完成授權後會自動刷新 token。</p>
+        <div id="accounts"></div>
+        <div id="oauth-panel" hidden>
+          <p id="oauth-copy" data-i18n="settings.oauthCode">在瀏覽器開啟授權頁，輸入代碼：</p>
+          <p class="codebox" id="user-code"></p>
+          <p><a id="verify-link" target="_blank" rel="noreferrer" data-i18n="settings.openAuth">開啟授權頁</a></p>
+          <div id="paste-wrap" hidden>
+            <label data-i18n="settings.pasteHint">若瀏覽器在別台機器，貼上導向網址或 code</label>
+            <input id="paste-code" placeholder="http://localhost:…/?code= 或授權碼" />
+            <button type="button" id="paste-go" data-i18n="settings.finishLogin">完成登入</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="keys" data-sec-panel="keys">
+        <div class="panel-head">
+          <div>
+            <h2 data-i18n="settings.keys">API 金鑰供應商</h2>
+            <p class="sub" data-i18n="settings.keysHint">點名稱切換供應商。要加新的，點「＋ 新增」。金鑰可用 $ENV 或直接貼上。</p>
+          </div>
+        </div>
+        <div class="key-tabs" id="provider-tabs"></div>
+        <div id="providers"></div>
+      </section>
+      </div>
+    </section>
+    <dialog class="pick" id="aux-dialog">
+      <h2 id="aux-title">更改輔助模型</h2>
+      <label data-i18n="settings.provider">供應商</label>
+      <select id="aux-provider"></select>
+      <label data-i18n="model">模型</label>
+      <select id="aux-model"></select>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="aux-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="aux-save" data-i18n="settings.apply">套用</button>
+      </div>
+    </dialog>
+    <dialog class="pick add-provider" id="add-provider-dialog">
+      <h2 data-i18n="settings.addProvider">新增供應商</h2>
+      <p class="sub" data-i18n="settings.pickTemplate">選一家模板，會帶好 endpoint 與環境變數名稱。</p>
+      <div class="preset-grid" id="preset-grid"></div>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="add-provider-cancel" data-i18n="cancel">取消</button>
+      </div>
+    </dialog>
+    <script>
+      let data = {
+        default: null,
+        reasoning: "medium",
+        fast: false,
+        aux: {},
+        auxRoles: [],
+        providers: [],
+        subscriptions: [],
+        picker: [],
+        recent: [],
+        active: null,
+      };
+      let pendingOauth = null;
+      let auxRole = null;
+      let keyTab = 0;
+      const PRESETS = {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          baseUrl: "https://api.openai.com/v1",
+          api: "openai-completions",
+          apiKey: "$OPENAI_API_KEY",
+          models: [{ id: "gpt-4.1-mini", name: "GPT-4.1 mini" }, { id: "gpt-4.1", name: "GPT-4.1" }],
+        },
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          baseUrl: "https://api.anthropic.com",
+          api: "anthropic-messages",
+          apiKey: "$ANTHROPIC_API_KEY",
+          models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
+        },
+        xai: {
+          id: "xai",
+          name: "xAI",
+          baseUrl: "https://api.x.ai/v1",
+          api: "openai-completions",
+          apiKey: "$XAI_API_KEY",
+          models: [{ id: "grok-4.6", name: "Grok 4.6" }, { id: "grok-4-fast", name: "Grok 4 Fast" }],
+        },
+        openrouter: {
+          id: "openrouter",
+          name: "OpenRouter",
+          baseUrl: "https://openrouter.ai/api/v1",
+          api: "openai-completions",
+          apiKey: "$OPENROUTER_API_KEY",
+          models: [{ id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" }],
+        },
+        ollama: {
+          id: "ollama",
+          name: "Ollama",
+          baseUrl: "http://localhost:11434/v1",
+          api: "openai-completions",
+          apiKey: "ollama",
+          models: [{ id: "llama3.1:8b", name: "Llama 3.1 8B" }],
+        },
+        google: {
+          id: "google",
+          name: "Google AI Studio",
+          baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+          api: "openai-completions",
+          apiKey: "$GEMINI_API_KEY",
+          models: [{ id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" }],
+        },
+        groq: {
+          id: "groq",
+          name: "Groq",
+          baseUrl: "https://api.groq.com/openai/v1",
+          api: "openai-completions",
+          apiKey: "$GROQ_API_KEY",
+          models: [{ id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B" }],
+        },
+        deepseek: {
+          id: "deepseek",
+          name: "DeepSeek",
+          baseUrl: "https://api.deepseek.com/v1",
+          api: "openai-completions",
+          apiKey: "$DEEPSEEK_API_KEY",
+          models: [{ id: "deepseek-chat", name: "DeepSeek Chat" }],
+        },
+        custom: {
+          id: "custom",
+          name: "Custom",
+          baseUrl: "https://api.example.com/v1",
+          api: "openai-completions",
+          apiKey: "",
+          models: [{ id: "my-model", name: "" }],
+        },
+      };
+
+      function flash(kind, text) {
+        const el = document.getElementById("flash");
+        el.className = kind;
+        el.textContent = text;
+      }
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      function pickerGroups() {
+        return data.picker || [];
+      }
+      function fillSelect(sel, groups, preferred) {
+        sel.innerHTML = groups
+          .map((p) => {
+            const mark = p.ready ? "" : t("settings.notLoggedIn");
+            return (
+              '<option value="' +
+              escapeHtml(p.id) +
+              '"' +
+              (p.ready ? "" : " data-locked=1") +
+              ">" +
+              escapeHtml((p.name || p.id) + mark) +
+              "</option>"
+            );
+          })
+          .join("");
+        const pid = (preferred && preferred.provider) || groups.find((p) => p.ready)?.id || groups[0]?.id || "";
+        if (pid) sel.value = pid;
+        fillModels(sel, document.getElementById(sel.id === "provider" ? "model" : "aux-model"), preferred);
+      }
+      function fillModels(psel, msel, preferred) {
+        const group = pickerGroups().find((p) => p.id === psel.value);
+        msel.innerHTML = ((group && group.models) || [])
+          .map(
+            (m) =>
+              '<option value="' +
+              escapeHtml(m.id) +
+              '">' +
+              escapeHtml(m.name || m.id) +
+              "</option>",
+          )
+          .join("");
+        if (preferred && preferred.provider === psel.value) msel.value = preferred.model;
+      }
+      function currentRef() {
+        const provider = document.getElementById("provider").value;
+        const model = document.getElementById("model").value;
+        if (!provider || !model) return null;
+        return { provider, model };
+      }
+      function groupReady(id) {
+        return Boolean((data.picker || []).find((p) => p.id === id && p.ready));
+      }
+      function modelLabel(ref) {
+        if (!ref || !ref.provider || !ref.model) return t("settings.noDefault");
+        const group = pickerGroups().find((p) => p.id === ref.provider);
+        const hit = ((group && group.models) || []).find((m) => m.id === ref.model);
+        const name = (hit && hit.name) || ref.model;
+        const vendor = (group && group.name) || ref.provider;
+        return name + " · " + vendor;
+      }
+      function modelWire(ref) {
+        if (!ref || !ref.provider || !ref.model) return "";
+        return ref.provider + " / " + ref.model;
+      }
+      function effectiveAux(roleId) {
+        const own = (data.aux || {})[roleId];
+        if (own && own.provider && own.model) {
+          return { ref: own, inherited: false };
+        }
+        return { ref: data.default, inherited: true };
+      }
+      function uniqueId(base) {
+        const used = new Set((data.providers || []).map((p) => p.id));
+        if (!used.has(base)) return base;
+        let n = 2;
+        while (used.has(base + "-" + n)) n += 1;
+        return base + "-" + n;
+      }
+      function renderAccounts() {
+        document.getElementById("accounts").innerHTML = (data.subscriptions || [])
+          .map((s) => {
+            const badge = s.connected || s.ready
+              ? '<span class="badge">' + t("settings.connected") + "</span>"
+              : s.pending
+                ? '<span class="badge wait">' + t("settings.pending") + "</span>"
+                : "";
+            const actions = s.connected || s.ready
+              ? '<button type="button" class="secondary" data-logout="' + s.id + '">' + t("settings.logout") + "</button>"
+              : '<button type="button" data-login="' + s.id + '">' + t("settings.connect") + "</button>";
+            return (
+              '<div class="account"><div class="account-copy"><strong>' +
+              escapeHtml(s.name) +
+              badge +
+              "</strong><span class='sub'>" +
+              escapeHtml(s.hint || "") +
+              (s.importHint ? " · " + escapeHtml(s.importHint) : "") +
+              "</span>" +
+              (s.loginHint ? '<p class="warn">' + escapeHtml(s.loginHint) + "</p>" : "") +
+              "</div><div class='account-act'>" +
+              actions +
+              "</div></div>"
+            );
+          })
+          .join("");
+      }
+      function renderPicker() {
+        fillSelect(document.getElementById("provider"), pickerGroups(), data.default);
+        document.getElementById("reasoning").value = data.reasoning || "medium";
+        document.getElementById("fast").checked = Boolean(data.fast);
+        const mainNow = document.getElementById("main-now");
+        if (mainNow) {
+          mainNow.textContent = t("settings.currentMain", {
+            name: modelLabel(data.default),
+          });
+        }
+        const rows = (data.auxRoles || [])
+          .map((role) => {
+            const eff = effectiveAux(role.id);
+            const revert = eff.inherited
+              ? ""
+              : '<button type="button" class="linkish" data-aux-main="' +
+                role.id +
+                '">' +
+                t("settings.useMain") +
+                "</button>";
+            const source = eff.inherited
+              ? '<span class="badge">' + t("settings.inherited") + "</span>"
+              : '<span class="badge wait">' + t("settings.override") + "</span>";
+            const wire = modelWire(eff.ref);
+            return (
+              '<div class="aux-row">' +
+              '<div class="aux-task"><strong>' +
+              escapeHtml(role.name) +
+              '</strong><span class="tag">' +
+              escapeHtml(role.hint) +
+              "</span></div>" +
+              '<div class="aux-now"><b>' +
+              escapeHtml(modelLabel(eff.ref)) +
+              "</b>" +
+              (wire ? '<span class="id">' + escapeHtml(wire) + "</span>" : "") +
+              "</div>" +
+              '<div class="aux-act">' +
+              source +
+              revert +
+              '<button type="button" class="linkish" data-aux-change="' +
+              role.id +
+              '">' +
+              t("settings.change") +
+              "</button></div></div>"
+            );
+          })
+          .join("");
+        document.getElementById("aux").innerHTML =
+          '<div class="aux-head-row"><span>' +
+          t("settings.task") +
+          "</span><span>" +
+          t("settings.using") +
+          "</span><span></span></div>" +
+          rows;
+      }
+      function storedBadge(p) {
+        if (p.stored === "env") return '<span class="badge">env</span>';
+        if (p.stored === "literal") return '<span class="badge">' + t("settings.filled") + "</span>";
+        return '<span class="badge empty">' + t("settings.emptyKey") + "</span>";
+      }
+      function cardHtml(p, index) {
+        const models = (p.models || [])
+          .map((m, i) => {
+            return (
+              '<div class="model-row"><input data-p="' + index + '" data-m="' + i +
+              '" data-f="id" value="' + escapeHtml(m.id || "") +
+              '" placeholder="model id" /><input data-p="' + index + '" data-m="' + i +
+              '" data-f="name" value="' + escapeHtml(m.name || "") +
+              '" placeholder="' + t("settings.displayName") + '" /><button type="button" class="secondary" data-del-model="' +
+              index + ":" + i + '">×</button></div>'
+            );
+          })
+          .join("");
+        return (
+          '<div class="provider-card" data-index="' + index + '">' +
+          '<div class="card-head"><h3>' + escapeHtml(p.name || p.id) + storedBadge(p) +
+          '</h3><button type="button" class="secondary" data-del="' + index + '">' + t("settings.delete") + "</button></div>" +
+          "<label>ID</label><input data-p=\"" + index + '" data-f="id" value="' + escapeHtml(p.id) + '" />' +
+          "<label>" + t("settings.name") + "</label><input data-p=\"" + index + '" data-f="name" value="' + escapeHtml(p.name || "") + '" />' +
+          "<label>baseUrl</label><input data-p=\"" + index + '" data-f="baseUrl" value="' + escapeHtml(p.baseUrl || "") + '" />' +
+          '<div class="row-2"><div><label>API</label><select data-p="' + index + '" data-f="api">' +
+          '<option value="openai-completions"' + (p.api !== "anthropic-messages" && p.api !== "openai-responses" ? " selected" : "") + ">openai-completions</option>" +
+          '<option value="anthropic-messages"' + (p.api === "anthropic-messages" ? " selected" : "") + ">anthropic-messages</option>" +
+          '<option value="openai-responses"' + (p.api === "openai-responses" ? " selected" : "") + ">openai-responses</option></select></div>" +
+          '<div><label>API key</label><input type="password" data-p="' + index + '" data-f="apiKey" value="' +
+          escapeHtml(p.stored === "literal" ? "" : p.apiKey || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div></div>' +
+          "<label>" + t("model") + "</label>" + models +
+          '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>" +
+          '<div class="card-foot"><p class="hint">' + t("settings.saveKeyHint") + "</p>" +
+          '<button type="button" data-save-keys="' + index + '">' +
+          t("settings.saveKey", { name: p.name || p.id || t("settings.thisProvider") }) +
+          "</button></div></div>"
+        );
+      }
+      function flushVisibleCard() {
+        const card = document.querySelector(".provider-card");
+        if (!card) return;
+        const index = Number(card.getAttribute("data-index"));
+        const p = (data.providers || [])[index];
+        if (!p) return;
+        const id = card.querySelector('[data-f="id"]').value.trim();
+        if (id) p.id = id;
+        p.name = card.querySelector('[data-f="name"]').value.trim();
+        p.baseUrl = card.querySelector('[data-f="baseUrl"]').value.trim();
+        p.api = card.querySelector('[data-f="api"]').value;
+        const key = card.querySelector('[data-f="apiKey"]').value.trim();
+        if (key) p.apiKey = key;
+        const models = [];
+        card.querySelectorAll(".model-row").forEach((row) => {
+          const mid = row.querySelector('[data-f="id"]').value.trim();
+          if (!mid) return;
+          models.push({
+            id: mid,
+            name: row.querySelector('[data-f="name"]').value.trim(),
+          });
+        });
+        p.models = models;
+      }
+      function collectKeys() {
+        flushVisibleCard();
+        const providers = {};
+        (data.providers || []).forEach((p) => {
+          if (!p.id) return;
+          providers[p.id] = {
+            name: p.name || "",
+            baseUrl: p.baseUrl || "",
+            api: p.api || "openai-completions",
+            apiKey: p.apiKey || "",
+            models: p.models || [],
+          };
+        });
+        return providers;
+      }
+      function presetLabel(key, preset) {
+        return key === "custom" ? t("settings.custom") : (preset && preset.name) || key;
+      }
+      function presetHost(url) {
+        try {
+          return new URL(url).host;
+        } catch (err) {
+          return "";
+        }
+      }
+      function renderPresetGrid() {
+        const grid = document.getElementById("preset-grid");
+        if (!grid) return;
+        grid.innerHTML = Object.keys(PRESETS)
+          .map((key) => {
+            const preset = PRESETS[key];
+            const host = key === "custom" ? "" : presetHost(preset.baseUrl);
+            return (
+              '<button type="button" data-preset="' +
+              escapeHtml(key) +
+              '">' +
+              escapeHtml(presetLabel(key, preset)) +
+              (host ? '<span class="hint">' + escapeHtml(host) + "</span>" : "") +
+              "</button>"
+            );
+          })
+          .join("");
+      }
+      function addFromPreset(key) {
+        flushVisibleCard();
+        const preset = PRESETS[key] || PRESETS.custom;
+        const copy = JSON.parse(JSON.stringify(preset));
+        copy.id = uniqueId(copy.id);
+        copy.name = presetLabel(key, copy);
+        copy.stored = copy.apiKey
+          ? String(copy.apiKey).startsWith("$")
+            ? "env"
+            : "empty"
+          : "empty";
+        data.providers.push(copy);
+        keyTab = data.providers.length - 1;
+        render();
+      }
+      function renderKeys() {
+        const list = data.providers || [];
+        if (keyTab < 0 || keyTab >= list.length) keyTab = Math.max(0, list.length - 1);
+        const chips = list
+          .map((p, i) => {
+            return (
+              '<button type="button" class="key-tab' +
+              (i === keyTab ? " on" : "") +
+              '" data-key-tab="' +
+              i +
+              '">' +
+              escapeHtml(p.name || p.id) +
+              storedBadge(p) +
+              "</button>"
+            );
+          })
+          .join("");
+        document.getElementById("provider-tabs").innerHTML =
+          chips +
+          '<button type="button" class="key-tab add" data-add-provider="1">' +
+          t("settings.addChip") +
+          "</button>";
+        const current = list[keyTab];
+        document.getElementById("providers").innerHTML = current
+          ? cardHtml(current, keyTab)
+          : '<p class="sub">' + t("settings.noProviders") + "</p>";
+      }
+      function settingsSection() {
+        const path = location.pathname.replace(/\/$/, "") || "/";
+        if (path.endsWith("/keys")) return "keys";
+        if (path.endsWith("/subs")) return "subs";
+        return "main";
+      }
+      function showSection() {
+        const sec = settingsSection();
+        document.body.setAttribute("data-section", sec);
+        document.querySelectorAll(".side-sub").forEach((a) => {
+          a.classList.toggle("on", a.getAttribute("data-sec") === sec);
+        });
+        const titles = {
+          main: t("settings.sub.main"),
+          subs: t("settings.sub.subs"),
+          keys: t("settings.sub.keys"),
+        };
+        const h1 = document.querySelector(".pane-head h1");
+        if (h1) h1.textContent = titles[sec] || t("settings.title");
+        document.title = "Guild — " + (titles[sec] || t("settings.title"));
+      }
+      function render() {
+        showSection();
+        renderAccounts();
+        renderPicker();
+        renderKeys();
+        renderPresetGrid();
+      }
+      async function load() {
+        const res = await fetch("/settings/models");
+        data = await res.json();
+        render();
+      }
+      async function applyPicker(extra) {
+        const ref = currentRef();
+        if (ref && !groupReady(ref.provider)) {
+          flash("error", t("settings.notReady"));
+          return;
+        }
+        const res = await fetch("/settings/models", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            default: ref,
+            reasoning: document.getElementById("reasoning").value,
+            fast: document.getElementById("fast").checked,
+            aux: extra && extra.aux !== undefined ? extra.aux : data.aux || {},
+          }),
+        });
+        const body = await res.json();
+        if (!res.ok) { flash("error", body.error || "apply failed"); return; }
+        data = body;
+        render();
+        flash("health", t("settings.applied", { name: ref ? ref.provider + " / " + ref.model : t("settings.appliedDefault") }));
+      }
+      document.getElementById("provider").addEventListener("change", () => {
+        fillModels(
+          document.getElementById("provider"),
+          document.getElementById("model"),
+          data.default,
+        );
+      });
+      document.getElementById("apply").addEventListener("click", () => applyPicker());
+      document.getElementById("reset-aux").addEventListener("click", async () => {
+        await applyPicker({ aux: {} });
+      });
+      document.getElementById("aux").addEventListener("click", async (event) => {
+        const main = event.target.closest("[data-aux-main]");
+        if (main) {
+          const role = main.getAttribute("data-aux-main");
+          const aux = { ...(data.aux || {}) };
+          aux[role] = null;
+          await applyPicker({ aux });
+          return;
+        }
+        const change = event.target.closest("[data-aux-change]");
+        if (!change) return;
+        auxRole = change.getAttribute("data-aux-change");
+        const role = (data.auxRoles || []).find((r) => r.id === auxRole);
+        document.getElementById("aux-title").textContent = t("settings.auxChangeName", { name: (role && role.name) || auxRole });
+        fillSelect(
+          document.getElementById("aux-provider"),
+          pickerGroups(),
+          (data.aux || {})[auxRole] || data.default,
+        );
+        document.getElementById("aux-dialog").showModal();
+      });
+      document.getElementById("aux-provider").addEventListener("change", () => {
+        fillModels(
+          document.getElementById("aux-provider"),
+          document.getElementById("aux-model"),
+          (data.aux || {})[auxRole],
+        );
+      });
+      document.getElementById("aux-cancel").addEventListener("click", () => {
+        document.getElementById("aux-dialog").close();
+      });
+      document.getElementById("aux-save").addEventListener("click", async () => {
+        const provider = document.getElementById("aux-provider").value;
+        const model = document.getElementById("aux-model").value;
+        if (!groupReady(provider)) {
+          flash("error", t("settings.connectFirst"));
+          return;
+        }
+        const aux = { ...(data.aux || {}) };
+        aux[auxRole] = { provider, model };
+        document.getElementById("aux-dialog").close();
+        await applyPicker({ aux });
+      });
+      document.getElementById("accounts").addEventListener("click", async (event) => {
+        const login = event.target.closest("[data-login]");
+        const logout = event.target.closest("[data-logout]");
+        if (login) {
+          const id = login.getAttribute("data-login");
+          const res = await fetch("/settings/oauth/" + id + "/login", { method: "POST" });
+          const body = await res.json();
+          if (!res.ok) { flash("error", body.error || "login failed"); return; }
+          pendingOauth = id;
+          showOauthPanel(body);
+          flash("muted", t("settings.waitingAuth"));
+          poll(id);
+        }
+        if (logout) {
+          await fetch("/settings/oauth/" + logout.getAttribute("data-logout") + "/logout", { method: "POST" });
+          await load();
+        }
+      });
+      function showOauthPanel(body) {
+        const panel = document.getElementById("oauth-panel");
+        panel.hidden = false;
+        const code = body.userCode || "";
+        document.getElementById("user-code").textContent = code;
+        document.getElementById("user-code").hidden = !code;
+        document.getElementById("oauth-copy").textContent = code
+          ? t("settings.oauthCode")
+          : t("settings.oauthBrowser");
+        const link = document.getElementById("verify-link");
+        link.href = body.verificationUri || "#";
+        const paste = document.getElementById("paste-wrap");
+        paste.hidden = body.flow !== "pkce";
+        document.getElementById("paste-code").value = "";
+      }
+      async function poll(id) {
+        const res = await fetch("/settings/oauth/" + id + "/poll", { method: "POST" });
+        const body = await res.json();
+        if (body.connected || body.ready) {
+          document.getElementById("oauth-panel").hidden = true;
+          flash("health", t("settings.connectedId", { id: id }));
+          await load();
+          return;
+        }
+        if (body.error) {
+          flash("error", body.error);
+          return;
+        }
+        if (body.pending) setTimeout(() => poll(id), 3000);
+      }
+      document.getElementById("paste-go").addEventListener("click", async () => {
+        if (!pendingOauth) return;
+        const res = await fetch("/settings/oauth/" + pendingOauth + "/complete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: document.getElementById("paste-code").value }),
+        });
+        const body = await res.json();
+        if (!res.ok) { flash("error", body.error || "complete failed"); return; }
+        document.getElementById("oauth-panel").hidden = true;
+        flash("health", t("settings.connectedId", { id: pendingOauth }));
+        await load();
+      });
+      document.getElementById("provider-tabs").addEventListener("click", (event) => {
+        if (event.target.closest("[data-add-provider]")) {
+          renderPresetGrid();
+          document.getElementById("add-provider-dialog").showModal();
+          return;
+        }
+        const tab = event.target.closest("[data-key-tab]");
+        if (!tab) return;
+        flushVisibleCard();
+        keyTab = Number(tab.getAttribute("data-key-tab"));
+        renderKeys();
+      });
+      document.getElementById("preset-grid").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-preset]");
+        if (!btn) return;
+        addFromPreset(btn.getAttribute("data-preset"));
+        document.getElementById("add-provider-dialog").close();
+      });
+      document.getElementById("add-provider-cancel").addEventListener("click", () => {
+        document.getElementById("add-provider-dialog").close();
+      });
+      async function saveProviderCard(index) {
+        const card = document.querySelector('.provider-card[data-index="' + index + '"]');
+        const label = card
+          ? (card.querySelector('[data-f="name"]')?.value ||
+              card.querySelector('[data-f="id"]')?.value ||
+              t("settings.thisProvider")).trim()
+          : t("settings.thisProvider");
+        const res = await fetch("/settings/models", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ providers: collectKeys() }),
+        });
+        const body = await res.json();
+        if (!res.ok) { flash("error", body.error || "save failed"); return; }
+        data = body;
+        render();
+        flash("health", t("settings.savedKeyFlash", { name: label }));
+      }
+      document.getElementById("providers").addEventListener("click", (event) => {
+        const el = event.target;
+        if (el.closest("[data-save-keys]")) {
+          const i = Number(el.closest("[data-save-keys]").getAttribute("data-save-keys"));
+          saveProviderCard(i);
+          return;
+        }
+        if (el.closest("[data-del]")) {
+          const i = Number(el.closest("[data-del]").getAttribute("data-del"));
+          data.providers.splice(i, 1);
+          if (keyTab >= data.providers.length) keyTab = Math.max(0, data.providers.length - 1);
+          render();
+        }
+        if (el.closest("[data-add-model]")) {
+          flushVisibleCard();
+          const i = Number(el.closest("[data-add-model]").getAttribute("data-add-model"));
+          data.providers[i].models.push({ id: "", name: "" });
+          render();
+        }
+        if (el.closest("[data-del-model]")) {
+          flushVisibleCard();
+          const [pi, mi] = el.closest("[data-del-model]").getAttribute("data-del-model").split(":").map(Number);
+          data.providers[pi].models.splice(mi, 1);
+          render();
+        }
+      });
+      window.addEventListener("guild-locale", render);
+      load().catch((err) => flash("error", err.message));
+    </script>
+  </body>
+</html>

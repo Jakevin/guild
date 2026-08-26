@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — 追加技能</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="app skills-add-page" data-i18n-page="skillsAdd">
+    <aside class="sidebar">
+      <div class="side-brand"><a class="logo" href="/">Guild</a></div>
+      <nav class="side-nav">
+        <a href="/" data-i18n="nav.chat">訊息</a>
+        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a class="on" href="/library" data-i18n="nav.library">技能庫</a>
+        <a href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a href="/settings" data-i18n="nav.settings">模型</a>
+      </nav>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <h1 data-i18n="skillsAdd.title">追加技能</h1>
+      </header>
+      <div class="page-body">
+      <p class="lede" data-i18n="skillsAdd.lede">這裡才是安裝入口。裝進技能庫之後，再到酒吧點每個人，各自勾選要用的技能。</p>
+      <p id="flash" class="muted"></p>
+
+      <div class="tabs">
+        <button type="button" class="tab on" data-tab="ai" data-i18n="skillsAdd.tabAi">AI 生成</button>
+        <button type="button" class="tab" data-tab="url" data-i18n="skillsAdd.tabUrl">網址下載</button>
+        <button type="button" class="tab" data-tab="github" data-i18n="skillsAdd.tabGh">GitHub repo</button>
+      </div>
+
+      <section class="card tab-pane" id="pane-ai">
+        <h2 data-i18n="skillsAdd.aiTitle">自行輸入，請 AI 生成</h2>
+        <label data-i18n="skillsAdd.what">這項技能要做什麼？</label>
+        <input id="ai-prompt" placeholder="審查 PR 的安全風險，並寫成可執行的修法" data-i18n-placeholder="skillsAdd.whatPh" />
+        <button type="button" class="secondary" id="ai-generate" data-i18n="skillsAdd.gen">用 AI 生成 SKILL.md</button>
+        <label data-i18n="skillsAdd.name">名稱</label>
+        <input id="ai-name" placeholder="Security Review" />
+        <label>SKILL.md</label>
+        <textarea id="ai-body" class="body" placeholder="---&#10;name: ...&#10;description: ...&#10;---"></textarea>
+        <button type="button" id="ai-save" data-i18n="skillsAdd.save">加入技能庫</button>
+      </section>
+
+      <section class="card tab-pane hidden" id="pane-url">
+        <h2 data-i18n="skillsAdd.urlTitle">從網上下載</h2>
+        <p class="muted" data-i18n="skillsAdd.urlHint">貼 SKILL.md 的直接連結（raw 檔或 GitHub blob）。</p>
+        <label>URL</label>
+        <input id="url-input" placeholder="https://raw.githubusercontent.com/org/repo/main/SKILL.md" />
+        <button type="button" id="url-import" data-i18n="skillsAdd.urlImport">下載並加入</button>
+      </section>
+
+      <section class="card tab-pane hidden" id="pane-github">
+        <h2 data-i18n="skillsAdd.ghTitle">載入 GitHub repo</h2>
+        <p class="muted" data-i18n="skillsAdd.ghHint">掃描 repo 內所有 SKILL.md。例：owner/repo 或完整 GitHub 網址。</p>
+        <label>Repo</label>
+        <input id="github-input" placeholder="anthropics/skills" />
+        <button type="button" id="github-import" data-i18n="skillsAdd.ghImport">掃描並加入</button>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="skillsAdd.recent">剛裝進技能庫的會出現在下面</h2>
+        <p class="muted" data-i18n-html="skillsAdd.recentHint">完整清單在 <a href="/library">技能庫</a>。要讓某人帶上，到 <a href="/studio">酒吧</a> 點那個人勾選。</p>
+        <ul id="library-skills" class="plain-list"></ul>
+      </section>
+      </div>
+    </section>
+    <script>
+      const flash = document.getElementById("flash");
+      function setFlash(kind, text) {
+        flash.className = kind;
+        flash.textContent = text;
+      }
+
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach((t) => t.classList.remove("on"));
+          tab.classList.add("on");
+          const id = tab.getAttribute("data-tab");
+          document.querySelectorAll(".tab-pane").forEach((pane) => pane.classList.add("hidden"));
+          document.getElementById("pane-" + id).classList.remove("hidden");
+        });
+      });
+
+      document.getElementById("ai-generate").addEventListener("click", async () => {
+        const prompt = document.getElementById("ai-prompt").value.trim();
+        if (!prompt) {
+          setFlash("error", t("skillsAdd.needDesc"));
+          return;
+        }
+        const button = document.getElementById("ai-generate");
+        button.disabled = true;
+        try {
+          const response = await fetch("/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ kind: "skill", prompt }),
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            setFlash("error", body.error || "generate failed");
+            return;
+          }
+          document.getElementById("ai-name").value = body.name;
+          document.getElementById("ai-body").value = body.body;
+          setFlash(
+            "health",
+            body.source === "llm" ? t("skillsAdd.generated") : t("skillsAdd.generatedLocal"),
+          );
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      document.getElementById("ai-save").addEventListener("click", async () => {
+        const name = document.getElementById("ai-name").value.trim();
+        const body = document.getElementById("ai-body").value.trim();
+        if (!name || !body) {
+          setFlash("error", t("skillsAdd.needName"));
+          return;
+        }
+        const response = await fetch("/library/skills", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, body, description: name }),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          setFlash("error", json.error || "save failed");
+          return;
+        }
+        setFlash("health", t("skillsAdd.added", { name: json.name }));
+        loadLibrary();
+      });
+
+      async function importSkills(payload) {
+        const response = await fetch("/library/skills/import", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          setFlash("error", json.error || "import failed");
+          return;
+        }
+        const names = (json.imported || []).map((item) => item.name).join("、");
+        setFlash("health", t("skillsAdd.imported", { n: (json.imported || []).length, names: names }));
+        loadLibrary();
+      }
+
+      document.getElementById("url-import").addEventListener("click", () => {
+        const url = document.getElementById("url-input").value.trim();
+        if (!url) {
+          setFlash("error", t("skillsAdd.needUrl"));
+          return;
+        }
+        importSkills({ source: "url", url });
+      });
+
+      async function loadLibrary() {
+        const list = document.getElementById("library-skills");
+        try {
+          const skills = await fetch("/library/skills").then((r) => r.json());
+          if (!Array.isArray(skills) || skills.length === 0) {
+            list.innerHTML = '<li class="muted">' + t("skillsAdd.empty") + "</li>";
+            return;
+          }
+          list.innerHTML = skills
+            .map((skill) => {
+              const source = skill.source === "catalog" ? t("skillsAdd.catalog") : t("library.user");
+              return (
+                "<li><strong>" +
+                skill.name +
+                '</strong> <span class="muted">· ' +
+                source +
+                "</span></li>"
+              );
+            })
+            .join("");
+        } catch (err) {
+          list.innerHTML = '<li class="muted">' + err.message + "</li>";
+        }
+      }
+      loadLibrary();
+
+      document.getElementById("github-import").addEventListener("click", () => {
+        const repo = document.getElementById("github-input").value.trim();
+        if (!repo) {
+          setFlash("error", t("skillsAdd.needRepo"));
+          return;
+        }
+        importSkills({ source: "github", repo });
+      });
+      window.addEventListener("guild-locale", loadLibrary);
+    </script>
+  </body>
+</html>

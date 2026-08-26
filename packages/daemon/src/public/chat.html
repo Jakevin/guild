@@ -1,0 +1,4015 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — 訊息</title>
+    <link rel="stylesheet" href="/chat.css" />
+    <script src="/i18n.js"></script>
+    <script src="/md.js"></script>
+  </head>
+  <body class="grok" data-i18n-page="chat">
+    <aside class="sidebar">
+      <div class="side-top">
+        <input class="search" id="filter" placeholder="搜尋" data-i18n-placeholder="search" />
+      </div>
+      <div class="section-h">
+        <span data-i18n="channels">頻道</span>
+        <button type="button" class="add-ch" id="toggle-create" title="新頻道" data-i18n-title="newChannel">+</button>
+      </div>
+      <form class="create-row" id="create-row">
+        <input id="new-channel" placeholder="新頻道名稱" data-i18n-placeholder="newChannelName" />
+        <button type="submit" data-i18n="create">建立</button>
+      </form>
+      <ul class="navlist" id="channels"></ul>
+      <div class="section-h" data-i18n="dms">私訊</div>
+      <ul class="navlist" id="dms"></ul>
+      <div class="side-foot">
+        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/library" data-i18n="nav.library">技能庫</a>
+        <a href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a href="/settings" data-i18n="nav.settings">模型</a>
+      </div>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <button type="button" class="head-id" id="head-id">
+          <span class="avatar sm" id="head-av">G</span>
+          <h1 id="title">general</h1>
+        </button>
+        <div class="meta" id="subtitle"></div>
+        <div class="head-actions">
+          <button type="button" class="traj-btn" id="traj-btn" title="Trajectory" data-i18n="trace" data-i18n-title="trace">Trajectory</button>
+        <div class="members-wrap" id="members-wrap" hidden>
+          <button type="button" class="members-btn" id="members-btn" title="成員" data-i18n-title="members">
+            <span class="members-stack" id="members-stack"></span>
+            <span class="members-count" id="members-count"></span>
+          </button>
+          <div class="members-pop" id="members-pop" hidden>
+            <div class="members-sec" data-i18n="members.in">在頻道裡</div>
+            <div id="members-in"></div>
+            <div class="members-sec" data-i18n="members.out">不在頻道中</div>
+            <div id="members-out"></div>
+          </div>
+        </div>
+        </div>
+      </header>
+      <div class="thread" id="thread"></div>
+      <form class="composer" id="composer">
+        <div class="composer-card">
+          <div class="mention-pop" id="mention-pop" hidden>
+            <div id="mention-results"></div>
+          </div>
+          <div class="attach-sheet" id="attach-sheet" hidden>
+            <div class="attach-sheet-bar">
+              <button type="button" class="attach-back" id="attach-back">‹</button>
+              <span id="attach-sheet-title" data-i18n="add">加入</span>
+            </div>
+            <input class="attach-q" id="attach-q" placeholder="搜尋" data-i18n-placeholder="search" autocomplete="off" />
+            <div class="attach-path" id="attach-path" hidden></div>
+            <div id="attach-sheet-body"></div>
+          </div>
+          <div class="composer-reply" id="composer-reply" hidden>
+            <span class="composer-reply-arrow" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M4 5.5H8.2a3.3 3.3 0 1 1 0 6.6H7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                <path d="M6 3.5 4 5.5 6 7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="composer-reply-text" id="composer-reply-text"></span>
+            <button type="button" class="composer-reply-clear" id="composer-reply-clear" title="取消回覆" aria-label="取消回覆" data-i18n-title="cancelReply" data-i18n-aria="cancelReply">×</button>
+          </div>
+          <div class="attach-chips" id="attach-chips" hidden></div>
+          <div class="queue-chips" id="queue-chips" hidden></div>
+          <div class="composer-steer" id="composer-steer" hidden></div>
+          <div class="composer-scroll">
+            <textarea id="draft" rows="1" placeholder="Ask anything" data-i18n-placeholder="askAnything"></textarea>
+          </div>
+          <div class="composer-row">
+            <div class="composer-tools">
+              <div class="attach-wrap">
+                <button type="button" class="composer-add" id="composer-plus" title="加入" data-i18n-title="add">+</button>
+                <div class="attach-pop" id="attach-pop" hidden>
+                  <button type="button" class="attach-item" data-attach="upload"><span class="attach-ico">📎</span><span data-i18n="attach.upload">上傳檔案</span></button>
+                  <button type="button" class="attach-item" data-attach="files"><span class="attach-ico">&lt;/&gt;</span><span data-i18n="attach.files">檔案</span></button>
+                  <button type="button" class="attach-item" data-attach="dirs"><span class="attach-ico">📁</span><span data-i18n="attach.dirs">資料夾</span></button>
+                  <button type="button" class="attach-item" data-attach="skills"><span class="attach-ico">✎</span><span data-i18n="attach.skills">技能</span></button>
+                  <button type="button" class="attach-item" data-attach="conv"><span class="attach-ico">💬</span><span data-i18n="attach.conv">對話</span></button>
+                  <button type="button" class="attach-item" data-attach="git"><span class="attach-ico">⑂</span><span data-i18n="attach.git">Git</span></button>
+                  <button type="button" class="attach-item" data-attach="rules"><span class="attach-ico">☰</span><span data-i18n="attach.rules">規則</span></button>
+                  <button type="button" class="attach-item" data-attach="term"><span class="attach-ico">&gt;_</span><span data-i18n="attach.term">終端</span></button>
+                  <button type="button" class="attach-item" data-attach="tree"><span class="attach-ico">🗺</span><span data-i18n="attach.tree">工作區</span></button>
+                  <button type="button" class="attach-item" data-attach="slash"><span class="attach-ico">/</span><span data-i18n="attach.slash">指令</span></button>
+                </div>
+              </div>
+              <input type="file" id="attach-upload" hidden multiple />
+              <div class="model-wrap" hidden>
+                <button type="button" class="model-btn" id="model-btn" title="切換模型" data-i18n-title="switchModel">
+                  <span id="model-btn-label">本地</span>
+                  <span class="model-caret" aria-hidden>▾</span>
+                </button>
+                <div class="model-pop" id="model-pop" hidden>
+                  <div class="model-nav">
+                    <button type="button" class="model-row on" data-sheet="models">
+                      <span data-i18n="model">模型</span>
+                      <span class="model-row-val" id="model-row-model">本地</span>
+                      <span class="model-row-chev" aria-hidden>›</span>
+                    </button>
+                    <button type="button" class="model-row" data-sheet="reasoning">
+                      <span data-i18n="reasoning">推理強度</span>
+                      <span class="model-row-val" id="model-row-reason">中</span>
+                      <span class="model-row-chev" aria-hidden>›</span>
+                    </button>
+                    <button type="button" class="model-row" data-sheet="speed">
+                      <span data-i18n="speed">速度</span>
+                      <span class="model-row-val" id="model-row-speed">標準</span>
+                      <span class="model-row-chev" aria-hidden>›</span>
+                    </button>
+                    <button type="button" class="model-row" data-sheet="advanced">
+                      <span data-i18n="advanced">進階</span>
+                      <span class="model-row-chev" aria-hidden>›</span>
+                    </button>
+                  </div>
+                  <div class="model-panes">
+                    <div class="model-pane" id="model-sheet-models">
+                      <label class="model-search">
+                        <span class="model-search-ico" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6.2" cy="6.2" r="4.1" stroke="currentColor" stroke-width="1.3"/><path d="M9.2 9.2 12 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                        </span>
+                        <input id="model-q" placeholder="搜尋全部模型" data-i18n-placeholder="search.models" autocomplete="off" />
+                      </label>
+                      <div id="model-results"></div>
+                    </div>
+                    <div class="model-pane" id="model-sheet-reasoning" hidden>
+                      <div id="model-reason-list"></div>
+                    </div>
+                    <div class="model-pane" id="model-sheet-speed" hidden>
+                      <div id="model-speed-list"></div>
+                    </div>
+                    <div class="model-pane" id="model-sheet-advanced" hidden>
+                      <a class="model-choice" href="/settings" data-i18n="model.settings">模型設定</a>
+                    </div>
+                  </div>
+                  <select id="model-reasoning" hidden>
+                    <option value="minimal" data-i18n="reason.min">最低</option>
+                    <option value="low" data-i18n="reason.low">低</option>
+                    <option value="medium" data-i18n="reason.mid">中</option>
+                    <option value="high" data-i18n="reason.high">高</option>
+                  </select>
+                  <input type="checkbox" id="model-fast" hidden />
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="primary" id="send" title="送出" aria-label="送出" data-i18n-title="send" data-i18n-aria="send">
+              <svg class="icon-send" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 12.5V3.5M8 3.5L4 7.5M8 3.5L12 7.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="icon-stop" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </form>
+      <div class="traj" id="traj" hidden>
+        <div class="traj-bar">
+          <strong data-i18n="trace">Trajectory</strong>
+          <span class="traj-src" id="traj-src"></span>
+          <input id="traj-q" placeholder="搜尋 system / tool / 結果" data-i18n-placeholder="search.traj" autocomplete="off" />
+          <button type="button" class="traj-close" id="traj-close" aria-label="關閉" data-i18n-aria="close">×</button>
+        </div>
+        <div class="traj-main">
+          <div class="traj-list" id="traj-list"></div>
+          <div class="traj-detail" id="traj-detail"></div>
+        </div>
+      </div>
+    </section>
+    <div class="html-zoom" id="html-zoom" hidden>
+      <div class="html-zoom-bar">
+        <strong data-i18n="html.zoom">HTML 預覽</strong>
+        <button type="button" class="html-zoom-close" id="html-zoom-close" title="關閉" aria-label="關閉" data-i18n-title="close" data-i18n-aria="close">×</button>
+      </div>
+      <iframe class="html-zoom-frame" id="html-zoom-frame" sandbox="allow-scripts" title="HTML preview large"></iframe>
+    </div>
+    <div class="bot-card" id="bot-card" hidden>
+      <div class="bot-card-av" id="bot-card-av"></div>
+      <div class="bot-card-name" id="bot-card-name"></div>
+      <div class="bot-card-handle" id="bot-card-handle"></div>
+      <p class="bot-card-bio" id="bot-card-bio"></p>
+      <div class="bot-card-actions">
+        <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">訊息</a>
+        <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">設定</a>
+        <button type="button" class="bot-card-btn" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
+        <button type="button" class="bot-card-btn danger" id="bot-card-del" data-i18n="bot.delete">刪除</button>
+      </div>
+    </div>
+    <dialog id="channel-md">
+      <h2 data-i18n="channel.md">Channel.md</h2>
+      <p data-i18n="channel.mdHelp">這個頻道的工作說明。用 @handle 叫 bot 時會讀到這份筆記。私訊沒有 Channel.md。</p>
+      <textarea id="channel-md-body" rows="8" placeholder="# Channel.md"></textarea>
+      <h2 data-i18n="memory.channel">Channel MEMORY.md</h2>
+      <p data-i18n="memory.channelHelp">這個頻道共享的站立筆記。有用的回合後會自動更新。人寫的 Channel.md 優先。</p>
+      <textarea id="channel-memory-body" rows="8" placeholder="# MEMORY.md"></textarea>
+      <div class="dialog-actions">
+        <button type="button" class="ghost danger" id="channel-md-del" data-i18n="channel.delete">刪除頻道</button>
+        <button type="button" class="ghost" id="channel-md-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="channel-md-save" data-i18n="save">儲存</button>
+      </div>
+    </dialog>
+    <dialog id="bot-memory">
+      <h2 data-i18n="memory.bot">MEMORY.md</h2>
+      <p data-i18n="memory.botHelp">這個 bot 學會的站立筆記。有用的回合後會自動更新。</p>
+      <textarea id="bot-memory-body" rows="12" placeholder="# MEMORY.md"></textarea>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="bot-memory-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="bot-memory-save" data-i18n="save">儲存</button>
+      </div>
+    </dialog>
+    <dialog id="assign">
+      <h2 data-i18n="assign.title">要誰做？</h2>
+      <p data-i18n="assign.hint">這則提到好幾個人。選一個去跑。</p>
+      <div class="assign-list" id="assign-list"></div>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="assign-cancel" data-i18n="cancel">取消</button>
+      </div>
+    </dialog>
+    <dialog id="invite">
+      <h2 data-i18n="invite.title">拉 bot 進頻道</h2>
+      <p data-i18n="invite.body">勾選要進來的人。頻道裡用 @handle 叫他們回話。</p>
+      <div class="pick" id="pick"></div>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="invite-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="invite-save" data-i18n="invite.save">加入</button>
+      </div>
+    </dialog>
+    <script>
+      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+      const state = {
+        channels: [],
+        bots: [],
+        kind: "channel",
+        id: "channel-general",
+        messages: [],
+        editingId: null,
+        statsId: null,
+        busy: false,
+        abort: null,
+        busySince: 0,
+        live: { botId: "", thinking: "", steps: [] },
+        liveTimer: null,
+        liveGen: 0,
+        mention: null,
+        mentionIndex: 0,
+        replyTo: null,
+        attachments: [],
+        attachCwd: "",
+        attachSheet: null,
+        busyBots: {},
+        busyRoom: null,
+        queue: [],
+        queueSeq: 0,
+        posting: false,
+        serverLive: [],
+        unread: (function () {
+          try {
+            return new Set(
+              JSON.parse(sessionStorage.getItem("guild-unread") || "[]"),
+            );
+          } catch {
+            return new Set();
+          }
+        })(),
+      };
+
+      function hue(key) {
+        let n = 0;
+        for (const ch of String(key)) n = (n + ch.charCodeAt(0) * 17) % COLORS.length;
+        return COLORS[n];
+      }
+      function initials(name) {
+        const parts = String(name).replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/);
+        if (parts[0] && /[A-Za-z]/.test(parts[0][0])) {
+          return parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+        }
+        return String(name).slice(0, 2);
+      }
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      function formatInline(text) {
+        return typeof renderMarkdown === "function"
+          ? renderMarkdown(text)
+          : escapeHtml(text);
+      }
+      function firstLine(text) {
+        const raw = String(text || "").trim();
+        const nl = raw.indexOf("\n");
+        return nl === -1 ? raw : raw.slice(0, nl);
+      }
+      function skillInstructions(output) {
+        const raw = String(output || "");
+        const m = raw.match(/<skill_instructions>([\s\S]*?)<\/skill_instructions>/i);
+        return (m ? m[1] : raw).trim();
+      }
+      function visibleAssistantText(text) {
+        return String(text || "")
+          .replace(/<skill_content\b[\s\S]*?<\/skill_content>/gi, "")
+          .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "")
+          .replace(/<available_skills>[\s\S]*?<\/available_skills>/gi, "")
+          .trim();
+      }
+      function previewLine(text) {
+        return firstLine(text).replace(/\s+/g, " ").slice(0, 120);
+      }
+      function replyQuoteHtml(msg) {
+        if (!msg.replyTo) return "";
+        const parent = state.messages.find((item) => item.id === msg.replyTo);
+        if (!parent) return "";
+        return (
+          '<button type="button" class="reply-quote" data-jump="' +
+          escapeHtml(msg.replyTo) +
+          '"><span class="reply-quote-arrow" aria-hidden="true">↩</span><span>' +
+          escapeHtml(previewLine(parent.body)) +
+          "</span></button>"
+        );
+      }
+      function toolTitle(name) {
+        if (name === "run") return t("bash");
+        if (name === "read") return t("read");
+        if (name === "write") return t("write");
+        if (name === "list") return t("list");
+        if (name === "spawn") return t("spawn");
+        return name || "Tool";
+      }
+      function parseExitCode(output) {
+        const m = String(output || "").match(/\[exit code: (\d+)\]\s*$/m);
+        return m ? m[1] : "";
+      }
+      function stripExitMarker(output) {
+        return String(output || "")
+          .replace(/\n?\[exit code: \d+\]\s*$/m, "")
+          .trim();
+      }
+      function renderTermBody(command, output) {
+        const code = parseExitCode(output);
+        const body = stripExitMarker(output) || "(no output)";
+        return (
+          '<div class="term-cmd">$ ' +
+          escapeHtml(command || "") +
+          "</div>" +
+          (code
+            ? '<div class="term-exit' +
+              (code === "0" ? "" : " bad") +
+              '">exit ' +
+              escapeHtml(code) +
+              "</div>"
+            : "") +
+          '<pre class="term-out">' +
+          escapeHtml(body) +
+          "</pre>"
+        );
+      }
+      function renderReadBody(output) {
+        return String(output || "")
+          .split("\n")
+          .slice(0, 200)
+          .map(function (line, i) {
+            return (
+              '<div class="read-line"><span class="ln">' +
+              (i + 1) +
+              '</span><span class="lx">' +
+              escapeHtml(line) +
+              "</span></div>"
+            );
+          })
+          .join("");
+      }
+      function iconThink() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5c-2.2 1.3-3.6 3.4-3.6 5.5 0 2 1.6 3.5 3.6 3.5s3.6-1.5 3.6-3.5c0-2.1-1.4-4.2-3.6-5.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M5.2 12.2h3.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+      }
+      function iconWrench() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.7 3.2a2.6 2.6 0 0 1 2.1 2.1L8.2 7.9 6.1 5.8 8.7 3.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6.1 5.8 2.4 11.2l.9.9 5.4-3.7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      }
+      function iconSkill() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2.4h6.2L11 4.2v7.4H3V2.4Z" stroke="currentColor" stroke-width="1.2"/><path d="M9.1 2.4v2H11" stroke="currentColor" stroke-width="1.2"/><path d="M5 7h4M5 9.2h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+      }
+      function iconTerm() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.7" y="2.4" width="10.6" height="9.2" rx="1.4" stroke="currentColor" stroke-width="1.2"/><path d="M4 6.2 5.6 7.5 4 8.8M7.2 9.2h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      }
+      function iconFile() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.2 2.3h5.1L10.8 4.8v6.9H3.2V2.3Z" stroke="currentColor" stroke-width="1.2"/><path d="M8.2 2.3v2.6h2.6" stroke="currentColor" stroke-width="1.2"/></svg>';
+      }
+      function iconFolder() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.3 4.2h3.1l1.1 1.2h5.2v6.2H2.3V4.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+      }
+      function iconPencil() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.4 2.6 11.4 5.6 5.2 11.8H2.2v-3L8.4 2.6Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+      }
+      function iconImage() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2.2" y="2.8" width="9.6" height="8.4" rx="1.4" stroke="currentColor" stroke-width="1.2"/><circle cx="5.1" cy="5.7" r="1" fill="currentColor"/><path d="M2.8 10.2 5.6 7.6l2 2 1.5-1.6 2.1 2.2" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+      }
+      function iconStats() {
+        return '<svg width="16" height="14" viewBox="0 0 16 14" fill="none" aria-hidden="true"><rect x="1.2" y="1.2" width="13.6" height="11.6" rx="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M5 10V7.1M8 10V4.4M11 10V6.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+      }
+      function formatCount(n) {
+        if (n == null || !Number.isFinite(Number(n))) return "—";
+        return Math.round(Number(n)).toLocaleString();
+      }
+      function formatDuration(ms) {
+        const n = Number(ms);
+        if (!Number.isFinite(n) || n < 0) return "—";
+        if (n < 1000) return "<1s";
+        if (n < 60_000) {
+          const sec = n / 1000;
+          return (sec < 10 ? sec.toFixed(1) : Math.round(sec)) + "s";
+        }
+        const m = Math.floor(n / 60_000);
+        const s = Math.round((n % 60_000) / 1000);
+        return m + "m " + s + "s";
+      }
+      function formatUsd(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v) || v <= 0) return "";
+        if (v < 0.01) return "$" + v.toFixed(4);
+        return "$" + v.toFixed(3);
+      }
+      function usageFor(msg, index) {
+        const raw = msg && msg.usage;
+        const hasReal =
+          raw &&
+          (raw.totalTokens || raw.input || raw.output || raw.durationMs || raw.model);
+        if (hasReal) return raw;
+        const prev = index > 0 ? state.messages[index - 1] : null;
+        const end = Date.parse(msg.finishedAt || msg.createdAt || 0);
+        const startIso =
+          (raw && raw.startedAt) ||
+          (msg.finishedAt ? msg.createdAt : "") ||
+          (prev && prev.createdAt) ||
+          "";
+        const start = Date.parse(startIso || 0);
+        const durationMs =
+          Number.isFinite(end) && Number.isFinite(start)
+            ? Math.max(0, end - start)
+            : 0;
+        const bot = msg.author === "you" ? null : botById(msg.author);
+        const ref = (bot && bot.model) || (modelCfg && modelCfg.default);
+        const tools = (msg.parts || []).filter(
+          (part) => part.type === "tool" || part.type === "skill",
+        ).length;
+        return {
+          totalTokens: Math.ceil(String(msg.body || "").length / 4),
+          durationMs: durationMs,
+          rounds: tools ? tools + 1 : msg.author === "you" ? 0 : 1,
+          model: ref && ref.model,
+          provider: ref && ref.provider,
+          estimated: true,
+        };
+      }
+      function statsBtnHtml(id, on) {
+        return (
+          '<button type="button" class="stats-ico' +
+          (on ? " on" : "") +
+          '" data-stats="' +
+          escapeHtml(id) +
+          '" title="' +
+          t("stats") +
+          '" aria-label="' +
+          t("stats") +
+          '">' +
+          iconStats() +
+          "</button>"
+        );
+      }
+      function statsPanelHtml(usage) {
+        if (!usage) return "";
+        const model =
+          usage.model || usage.provider
+            ? displayName({
+                provider: usage.provider || "",
+                model: usage.model || "",
+              })
+            : "—";
+        const cost = formatUsd(usage.costUsd);
+        const subTokens =
+          usage.input || usage.output
+            ? t("stats.inOut", {
+                in: formatCount(usage.input || 0),
+                out: formatCount(usage.output || 0),
+              })
+            : usage.estimated
+              ? t("stats.estimated")
+              : "";
+        const subTime =
+          usage.rounds
+            ? usage.rounds + " " + t("stats.rounds")
+            : usage.estimated
+              ? t("stats.estimated")
+              : "";
+        return (
+          '<div class="stats-panel">' +
+          '<div class="stats-kicker">' +
+          t("stats.title") +
+          (usage.estimated ? " · " + t("stats.estimated") : "") +
+          "</div>" +
+          '<div class="stats-grid">' +
+          '<div class="stats-cell"><span>' +
+          t("stats.tokens") +
+          "</span><b>" +
+          formatCount(usage.totalTokens) +
+          "</b>" +
+          (subTokens ? "<em>" + escapeHtml(subTokens) + "</em>" : "") +
+          "</div>" +
+          '<div class="stats-cell"><span>' +
+          t("stats.time") +
+          "</span><b>" +
+          formatDuration(usage.durationMs) +
+          "</b>" +
+          (subTime ? "<em>" + escapeHtml(subTime) + "</em>" : "") +
+          "</div>" +
+          '<div class="stats-cell"><span>' +
+          t("stats.model") +
+          "</span><b>" +
+          escapeHtml(model) +
+          "</b>" +
+          (cost ? "<em>" + escapeHtml(cost) + "</em>" : "") +
+          "</div>" +
+          "</div></div>"
+        );
+      }
+      function partLabel(part) {
+        if (part.type === "thinking") return t("think");
+        if (part.type === "skill") return t("skill");
+        if (part.type === "tool") return toolTitle(part.name);
+        return "";
+      }
+      function traceSummary(parts) {
+        const counts = {};
+        const order = [];
+        for (const part of parts) {
+          const label = partLabel(part);
+          if (!label) continue;
+          if (!counts[label]) {
+            counts[label] = 0;
+            order.push(label);
+          }
+          counts[label] += 1;
+        }
+        return order
+          .map((label) =>
+            counts[label] > 1 ? label + " ×" + counts[label] : label,
+          )
+          .join(" · ");
+      }
+      function disclosureRow(opts) {
+        const open = opts.open ? " open" : "";
+        const stateAttr = opts.running ? "running" : opts.error ? "error" : "ok";
+        const summaryClass = opts.error ? "row-summary err" : "row-summary";
+        const kind = opts.cardKind ? " " + opts.cardKind : "";
+        const bodyClass = (opts.card ? "row-card" : "row-body") + kind;
+        const inner = opts.bodyHtml
+          ? opts.bodyHtml
+          : opts.body
+            ? escapeHtml(opts.body)
+            : "";
+        const body = inner
+          ? "<div class=\"" + bodyClass + "\">" + inner + "</div>"
+          : "";
+        return (
+          "<details class=\"dsh-row\" data-state=\"" +
+          stateAttr +
+          "\"" +
+          open +
+          "><summary><span class=\"row-icon\">" +
+          opts.icon +
+          "</span><span class=\"row-title\">" +
+          escapeHtml(opts.title) +
+          "</span><span class=\"row-sep\" aria-hidden></span><span class=\"" +
+          summaryClass +
+          "\">" +
+          escapeHtml(opts.summary || "") +
+          "</span></summary>" +
+          body +
+          "</details>"
+        );
+      }
+      function toolCard(part) {
+        const err = Boolean(part.isError);
+        if (part.name === "run") {
+          const failed = err || /\[exit code: (?!0\b)\d+\]/.test(part.output || "");
+          return disclosureRow({
+            title: t("bash"),
+            icon: iconTerm(),
+            summary: part.label || part.detail || "bash",
+            bodyHtml: renderTermBody(part.detail, part.output || ""),
+            card: true,
+            cardKind: "terminal",
+            error: failed,
+          });
+        }
+        if (part.name === "read") {
+          return disclosureRow({
+            title: t("read"),
+            icon: iconFile(),
+            summary: part.detail || "read",
+            bodyHtml: renderReadBody(part.output || ""),
+            card: true,
+            cardKind: "read",
+            error: err,
+          });
+        }
+        if (part.name === "write") {
+          return disclosureRow({
+            title: t("write"),
+            icon: iconPencil(),
+            summary: part.detail || "write",
+            body: part.output || "",
+            card: true,
+            cardKind: "diff",
+            error: err,
+          });
+        }
+        if (part.name === "list") {
+          return disclosureRow({
+            title: t("list"),
+            icon: iconFolder(),
+            summary: part.detail || "list",
+            body: part.output || "",
+            card: true,
+            cardKind: "search",
+            error: err,
+          });
+        }
+        if (part.name === "spawn") {
+          return disclosureRow({
+            title: t("spawn"),
+            icon: iconWrench(),
+            summary: part.label || part.detail || "spawn",
+            body: part.output || "",
+            card: true,
+            cardKind: "search",
+            error: err,
+          });
+        }
+        if (part.name === "image_gen") {
+          const src = String(part.output || "").match(/\/generated\/[A-Za-z0-9._-]+/);
+          const img = src
+            ? '<img class="md-img" src="' +
+              src[0] +
+              '" alt="' +
+              escapeHtml(part.detail || "image") +
+              '" loading="lazy">'
+            : "";
+          return disclosureRow({
+            title: t("imageGen"),
+            icon: iconImage(),
+            summary: part.detail || "image_gen",
+            bodyHtml: img + (part.output ? "<pre class=\"term-out\">" + escapeHtml(part.output) + "</pre>" : ""),
+            card: true,
+            cardKind: "image",
+            error: err,
+          });
+        }
+        return disclosureRow({
+          title: toolTitle(part.name),
+          icon: iconWrench(),
+          summary: part.detail || part.name,
+          body: part.output || "",
+          card: true,
+          error: err,
+        });
+      }
+      function legacyParts(body) {
+        const marker = "本機\n";
+        if (!String(body).startsWith(marker)) {
+          return [{ type: "text", text: body }];
+        }
+        const rest = String(body).slice(marker.length);
+        const split = rest.indexOf("\n\n");
+        const log = split >= 0 ? rest.slice(0, split) : rest;
+        const answer = split >= 0 ? rest.slice(split + 2) : "";
+        const parts = [];
+        const blocks = log.split(/\n\n/);
+        for (const block of blocks) {
+          const line = block.trim();
+          if (!line) continue;
+          if (line.startsWith("$ ")) {
+            const nl = line.indexOf("\n");
+            parts.push({
+              type: "tool",
+              name: "run",
+              detail: nl === -1 ? line.slice(2) : line.slice(2, nl),
+              output: nl === -1 ? "" : line.slice(nl + 1),
+            });
+          } else {
+            parts.push({ type: "tool", name: "run", detail: "", output: line });
+          }
+        }
+        if (answer.trim()) parts.push({ type: "text", text: answer });
+        return parts;
+      }
+      function partsOf(msg) {
+        if (Array.isArray(msg.parts) && msg.parts.length) return msg.parts;
+        return legacyParts(msg.body || "");
+      }
+      function renderAssistant(msg) {
+        const parts = partsOf(msg);
+        const chunks = [];
+        let texts = [];
+        let trace = [];
+        let traceParts = [];
+        function flushTexts() {
+          const cleaned = texts.map(visibleAssistantText).filter(Boolean);
+          texts = [];
+          if (!cleaned.length) return;
+          const html =
+            '<div class="bubble">' +
+            cleaned
+              .map(function (text) {
+                return '<div class="assistant-text md">' + formatInline(text) + "</div>";
+              })
+              .join("") +
+            "</div>";
+          const joined = cleaned.join("\n\n");
+          if (joined.length > 6000) {
+            chunks.push(
+              '<details class="dsh-trace">' +
+                "<summary><span class=\"row-icon\">" +
+                iconWrench() +
+                '</span><span class="row-title">' +
+                t("trace.long") +
+                '</span><span class="row-sep" aria-hidden></span><span class="row-summary">' +
+                escapeHtml(previewLine(joined)) +
+                "</span></summary>" +
+                html +
+                "</details>",
+            );
+            return;
+          }
+          chunks.push(html);
+        }
+        function flushTrace() {
+          if (!trace.length) return;
+          chunks.push(
+            '<details class="dsh-trace">' +
+              "<summary><span class=\"row-icon\">" +
+              iconWrench() +
+              '</span><span class="row-title">' +
+              t("trace.steps") +
+              '</span><span class="row-sep" aria-hidden></span><span class="row-summary">' +
+              escapeHtml(traceSummary(traceParts)) +
+              "</span></summary><div class=\"dsh-trace-body\">" +
+              trace.join("") +
+              "</div></details>",
+          );
+          trace = [];
+          traceParts = [];
+        }
+        parts.forEach((part) => {
+          if (part.type === "thinking") {
+            flushTexts();
+            traceParts.push(part);
+            trace.push(
+              disclosureRow({
+                title: t("think"),
+                icon: iconThink(),
+                summary: firstLine(part.text),
+                body: part.text,
+              }),
+            );
+            return;
+          }
+          if (part.type === "skill") {
+            flushTexts();
+            traceParts.push(part);
+            trace.push(
+              disclosureRow({
+                title: t("skill"),
+                icon: iconSkill(),
+                summary: part.name,
+                body: skillInstructions(part.output || ""),
+                card: true,
+              }),
+            );
+            return;
+          }
+          if (part.type === "tool") {
+            flushTexts();
+            traceParts.push(part);
+            trace.push(toolCard(part));
+            return;
+          }
+          flushTrace();
+          texts.push(part.text || "");
+        });
+        flushTrace();
+        flushTexts();
+        return '<div class="assistant-doc">' + chunks.join("") + "</div>";
+      }
+      function botById(id) {
+        return state.bots.find((bot) => bot.id === id);
+      }
+      function currentChannel() {
+        return state.channels.find((ch) => ch.id === state.id);
+      }
+      function parseHash() {
+        const raw = location.hash.replace(/^#/, "");
+        if (raw.startsWith("d/")) {
+          state.kind = "dm";
+          state.id = raw.slice(2);
+          return;
+        }
+        if (raw.startsWith("c/")) {
+          state.kind = "channel";
+          state.id = raw.slice(2);
+          return;
+        }
+        state.kind = "channel";
+        state.id = "channel-general";
+      }
+      function setHash() {
+        const next = state.kind === "dm" ? "#d/" + state.id : "#c/" + state.id;
+        if (location.hash !== next) history.replaceState(null, "", next);
+      }
+      function roomKey(kind, id) {
+        return kind + ":" + id;
+      }
+      function saveUnread() {
+        sessionStorage.setItem(
+          "guild-unread",
+          JSON.stringify(Array.from(state.unread)),
+        );
+      }
+      function markRoomRead() {
+        state.unread.delete(roomKey(state.kind, state.id));
+        saveUnread();
+      }
+      function currentRoomBusy() {
+        return Boolean(
+          state.busy &&
+            state.busyRoom &&
+            state.busyRoom.kind === state.kind &&
+            state.busyRoom.id === state.id,
+        );
+      }
+      function canStopHere() {
+        if (!state.busy || !state.abort) return false;
+        if (currentRoomBusy()) return true;
+        return Boolean(state.kind === "dm" && state.busyBots[state.id]);
+      }
+      function composerHasPayload() {
+        const draft = document.getElementById("draft");
+        return Boolean(
+          (draft && draft.value.trim()) ||
+            (state.attachments && state.attachments.length),
+        );
+      }
+      function steerModLabel() {
+        return /Mac|iPhone|iPad/.test(navigator.platform || "") ? "⌘" : "Ctrl+";
+      }
+      function syncSteerHint() {
+        const hint = document.getElementById("composer-steer");
+        if (!hint) return;
+        if (!currentRoomBusy()) {
+          hint.hidden = true;
+          hint.textContent = "";
+          return;
+        }
+        hint.hidden = false;
+        hint.textContent = t("steer.hint", { mod: steerModLabel() });
+      }
+      function syncSendButton() {
+        const stop = canStopHere() && !composerHasPayload();
+        const send = document.getElementById("send");
+        send.classList.toggle("stopping", stop);
+        const label = stop
+          ? t("stop")
+          : currentRoomBusy()
+            ? t("steer.queue")
+            : t("send");
+        send.title = label;
+        send.setAttribute("aria-label", label);
+        syncSteerHint();
+      }
+      function mentionScanText(text) {
+        return String(text || "")
+          .replace(/```[\s\S]*?```/g, " ")
+          .replace(/`[^`]*`/g, " ");
+      }
+      function mentionedBotIds(text) {
+        const scan = mentionScanText(text);
+        const known = new Map(
+          (state.bots || []).map((bot) => [String(bot.handle).toLowerCase(), bot.id]),
+        );
+        const out = [];
+        const re = /(?:^|\s)@([A-Za-z0-9_-]+)\b/g;
+        let row;
+        while ((row = re.exec(scan))) {
+          const id = known.get(String(row[1]).toLowerCase());
+          if (id && !out.includes(id)) out.push(id);
+        }
+        return out;
+      }
+      function botsFromSend(text) {
+        if (state.kind === "dm") return [state.id];
+        const scan = mentionScanText(text);
+        if (/(^|\s)@(channel|here|all)\b/i.test(scan)) {
+          const ch = currentChannel();
+          return (ch && ch.memberIds) || [];
+        }
+        const ids = mentionedBotIds(text);
+        if (ids.length) return ids;
+        if (
+          state.replyTo &&
+          state.replyTo.author &&
+          state.replyTo.author !== "you"
+        ) {
+          return [state.replyTo.author];
+        }
+        return [];
+      }
+      function assignCandidates(text) {
+        if (state.kind === "dm") return [];
+        const scan = mentionScanText(text);
+        if (/(^|\s)@(channel|here|all)\b/i.test(scan)) return [];
+        const ids = mentionedBotIds(text).slice();
+        if (
+          state.replyTo &&
+          state.replyTo.author &&
+          state.replyTo.author !== "you" &&
+          !ids.includes(state.replyTo.author)
+        ) {
+          ids.push(state.replyTo.author);
+        }
+        return ids
+          .map((id) => (state.bots || []).find((bot) => bot.id === id))
+          .filter(Boolean);
+      }
+      function dayKey(iso) {
+        if (!iso) return "";
+        const when = new Date(iso);
+        if (Number.isNaN(when.getTime())) return "";
+        return (
+          when.getFullYear() +
+          "-" +
+          String(when.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(when.getDate()).padStart(2, "0")
+        );
+      }
+      function formatMsgClock(iso) {
+        if (!iso) return "";
+        const when = new Date(iso);
+        if (Number.isNaN(when.getTime())) return "";
+        const en = guildLocale() === "en";
+        return when.toLocaleTimeString(en ? "en" : "zh-Hant", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      }
+      function formatMsgDay(iso) {
+        if (!iso) return "";
+        const when = new Date(iso);
+        if (Number.isNaN(when.getTime())) return "";
+        const today = new Date();
+        if (
+          when.getFullYear() === today.getFullYear() &&
+          when.getMonth() === today.getMonth() &&
+          when.getDate() === today.getDate()
+        ) {
+          return t("today");
+        }
+        const yest = new Date(today);
+        yest.setDate(today.getDate() - 1);
+        if (
+          when.getFullYear() === yest.getFullYear() &&
+          when.getMonth() === yest.getMonth() &&
+          when.getDate() === yest.getDate()
+        ) {
+          return t("yesterday");
+        }
+        const en = guildLocale() === "en";
+        const opts = { month: "short", day: "numeric" };
+        if (when.getFullYear() !== today.getFullYear()) opts.year = "numeric";
+        return when.toLocaleDateString(en ? "en" : "zh-Hant", opts);
+      }
+      function dayRuleHtml(iso) {
+        const label = formatMsgDay(iso);
+        if (!label) return "";
+        return (
+          '<div class="day-rule" role="separator"><span>' +
+          escapeHtml(label) +
+          "</span></div>"
+        );
+      }
+      function msgStamp(msg) {
+        if (!msg) return "";
+        if (msg.author !== "you" && msg.finishedAt) return msg.finishedAt;
+        return msg.createdAt || "";
+      }
+      function msgTimeHtml(iso) {
+        const clock = formatMsgClock(iso);
+        if (!clock) return "";
+        return (
+          '<time class="msg-time" datetime="' +
+          escapeHtml(iso) +
+          '">' +
+          escapeHtml(clock) +
+          "</time>"
+        );
+      }
+      function formatUpdated(iso) {
+        if (!iso) return "";
+        const when = new Date(iso);
+        if (Number.isNaN(when.getTime())) return "";
+        const today = new Date();
+        const sameDay =
+          when.getFullYear() === today.getFullYear() &&
+          when.getMonth() === today.getMonth() &&
+          when.getDate() === today.getDate();
+        if (sameDay) {
+          const en = guildLocale() === "en";
+          return when.toLocaleTimeString(en ? "en" : "zh-Hant", {
+            hour: en ? "numeric" : "2-digit",
+            minute: "2-digit",
+            hour12: en,
+          });
+        }
+        const yest = new Date(today);
+        yest.setDate(today.getDate() - 1);
+        if (
+          when.getFullYear() === yest.getFullYear() &&
+          when.getMonth() === yest.getMonth() &&
+          when.getDate() === yest.getDate()
+        ) {
+          return t("yesterday");
+        }
+        if (when.getFullYear() === today.getFullYear()) {
+          return when.getMonth() + 1 + "/" + when.getDate();
+        }
+        return when.getFullYear() + "/" + (when.getMonth() + 1) + "/" + when.getDate();
+      }
+      function botModelLabel(bot) {
+        const ref =
+          bot && bot.model && bot.model.provider
+            ? bot.model
+            : modelCfg && modelCfg.default;
+        if (!ref || !ref.model) return "";
+        return displayName(ref);
+      }
+      function lastPreview(item, kind) {
+        const last = item && item.lastMessage;
+        const text = last && last.body ? String(last.body).replace(/\s+/g, " ").trim() : "";
+        if (!text) return t("noActivity");
+        if (kind === "channel") {
+          const who =
+            last.author === "you"
+              ? t("you")
+              : (botById(last.author) || {}).name || last.author;
+          return who + ": " + text;
+        }
+        return text;
+      }
+      function navRowHtml(opts) {
+        const time = opts.updatedAt ? formatUpdated(opts.updatedAt) : "";
+        const right =
+          opts.unread && !opts.busy
+            ? '<span class="unread-dot" title="' + t("unread") + '"></span>'
+            : time
+              ? "<time>" + escapeHtml(time) + "</time>"
+              : "";
+        const chip = opts.chip
+          ? '<span class="nav-chip">' + escapeHtml(opts.chip) + "</span>"
+          : "";
+        return (
+          '<li><a class="nav-row' +
+          (opts.on ? " on" : "") +
+          (opts.unread ? " unread" : "") +
+          '" href="' +
+          opts.href +
+          '"><span class="nav-av">' +
+          opts.av +
+          (opts.busy
+            ? '<span class="busy-flash" title="' + t("busy") + '"></span>'
+            : "") +
+          '</span><span class="nav-body"><span class="nav-top"><strong>' +
+          escapeHtml(opts.name) +
+          "</strong>" +
+          chip +
+          right +
+          "</span><em>" +
+          escapeHtml(opts.preview) +
+          "</em></span></a></li>"
+        );
+      }
+      function touchNavTime(kind, id, iso, lastMessage) {
+        const k = kind || state.kind;
+        const roomId = id || state.id;
+        const at = iso || (lastMessage && lastMessage.createdAt) || new Date().toISOString();
+        const preview = lastMessage
+          ? {
+              author: lastMessage.author,
+              body: String(lastMessage.body || "")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 120),
+              createdAt: lastMessage.createdAt || at,
+            }
+          : null;
+        if (k === "channel") {
+          const ch = state.channels.find((c) => c.id === roomId);
+          if (ch) {
+            ch.updatedAt = at;
+            if (preview) ch.lastMessage = preview;
+          }
+        } else {
+          const bot = botById(roomId);
+          if (bot) {
+            bot.updatedAt = at;
+            if (preview) bot.lastMessage = preview;
+          }
+        }
+      }
+
+      function byUpdatedAtDesc(a, b) {
+        const ta = a && a.updatedAt ? Date.parse(a.updatedAt) : 0;
+        const tb = b && b.updatedAt ? Date.parse(b.updatedAt) : 0;
+        const na = Number.isFinite(ta) ? ta : 0;
+        const nb = Number.isFinite(tb) ? tb : 0;
+        return nb - na;
+      }
+      function renderNav() {
+        const q = document.getElementById("filter").value.toLowerCase();
+        const channels = state.channels
+          .filter((ch) => !q || ch.name.includes(q))
+          .slice()
+          .sort(byUpdatedAtDesc);
+        document.getElementById("channels").innerHTML = channels
+          .map((ch) => {
+            const busy = Boolean(
+              (state.busyRoom &&
+                state.busyRoom.kind === "channel" &&
+                state.busyRoom.id === ch.id) ||
+                (state.serverLive || []).some(
+                  (row) => row.kind === "channel" && row.id === ch.id,
+                ),
+            );
+            const unread = state.unread.has(roomKey("channel", ch.id));
+            return navRowHtml({
+              href: "#c/" + encodeURIComponent(ch.id),
+              on: state.kind === "channel" && state.id === ch.id,
+              av: '<span class="avatar hash-av">#</span>',
+              name: ch.name,
+              updatedAt: ch.updatedAt,
+              preview: lastPreview(ch, "channel"),
+              busy: busy,
+              unread: unread,
+            });
+          })
+          .join("");
+        const bots = state.bots
+          .filter((bot) => {
+            const hay = (bot.name + " " + bot.handle).toLowerCase();
+            return !q || hay.includes(q);
+          })
+          .slice()
+          .sort(byUpdatedAtDesc);
+        document.getElementById("dms").innerHTML = bots
+          .map((bot) => {
+            const busy = Boolean(
+              state.busyBots[bot.id] ||
+                (state.serverLive || []).some((row) => row.botId === bot.id),
+            );
+            const unread = state.unread.has(roomKey("dm", bot.id));
+            return navRowHtml({
+              href: "#d/" + encodeURIComponent(bot.id),
+              on: state.kind === "dm" && state.id === bot.id,
+              av:
+                '<span class="avatar" style="background:' +
+                hue(bot.handle) +
+                '">' +
+                escapeHtml(initials(bot.name)) +
+                "</span>",
+              name: bot.name,
+              chip: botModelLabel(bot),
+              updatedAt: bot.updatedAt,
+              preview: lastPreview(bot, "dm"),
+              busy: busy,
+              unread: unread,
+            });
+          })
+          .join("");
+      }
+
+      function memberRowHtml(bot, action, locked) {
+        const act =
+          action === "in" && !locked
+            ? '<button type="button" class="members-act out" data-remove="' +
+              escapeHtml(bot.id) +
+              '">' +
+              t("members.kick") +
+              "</button>"
+            : action === "out"
+              ? '<button type="button" class="members-act" data-add="' +
+                escapeHtml(bot.id) +
+                '">' +
+                t("members.add") +
+                "</button>"
+              : "";
+        return (
+          '<div class="members-row"><button type="button" class="avatar sm" data-bot-id="' +
+          escapeHtml(bot.id) +
+          '" style="background:' +
+          hue(bot.handle) +
+          '">' +
+          escapeHtml(initials(bot.name)) +
+          '</button><span class="who"><strong>' +
+          escapeHtml(bot.name) +
+          "</strong><em>@" +
+          escapeHtml(bot.handle) +
+          "</em></span>" +
+          act +
+          "</div>"
+        );
+      }
+      function renderHead() {
+        const wrap = document.getElementById("members-wrap");
+        const av = document.getElementById("head-av");
+        if (state.kind === "dm") {
+          const bot = botById(state.id);
+          document.getElementById("title").textContent = bot ? bot.name : t("dm");
+          document.getElementById("subtitle").textContent = "";
+          wrap.hidden = true;
+          document.getElementById("members-pop").hidden = true;
+          av.textContent = bot ? initials(bot.name) : "?";
+          av.style.background = bot ? hue(bot.handle) : "#333";
+          av.classList.remove("hash-av");
+          if (bot) {
+            av.setAttribute("href", "#");
+            av.setAttribute("data-bot-id", bot.id);
+            av.setAttribute("title", bot.name);
+          } else {
+            av.removeAttribute("href");
+            av.removeAttribute("data-bot-id");
+            av.removeAttribute("title");
+          }
+          setModelPickerVisible(true);
+          renderModelList();
+          syncDraftPlaceholder();
+          return;
+        }
+        const ch = currentChannel();
+        document.getElementById("title").textContent = ch ? ch.name : "…";
+        const members = ch ? ch.members || [] : [];
+        const locked = Boolean(
+          ch && (ch.id === "channel-general" || ch.name === "general"),
+        );
+        document.getElementById("subtitle").textContent = "";
+        av.textContent = "#";
+        av.style.background = "";
+        av.classList.add("hash-av");
+        av.setAttribute("href", "#");
+        av.setAttribute("title", "Channel.md");
+        wrap.hidden = false;
+        const shown = members.slice(0, 3);
+        document.getElementById("members-stack").innerHTML = shown
+          .map(
+            (bot) =>
+              '<span class="avatar" style="background:' +
+              hue(bot.handle) +
+              '">' +
+              escapeHtml(initials(bot.name)) +
+              "</span>",
+          )
+          .join("");
+        document.getElementById("members-count").textContent = members.length
+          ? String(members.length)
+          : "0";
+        const taken = new Set((ch && ch.memberIds) || members.map((b) => b.id));
+        const outsiders = (state.bots || []).filter((bot) => !taken.has(bot.id));
+        document.getElementById("members-in").innerHTML = members.length
+          ? members.map((bot) => memberRowHtml(bot, "in", locked)).join("")
+          : '<div class="members-empty">' + t("members.empty") + "</div>";
+        document.getElementById("members-out").innerHTML = outsiders.length
+          ? outsiders.map((bot) => memberRowHtml(bot, "out", locked)).join("")
+          : '<div class="members-empty">' + t("members.allIn") + "</div>";
+        setModelPickerVisible(false);
+        syncDraftPlaceholder();
+        renderQueue();
+        syncSendButton();
+      }
+
+      function liveStepLabel(name) {
+        if (name === "think") return t("think");
+        if (name === "skill") return t("skill");
+        if (name === "image_gen") return t("imageGen");
+        return toolTitle(name);
+      }
+      function liveStepsHtml(steps) {
+        const rows = (steps || []).slice(-5);
+        if (!rows.length) return "";
+        return (
+          '<ul class="live-steps">' +
+          rows
+            .map((step) => {
+              const running = step.running ? " running" : "";
+              const detail = String(step.detail || "").trim();
+              return (
+                '<li class="live-step' +
+                running +
+                '"><span class="live-name">' +
+                escapeHtml(liveStepLabel(step.name)) +
+                "</span>" +
+                (detail
+                  ? '<span class="live-detail">' +
+                    escapeHtml(detail) +
+                    "</span>"
+                  : "") +
+                "</li>"
+              );
+            })
+            .join("") +
+          "</ul>"
+        );
+      }
+      function liveBot() {
+        const id =
+          (state.live && state.live.botId) ||
+          Object.keys(state.busyBots || {})[0] ||
+          (state.kind === "dm" ? state.id : "");
+        return id ? botById(id) : null;
+      }
+      function liveActorHtml(bot) {
+        if (!bot) return { av: "", head: "" };
+        const botAttr = ' data-bot-id="' + escapeHtml(bot.id) + '"';
+        return {
+          av:
+            '<button type="button" class="avatar"' +
+            botAttr +
+            ' title="' +
+            escapeHtml(bot.name) +
+            '" style="background:' +
+            hue(bot.handle) +
+            '">' +
+            escapeHtml(initials(bot.name)) +
+            "</button>",
+          head:
+            '<div class="msg-head"><button type="button" class="name"' +
+            botAttr +
+            ">" +
+            escapeHtml(bot.name) +
+            "</button>" +
+            (bot.handle
+              ? '<span class="handle">@' + escapeHtml(bot.handle) + "</span>"
+              : "") +
+            "</div>",
+        };
+      }
+      function turnStatusInnerHtml() {
+        const elapsed = Date.now() - (state.busySince || Date.now());
+        const clock =
+          elapsed >= 15000
+            ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
+            : "";
+        return (
+          '<div class="turn-live">' +
+          '<div class="turn-status">' +
+          t("deepDiving") +
+          clock +
+          "</div>" +
+          liveStepsHtml(state.live && state.live.steps) +
+          "</div>"
+        );
+      }
+      function turnStatusHtml() {
+        if (!currentRoomBusy()) return "";
+        const bot = liveBot();
+        const inner = turnStatusInnerHtml();
+        if (!bot) return inner;
+        const actor = liveActorHtml(bot);
+        return (
+          '<article class="msg bot live" data-bot-id="' +
+          escapeHtml(bot.id) +
+          '" role="status">' +
+          actor.av +
+          '<div class="msg-main">' +
+          actor.head +
+          inner +
+          "</div></article>"
+        );
+      }
+      function liveUrl(room) {
+        const r = room || state.busyRoom;
+        if (!r) return "";
+        return r.kind === "dm"
+          ? "/dms/" + encodeURIComponent(r.id) + "/live"
+          : "/channels/" + encodeURIComponent(r.id) + "/live";
+      }
+      function paintLiveActor() {
+        const bot = liveBot();
+        const article = document.querySelector("article.msg.live");
+        if (!bot) return false;
+        if (!article) {
+          renderThread();
+          return true;
+        }
+        if (article.getAttribute("data-bot-id") === bot.id) return false;
+        const actor = liveActorHtml(bot);
+        article.setAttribute("data-bot-id", bot.id);
+        const av = article.querySelector(".avatar");
+        if (av) av.outerHTML = actor.av;
+        const head = article.querySelector(".msg-head");
+        if (head) head.outerHTML = actor.head;
+        return false;
+      }
+      function paintLiveSteps() {
+        if (!currentRoomBusy()) return;
+        if (paintLiveActor()) return;
+        const block = document.querySelector(".turn-live");
+        if (!block) return;
+        const html = liveStepsHtml(state.live && state.live.steps);
+        const existing = block.querySelector(".live-steps");
+        if (!html) {
+          if (existing) existing.remove();
+          return;
+        }
+        if (existing) existing.outerHTML = html;
+        else block.insertAdjacentHTML("beforeend", html);
+        const thread = document.getElementById("thread");
+        if (!thread) return;
+        const nearBottom =
+          thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
+        if (nearBottom) thread.scrollTop = thread.scrollHeight;
+      }
+      async function pollLive(gen) {
+        const url = liveUrl();
+        if (!url || !state.busy || state.liveGen !== gen) return;
+        try {
+          const res = await fetch(url);
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || state.liveGen !== gen) return;
+          if (!body.botId) {
+            if (state.posting) return;
+            if (currentRoomBusy()) {
+              setBusy(false);
+              await loadMessages({ resume: false }).catch(() => {});
+            }
+            return;
+          }
+          state.live = {
+            botId: body.botId || "",
+            thinking: body.thinking || "",
+            steps: Array.isArray(body.steps) ? body.steps.slice(-5) : [],
+            startedAt: body.startedAt || "",
+          };
+          if (body.startedAt) {
+            const at = Date.parse(body.startedAt);
+            if (Number.isFinite(at)) state.busySince = at;
+          }
+          if (body.botId) state.busyBots[body.botId] = true;
+          paintLiveSteps();
+        } catch {
+          /* poll is best-effort while the POST is in flight */
+        }
+      }
+      function renderThread() {
+        const root = document.getElementById("thread");
+        if (!state.messages.length && !currentRoomBusy()) {
+          root.innerHTML =
+            '<div class="empty-thread">' + t("noMessages") + "</div>";
+          return;
+        }
+        root.innerHTML =
+          state.messages
+            .map((msg, index) => {
+              const you = msg.author === "you";
+              const bot = you ? null : botById(msg.author);
+              const name = bot ? bot.name : msg.author;
+              const handle = bot ? bot.handle : "";
+              const prev = index > 0 ? state.messages[index - 1] : null;
+              const stamp = msgStamp(msg);
+              const day = dayKey(stamp);
+              const rule =
+                day && day !== dayKey(msgStamp(prev))
+                  ? dayRuleHtml(stamp)
+                  : "";
+              const clock = msgTimeHtml(stamp);
+              const editing = state.editingId === msg.id;
+              const statsOn = !you && state.statsId === msg.id;
+              const usage = you ? null : usageFor(msg, index);
+              const statsPanel = statsOn ? statsPanelHtml(usage) : "";
+              const statsBtn = you ? "" : statsBtnHtml(msg.id, statsOn);
+              const body = editing
+                ? '<textarea class="edit-draft" data-edit-id="' +
+                  escapeHtml(msg.id) +
+                  '">' +
+                  escapeHtml(msg.body) +
+                  "</textarea>"
+                : you
+                  ? replyQuoteHtml(msg) +
+                    youAttachHtml(msg) +
+                    '<p class="bubble">' +
+                    formatYouBody(msg.body) +
+                    "</p>"
+                  : renderAssistant(msg);
+              const actions = editing
+                ? '<div class="msg-actions on"><button type="button" data-edit-cancel="' +
+                  escapeHtml(msg.id) +
+                  '">' +
+                  t("cancel") +
+                  '</button><button type="button" data-edit-send="' +
+                  escapeHtml(msg.id) +
+                  '">' +
+                  t("askAgain") +
+                  "</button></div>"
+                : '<div class="msg-actions">' +
+                  '<button type="button" data-copy="' +
+                  escapeHtml(msg.id) +
+                  '">' +
+                  t("copy") +
+                  "</button>" +
+                  (you
+                    ? '<button type="button" data-edit="' +
+                      escapeHtml(msg.id) +
+                      '">' +
+                      t("edit") +
+                      "</button>"
+                    : '<button type="button" data-reply="' +
+                      escapeHtml(msg.id) +
+                      '">' +
+                      t("reply") +
+                      "</button>") +
+                  '<button type="button" data-retry="' +
+                    escapeHtml(msg.id) +
+                    '">' +
+                    t("retry") +
+                    "</button></div>";
+              if (you) {
+                return (
+                  rule +
+                  '<article class="msg you" data-id="' +
+                  escapeHtml(msg.id) +
+                  '">' +
+                  clock +
+                  body +
+                  actions +
+                  "</article>"
+                );
+              }
+              const botAttr = bot
+                ? ' data-bot-id="' + escapeHtml(bot.id) + '"'
+                : "";
+              const av =
+                '<button type="button" class="avatar"' +
+                botAttr +
+                ' title="' +
+                escapeHtml(name) +
+                '" style="background:' +
+                hue(handle || name) +
+                '">' +
+                escapeHtml(initials(name)) +
+                "</button>";
+              const head =
+                '<div class="msg-head"><button type="button" class="name"' +
+                botAttr +
+                ">" +
+                escapeHtml(name) +
+                "</button>" +
+                (handle
+                  ? '<span class="handle">@' + escapeHtml(handle) + "</span>"
+                  : "") +
+                clock +
+                "</div>";
+              return (
+                rule +
+                '<article class="msg bot" data-id="' +
+                escapeHtml(msg.id) +
+                '">' +
+                av +
+                '<div class="msg-main">' +
+                head +
+                body +
+                statsBtn +
+                statsPanel +
+                actions +
+                "</div></article>"
+              );
+            })
+            .join("") + turnStatusHtml();
+        const editBox = root.querySelector(".edit-draft");
+        if (editBox) {
+          editBox.focus();
+          editBox.setSelectionRange(editBox.value.length, editBox.value.length);
+        } else {
+          root.scrollTop = root.scrollHeight;
+        }
+        hydrateHtmlPreviews(root);
+      }
+      function hydrateHtmlPreviews(root) {
+        if (!root || typeof document === "undefined") return;
+        root.querySelectorAll(".md-html-preview").forEach((box) => {
+          const src = box.querySelector(".md-html-src");
+          const frame = box.querySelector(".md-html-frame");
+          if (!src || !frame || frame.dataset.ready) return;
+          frame.dataset.ready = "1";
+          const raw = src.value;
+          const lang = (box.querySelector(".md-fence-lang") || {}).textContent || "";
+          frame.srcdoc = /svg/i.test(lang)
+            ? '<!doctype html><html><body style="margin:0;background:#fff">' +
+              raw +
+              "</body></html>"
+            : raw;
+        });
+      }
+      function openHtmlZoom(raw) {
+        const wrap = document.getElementById("html-zoom");
+        const frame = document.getElementById("html-zoom-frame");
+        if (!wrap || !frame) return;
+        frame.srcdoc = raw || "";
+        wrap.hidden = false;
+      }
+      function closeHtmlZoom() {
+        const wrap = document.getElementById("html-zoom");
+        const frame = document.getElementById("html-zoom-frame");
+        if (frame) frame.srcdoc = "";
+        if (wrap) wrap.hidden = true;
+      }
+
+      async function loadWorkspace() {
+        const data = await fetch("/workspace").then((r) => r.json());
+        state.channels = data.channels || [];
+        state.bots = data.bots || [];
+        state.serverLive = Array.isArray(data.live) ? data.live : [];
+        if (state.kind === "channel" && !currentChannel() && state.channels[0]) {
+          state.id = state.channels[0].id;
+        }
+        renderNav();
+        renderHead();
+        setHash();
+      }
+      async function deleteChannel(id, name) {
+        if (!id || id === "channel-general") {
+          alert(t("channel.keepGeneral"));
+          return;
+        }
+        if (!confirm(t("channel.deleteConfirm", { name: name || id }))) return;
+        const res = await fetch("/channels/" + encodeURIComponent(id), {
+          method: "DELETE",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+        if (state.kind === "channel" && state.id === id) {
+          state.id = "channel-general";
+          setHash();
+        }
+        await loadWorkspace();
+        if (state.kind === "channel") await loadMessages();
+      }
+      async function deleteBot(id, handle) {
+        if (!id) return;
+        if (!confirm(t("bot.deleteConfirm", { handle: handle || id }))) return;
+        const res = await fetch("/bots/" + encodeURIComponent(id), {
+          method: "DELETE",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+        if (state.kind === "dm" && state.id === id) {
+          state.kind = "channel";
+          state.id = "channel-general";
+          setHash();
+        }
+        hideBotCard();
+        await loadWorkspace();
+        await loadMessages();
+      }
+
+      function roomMessagesUrl(kind, id, suffix) {
+        const base =
+          kind === "dm"
+            ? "/dms/" + encodeURIComponent(id) + "/messages"
+            : "/channels/" + encodeURIComponent(id) + "/messages";
+        return suffix ? base + "/" + encodeURIComponent(suffix) : base;
+      }
+      function messagesUrl(suffix) {
+        return roomMessagesUrl(state.kind, state.id, suffix);
+      }
+      function steerUrl(kind, id) {
+        return kind === "dm"
+          ? "/dms/" + encodeURIComponent(id) + "/steer"
+          : "/channels/" + encodeURIComponent(id) + "/steer";
+      }
+      function abortUrl(room) {
+        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        return r.kind === "dm"
+          ? "/dms/" + encodeURIComponent(r.id) + "/abort"
+          : "/channels/" + encodeURIComponent(r.id) + "/abort";
+      }
+      function stopTurn() {
+        const room = state.busyRoom || { kind: state.kind, id: state.id };
+        try {
+          state.abort && state.abort.abort();
+        } catch {
+          /* ignore */
+        }
+        fetch(abortUrl(room), { method: "POST" }).catch(() => {});
+      }
+      function currentQueue() {
+        return (state.queue || []).filter(
+          (item) => item.room.kind === state.kind && item.room.id === state.id,
+        );
+      }
+      function renderQueue() {
+        const root = document.getElementById("queue-chips");
+        if (!root) return;
+        const rows = currentQueue();
+        if (!rows.length) {
+          root.hidden = true;
+          root.innerHTML = "";
+          return;
+        }
+        root.hidden = false;
+        root.innerHTML = rows
+          .map((item) => {
+            const preview = String(item.raw || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 48);
+            return (
+              '<span class="queue-chip"><span>' +
+              escapeHtml(preview || t("steer.queue")) +
+              '</span><button type="button" data-queue-del="' +
+              escapeHtml(item.id) +
+              '" title="' +
+              escapeHtml(t("steer.remove")) +
+              '">×</button></span>'
+            );
+          })
+          .join("");
+      }
+      function enqueuePending(pending) {
+        state.queueSeq += 1;
+        state.queue.push({
+          id: "q-" + state.queueSeq,
+          room: { kind: state.kind, id: state.id },
+          raw: pending.raw,
+          packed: pending.packed,
+          replyTo: pending.replyTo,
+          botIds: pending.botIds || [],
+          assigneeId: pending.assigneeId || "",
+        });
+        renderQueue();
+      }
+      function takeComposerPending() {
+        const draft = document.getElementById("draft");
+        const raw = draft.value.trim();
+        const packed = state.attachments.slice();
+        const text = composeSendBody(raw);
+        if (!text) return null;
+        const replyTo = state.replyTo ? state.replyTo.id : "";
+        draft.value = "";
+        fitDraft();
+        clearReply();
+        state.attachments = [];
+        renderAttachChips();
+        syncSendButton();
+        return { raw: raw, packed: packed, replyTo: replyTo, text: text };
+      }
+      async function loadMessages(opts) {
+        const res = await fetch(messagesUrl());
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "load failed");
+        state.messages = Array.isArray(body) ? body : [];
+        const last = state.messages[state.messages.length - 1];
+        if (last && last.createdAt) {
+          touchNavTime(state.kind, state.id, last.createdAt, last);
+        }
+        markRoomRead();
+        renderThread();
+        renderNav();
+        if (!opts || opts.resume !== false) await resumeCurrentLive();
+      }
+      async function resumeCurrentLive() {
+        if (state.posting) return;
+        const url = liveUrl({ kind: state.kind, id: state.id });
+        if (!url) return;
+        const res = await fetch(url);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.botId) {
+          if (currentRoomBusy() && !state.posting) setBusy(false);
+          return;
+        }
+        state.live = {
+          botId: body.botId,
+          thinking: body.thinking || "",
+          steps: Array.isArray(body.steps) ? body.steps.slice(-5) : [],
+          startedAt: body.startedAt || "",
+        };
+        state.abort = {
+          abort: function () {
+            fetch(abortUrl({ kind: state.kind, id: state.id }), {
+              method: "POST",
+            }).catch(function () {});
+          },
+        };
+        setBusy(true, [body.botId], {
+          keepLive: true,
+          startedAt: body.startedAt,
+        });
+      }
+      async function retryMessage(id, body) {
+        if (canStopHere()) {
+          stopTurn();
+          return;
+        }
+        if (state.busy) return;
+        state.editingId = null;
+        const text = body || "";
+        await postChat(
+          messagesUrl(id) + "/retry",
+          body ? { body: body } : {},
+          { kind: state.kind, id: state.id },
+          botsFromSend(text) || (state.kind === "dm" ? [state.id] : []),
+        );
+      }
+
+      async function openFromHash() {
+        parseHash();
+        state.editingId = null;
+        state.replyTo = null;
+        state.attachments = [];
+        if (typeof renderAttachChips === "function") renderAttachChips();
+        if (typeof hideAttach === "function") hideAttach();
+        if (typeof hideMention === "function") hideMention();
+        if (typeof hideBotCard === "function") hideBotCard();
+        const pop = document.getElementById("members-pop");
+        if (pop) pop.hidden = true;
+        renderReplyBar();
+        await loadWorkspace();
+        await loadMessages();
+        syncSendButton();
+      }
+
+      document.getElementById("thread").addEventListener("click", async (event) => {
+        const fenceCopy = event.target.closest("[data-fence-copy]");
+        const fenceInput = event.target.closest("[data-fence-input]");
+        const reply = event.target.closest("[data-reply]");
+        const jump = event.target.closest("[data-jump]");
+        const copy = event.target.closest("[data-copy]");
+        const edit = event.target.closest("[data-edit]");
+        const retry = event.target.closest("[data-retry]");
+        const stats = event.target.closest("[data-stats]");
+        const cancel = event.target.closest("[data-edit-cancel]");
+        const sendEdit = event.target.closest("[data-edit-send]");
+        try {
+          if (fenceCopy) {
+            event.preventDefault();
+            const text = fenceText(fenceCopy);
+            if (text) await navigator.clipboard.writeText(text);
+            fenceCopy.classList.add("copied");
+            fenceCopy.title = t("copied");
+            setTimeout(() => {
+              fenceCopy.classList.remove("copied");
+              fenceCopy.title = t("copy");
+            }, 1200);
+            return;
+          }
+          if (fenceInput) {
+            event.preventDefault();
+            insertDraft(fenceText(fenceInput));
+            return;
+          }
+          const htmlExpand = event.target.closest("[data-html-expand]");
+          if (htmlExpand) {
+            event.preventDefault();
+            const box = htmlExpand.closest(".md-html-preview");
+            const src = box && box.querySelector(".md-html-src");
+            if (src) openHtmlZoom(src.value);
+            return;
+          }
+          const htmlView = event.target.closest("[data-html-view]");
+          if (htmlView) {
+            event.preventDefault();
+            const box = htmlView.closest(".md-html-preview");
+            if (!box) return;
+            const view = htmlView.getAttribute("data-html-view");
+            box.setAttribute("data-view", view);
+            const frame = box.querySelector(".md-html-frame");
+            const pre = box.querySelector(".md-pre");
+            if (frame) frame.hidden = view !== "preview";
+            if (pre) pre.hidden = view !== "code";
+            box.querySelectorAll("[data-html-view]").forEach((tab) => {
+              tab.classList.toggle("on", tab.getAttribute("data-html-view") === view);
+            });
+            return;
+          }
+          const chipToken = event.target.closest("[data-chip-insert-token]");
+          if (chipToken) {
+            event.preventDefault();
+            insertAttachToken(chipToken.getAttribute("data-chip-insert-token"));
+            return;
+          }
+          if (jump) {
+            event.preventDefault();
+            const target = document.querySelector(
+              '.msg[data-id="' + CSS.escape(jump.getAttribute("data-jump")) + '"]',
+            );
+            if (target) {
+              target.classList.remove("flash");
+              void target.offsetWidth;
+              target.classList.add("flash");
+              target.scrollIntoView({ block: "center", behavior: "smooth" });
+            }
+            return;
+          }
+          if (reply) {
+            event.preventDefault();
+            const msg = state.messages.find(
+              (item) => item.id === reply.getAttribute("data-reply"),
+            );
+            if (msg) setReply(msg);
+            return;
+          }
+          if (copy) {
+            const msg = state.messages.find((item) => item.id === copy.getAttribute("data-copy"));
+            if (msg) await navigator.clipboard.writeText(msg.body);
+            return;
+          }
+          if (edit) {
+            state.editingId = edit.getAttribute("data-edit");
+            renderThread();
+            return;
+          }
+          if (cancel) {
+            state.editingId = null;
+            renderThread();
+            return;
+          }
+          if (sendEdit) {
+            const id = sendEdit.getAttribute("data-edit-send");
+            const box = document.querySelector('.edit-draft[data-edit-id="' + CSS.escape(id) + '"]');
+            const text = box ? box.value.trim() : "";
+            if (!text) return;
+            sendEdit.disabled = true;
+            await retryMessage(id, text);
+            return;
+          }
+          if (stats) {
+            event.preventDefault();
+            const id = stats.getAttribute("data-stats");
+            state.statsId = state.statsId === id ? null : id;
+            renderThread();
+            return;
+          }
+          if (retry) {
+            retry.disabled = true;
+            await retryMessage(retry.getAttribute("data-retry"));
+          }
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      document.getElementById("thread").addEventListener("keydown", (event) => {
+        if (!event.target.classList || !event.target.classList.contains("edit-draft")) return;
+        if (event.isComposing || event.keyCode === 229) return;
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          const id = event.target.getAttribute("data-edit-id");
+          const send = document.querySelector('[data-edit-send="' + CSS.escape(id) + '"]');
+          if (send) send.click();
+        }
+        if (event.key === "Escape") {
+          state.editingId = null;
+          renderThread();
+        }
+      });
+      document.getElementById("filter").addEventListener("input", renderNav);
+      document.getElementById("toggle-create").addEventListener("click", () => {
+        document.getElementById("create-row").classList.toggle("open");
+        document.getElementById("new-channel").focus();
+      });
+      document.getElementById("create-row").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const name = document.getElementById("new-channel").value.trim();
+        if (!name) return;
+        const res = await fetch("/channels", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          alert(body.error || "create failed");
+          return;
+        }
+        document.getElementById("new-channel").value = "";
+        document.getElementById("create-row").classList.remove("open");
+        location.hash = "#c/" + body.id;
+      });
+
+      const membersPop = document.getElementById("members-pop");
+      function toggleMembersPop() {
+        if (state.kind !== "channel") return;
+        membersPop.hidden = !membersPop.hidden;
+      }
+      document.getElementById("members-btn").addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleMembersPop();
+      });
+      document.getElementById("members-wrap").addEventListener("click", async (event) => {
+        const profile = event.target.closest("[data-bot-id]");
+        if (profile && !event.target.closest("[data-remove],[data-add]")) {
+          event.preventDefault();
+          showBotCard(botById(profile.getAttribute("data-bot-id")), profile);
+          return;
+        }
+        const add = event.target.closest("[data-add]");
+        const kick = event.target.closest("[data-remove]");
+        if (!add && !kick) return;
+        if (state.kind !== "channel") return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (kick) {
+          if (state.id === "channel-general") return;
+          await fetch(
+            "/channels/" +
+              encodeURIComponent(state.id) +
+              "/members/" +
+              encodeURIComponent(kick.getAttribute("data-remove")),
+            { method: "DELETE" },
+          );
+        } else {
+          await fetch("/channels/" + encodeURIComponent(state.id) + "/members", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ botId: add.getAttribute("data-add") }),
+          });
+        }
+        await loadWorkspace();
+        membersPop.hidden = false;
+      });
+
+      const channelMdDialog = document.getElementById("channel-md");
+      async function openChannelMd(event) {
+        if (state.kind !== "channel") return;
+        if (event) event.preventDefault();
+        const [notes, memory] = await Promise.all([
+          fetch("/channels/" + encodeURIComponent(state.id) + "/channel.md").then((r) => r.json()),
+          fetch("/channels/" + encodeURIComponent(state.id) + "/memory.md").then((r) => r.json()),
+        ]);
+        document.getElementById("channel-md-body").value =
+          notes && typeof notes.body === "string" ? notes.body : "";
+        document.getElementById("channel-memory-body").value =
+          memory && typeof memory.body === "string" ? memory.body : "";
+        const ch = currentChannel();
+        const locked = Boolean(
+          ch && (ch.id === "channel-general" || ch.name === "general"),
+        );
+        document.getElementById("channel-md-del").hidden = locked;
+        channelMdDialog.showModal();
+      }
+      const botMemoryDialog = document.getElementById("bot-memory");
+      let memoryBotId = "";
+      async function openBotMemory(bot) {
+        if (!bot) return;
+        memoryBotId = bot.id;
+        const payload = await fetch(
+          "/bots/" + encodeURIComponent(bot.id) + "/memory.md",
+        ).then((r) => r.json());
+        document.getElementById("bot-memory-body").value =
+          payload && typeof payload.body === "string" ? payload.body : "";
+        hideBotCard();
+        botMemoryDialog.showModal();
+      }
+      const botCard = document.getElementById("bot-card");
+      function hideBotCard() {
+        botCard.hidden = true;
+      }
+      function showBotCard(bot, anchor) {
+        if (!bot || !anchor) return;
+        document.getElementById("bot-card-av").textContent = initials(bot.name);
+        document.getElementById("bot-card-av").style.background = hue(bot.handle);
+        document.getElementById("bot-card-name").textContent = bot.name;
+        document.getElementById("bot-card-handle").textContent = "@" + bot.handle;
+        document.getElementById("bot-card-bio").textContent =
+          bot.oneLiner || "";
+        document.getElementById("bot-card-dm").setAttribute("href", "#d/" + bot.id);
+        document.getElementById("bot-card-edit").setAttribute(
+          "href",
+          "/edit/" + encodeURIComponent(bot.id),
+        );
+        botCard.hidden = false;
+        const rect = anchor.getBoundingClientRect();
+        const width = botCard.offsetWidth || 280;
+        const height = botCard.offsetHeight || 220;
+        let left = rect.left;
+        let top = rect.bottom + 8;
+        if (left + width > window.innerWidth - 12) {
+          left = window.innerWidth - width - 12;
+        }
+        if (left < 12) left = 12;
+        if (top + height > window.innerHeight - 12) {
+          top = rect.top - height - 8;
+        }
+        if (top < 12) top = 12;
+        botCard.style.left = left + "px";
+        botCard.style.top = top + "px";
+      }
+      document.getElementById("head-id").addEventListener("click", (event) => {
+        if (state.kind === "channel") {
+          openChannelMd(event);
+          return;
+        }
+        event.preventDefault();
+        const bot = botById(state.id);
+        if (bot) showBotCard(bot, event.currentTarget);
+      });
+      document.getElementById("thread").addEventListener("click", (event) => {
+        const av = event.target.closest("[data-bot-id]");
+        if (!av) return;
+        event.preventDefault();
+        const bot = botById(av.getAttribute("data-bot-id"));
+        showBotCard(bot, av);
+      });
+      document.getElementById("bot-card-dm").addEventListener("click", () => {
+        hideBotCard();
+      });
+      document.addEventListener("click", (event) => {
+        if (!membersPop.hidden && !event.target.closest("#members-wrap")) {
+          membersPop.hidden = true;
+        }
+        if (botCard.hidden) return;
+        if (event.target.closest("#bot-card")) return;
+        if (event.target.closest("[data-bot-id]")) return;
+        if (event.target.closest("#head-id")) return;
+        hideBotCard();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeHtmlZoom();
+          hideBotCard();
+        }
+      });
+      document.getElementById("html-zoom-close").addEventListener("click", () => {
+        closeHtmlZoom();
+      });
+      document.getElementById("html-zoom").addEventListener("click", (event) => {
+        if (event.target.id === "html-zoom") closeHtmlZoom();
+      });
+      document.getElementById("channel-md-cancel").addEventListener("click", () => {
+        channelMdDialog.close();
+      });
+      document.getElementById("channel-md-save").addEventListener("click", async () => {
+        const notes = document.getElementById("channel-md-body").value;
+        const memory = document.getElementById("channel-memory-body").value;
+        const [notesRes, memoryRes] = await Promise.all([
+          fetch("/channels/" + encodeURIComponent(state.id) + "/channel.md", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body: notes }),
+          }),
+          fetch("/channels/" + encodeURIComponent(state.id) + "/memory.md", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body: memory }),
+          }),
+        ]);
+        if (!notesRes.ok) {
+          const payload = await notesRes.json().catch(() => ({}));
+          alert(payload.error || t("saveFailed"));
+          return;
+        }
+        if (!memoryRes.ok) {
+          const payload = await memoryRes.json().catch(() => ({}));
+          alert(payload.error || t("saveFailed"));
+          return;
+        }
+        channelMdDialog.close();
+      });
+      document.getElementById("bot-memory-cancel").addEventListener("click", () => {
+        botMemoryDialog.close();
+      });
+      document.getElementById("bot-memory-save").addEventListener("click", async () => {
+        if (!memoryBotId) return;
+        const body = document.getElementById("bot-memory-body").value;
+        const res = await fetch(
+          "/bots/" + encodeURIComponent(memoryBotId) + "/memory.md",
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body: body }),
+          },
+        );
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(payload.error || t("saveFailed"));
+          return;
+        }
+        botMemoryDialog.close();
+      });
+      document.getElementById("bot-card-memory").addEventListener("click", (event) => {
+        event.preventDefault();
+        const handle = document.getElementById("bot-card-handle").textContent.replace(/^@/, "");
+        const bot = state.bots.find((item) => item.handle === handle);
+        openBotMemory(bot);
+      });
+      document.getElementById("bot-card-del").addEventListener("click", async (event) => {
+        event.preventDefault();
+        const handle = document.getElementById("bot-card-handle").textContent.replace(/^@/, "");
+        const bot = state.bots.find((item) => item.handle === handle);
+        if (!bot) return;
+        try {
+          await deleteBot(bot.id, bot.handle);
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      document.getElementById("channel-md-del").addEventListener("click", async () => {
+        const ch = currentChannel();
+        try {
+          await deleteChannel(state.id, ch && ch.name);
+          channelMdDialog.close();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+      const dialog = document.getElementById("invite");
+      function openInvite() {
+        if (state.kind !== "channel") return;
+        const ch = currentChannel();
+        const taken = new Set((ch && ch.memberIds) || []);
+        const available = state.bots.filter((bot) => !taken.has(bot.id));
+        document.getElementById("pick").innerHTML = available.length
+          ? available
+              .map(
+                (bot) =>
+                  '<label><input type="checkbox" name="bot" value="' +
+                  escapeHtml(bot.id) +
+                  '" />' +
+                  escapeHtml(bot.name) +
+                  " @" +
+                  escapeHtml(bot.handle) +
+                  "</label>",
+              )
+              .join("")
+          : '<p class="meta">' + t("members.allIn") + "</p>";
+        dialog.showModal();
+      }
+      document.getElementById("composer-reply-clear").addEventListener("click", () => {
+        clearReply();
+        document.getElementById("draft").focus();
+      });
+      document.getElementById("composer-plus").addEventListener("click", (event) => {
+        event.stopPropagation();
+        const pop = document.getElementById("attach-pop");
+        if (!pop.hidden || !document.getElementById("attach-sheet").hidden) {
+          hideAttach();
+          return;
+        }
+        pop.hidden = false;
+      });
+      document.getElementById("attach-pop").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-attach]");
+        if (!btn) return;
+        event.stopPropagation();
+        try {
+          await runAttach(btn.getAttribute("data-attach"));
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      document.getElementById("attach-back").addEventListener("click", (event) => {
+        event.stopPropagation();
+        hideAttach();
+        document.getElementById("attach-pop").hidden = false;
+      });
+      document.getElementById("attach-q").addEventListener("input", () => {
+        if (!state.attachSheet) return;
+        state.attachSheet.q = document.getElementById("attach-q").value;
+        renderAttachSheet();
+      });
+      document.getElementById("attach-sheet").addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const extra = event.target.closest("[data-extra]");
+        const pick = event.target.closest("[data-pick]");
+        try {
+          if (extra) {
+            const id = extra.getAttribute("data-extra");
+            if (state.attachSheet && (state.attachSheet.kind === "files" || state.attachSheet.kind === "dirs" || state.attachSheet.kind === "tree")) {
+              await pickFs(id);
+            }
+            return;
+          }
+          if (!pick) return;
+          const id = pick.getAttribute("data-pick");
+          const kind = state.attachSheet && state.attachSheet.kind;
+          if (kind === "files" || kind === "dirs" || kind === "tree") await pickFs(id);
+          else if (kind === "skills") {
+            const row = state.attachSheet.rows.find((item) => item.id === id);
+            if (!row) return;
+            addAttachment({
+              kind: "skill",
+              title: "skill " + row.name,
+              body:
+                t("attach.skillBody", { name: row.name }) +
+                "\n\n" +
+                String(row.body || "").slice(0, 2400),
+            });
+          } else if (kind === "conv") await pickConv(id);
+          else if (kind === "slash") await pickSlash(id);
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+      document.getElementById("attach-chips").addEventListener("click", (event) => {
+        const insert = event.target.closest("[data-chip-insert]");
+        if (insert) {
+          const att = state.attachments.find(
+            (item) => item.id === insert.getAttribute("data-chip-insert"),
+          );
+          if (att) insertAttachToken(att.token);
+          return;
+        }
+        const chip = event.target.closest("[data-chip]");
+        if (!chip) return;
+        const id = chip.getAttribute("data-chip");
+        const att = state.attachments.find((item) => item.id === id);
+        state.attachments = state.attachments.filter((item) => item.id !== id);
+        if (att && att.token) {
+          const draft = document.getElementById("draft");
+          draft.value = draft.value.split(att.token).join("").replace(/[ \t]{2,}/g, " ").replace(/^\s+|\s+$/g, "");
+          fitDraft();
+        }
+        renderAttachChips();
+      });
+      document.getElementById("attach-upload").addEventListener("change", async (event) => {
+        const files = [...(event.target.files || [])];
+        event.target.value = "";
+        for (const file of files) {
+          const image = /^image\//.test(file.type) || /\.(png|jpe?g|gif|webp|bmp|heic|svg)$/i.test(file.name);
+          const textish =
+            /^text\/|^application\/(json|javascript|xml|toml|yaml)/.test(file.type) ||
+            /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|rs|go|toml|ya?ml|sh|c|h|cpp|java|rb|php|sql|svg)$/i.test(
+              file.name,
+            );
+          if (image && !textish) {
+            addAttachment({
+              kind: "file",
+              title: file.name,
+              image: true,
+              mime: file.type,
+              body: t("attach.imageBody", {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                token: nextAttachToken("Image"),
+              }),
+            });
+            continue;
+          }
+          if (!textish) {
+            addAttachment({
+              kind: "file",
+              title: file.name,
+              mime: file.type,
+              body: t("attach.uploadNoPath", {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+              }),
+            });
+            continue;
+          }
+          if (file.size > 256000) {
+            addAttachment({
+              kind: "file",
+              title: file.name,
+              mime: file.type,
+              image: image,
+              body: t("attach.tooBig", { name: file.name }),
+            });
+            continue;
+          }
+          const text = await file.text();
+          addAttachment({
+            kind: "file",
+            title: file.name,
+            mime: file.type,
+            image: image,
+            body:
+              t("attach.uploadText", { name: file.name }) +
+              "\n```\n" +
+              text.slice(0, 48000) +
+              "\n```",
+          });
+        }
+      });
+      document.addEventListener("click", (event) => {
+        if (event.target.closest(".attach-wrap")) return;
+        if (event.target.closest("#attach-sheet")) return;
+        hideAttach();
+      });
+      document.getElementById("invite-cancel").addEventListener("click", () => dialog.close());
+      document.getElementById("invite-save").addEventListener("click", async () => {
+        const ids = [...document.querySelectorAll('#pick input[name="bot"]:checked')].map(
+          (el) => el.value,
+        );
+        for (const botId of ids) {
+          await fetch("/channels/" + encodeURIComponent(state.id) + "/members", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ botId }),
+          });
+        }
+        dialog.close();
+        await loadWorkspace();
+      });
+
+      function fitDraft() {
+        const el = document.getElementById("draft");
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 336) + "px";
+      }
+      function syncDraftPlaceholder() {
+        const draft = document.getElementById("draft");
+        if (!draft) return;
+        if (state.replyTo) {
+          draft.placeholder = t("replying");
+          return;
+        }
+        if (state.kind === "dm") {
+          const bot = botById(state.id);
+          draft.placeholder = bot
+            ? t("askName", { name: bot.name })
+            : t("askAnything");
+          return;
+        }
+        draft.placeholder = t("askAnything");
+      }
+      function renderReplyBar() {
+        const bar = document.getElementById("composer-reply");
+        const label = document.getElementById("composer-reply-text");
+        if (!bar || !label) return;
+        if (!state.replyTo) {
+          bar.hidden = true;
+          label.textContent = "";
+          syncDraftPlaceholder();
+          return;
+        }
+        bar.hidden = false;
+        label.textContent = previewLine(state.replyTo.body);
+        syncDraftPlaceholder();
+      }
+      function setReply(msg) {
+        if (!msg || msg.author === "you") return;
+        const wasEditing = Boolean(state.editingId);
+        state.editingId = null;
+        state.replyTo = { id: msg.id, author: msg.author, body: msg.body };
+        if (typeof hideMention === "function") hideMention();
+        if (wasEditing) renderThread();
+        renderReplyBar();
+        const draft = document.getElementById("draft");
+        draft.focus();
+      }
+      function clearReply() {
+        if (!state.replyTo) {
+          renderReplyBar();
+          return;
+        }
+        state.replyTo = null;
+        renderReplyBar();
+      }
+      function fenceText(el) {
+        const wrap = el.closest(".md-fence");
+        const code = wrap && wrap.querySelector(".md-pre code");
+        return code ? code.textContent : "";
+      }
+      function insertDraft(text) {
+        const draft = document.getElementById("draft");
+        if (!draft) return;
+        const start = draft.selectionStart;
+        const end = draft.selectionEnd;
+        const cur = draft.value;
+        let chunk = text;
+        if (cur && start === end) {
+          const before = cur.slice(0, start);
+          if (before && !/\n$/.test(before)) chunk = "\n\n" + chunk;
+        }
+        draft.value = cur.slice(0, start) + chunk + cur.slice(end);
+        const caret = start + chunk.length;
+        draft.setSelectionRange(caret, caret);
+        fitDraft();
+        draft.focus();
+      }
+      function hideAttach() {
+        document.getElementById("attach-pop").hidden = true;
+        document.getElementById("attach-sheet").hidden = true;
+        state.attachSheet = null;
+      }
+      function attachPrefix(att) {
+        if (
+          att.image ||
+          /^image\//i.test(att.mime || "") ||
+          /\.(png|jpe?g|gif|webp|bmp|heic|svg)$/i.test(att.title || "")
+        ) {
+          return "Image";
+        }
+        if (att.kind === "skill") return "Skill";
+        if (att.kind === "git") return "Git";
+        if (att.kind === "conv") return "Chat";
+        if (att.kind === "rules") return "Rules";
+        if (att.kind === "term") return "Bash";
+        if (att.kind === "dir" || att.kind === "tree") return "Dir";
+        return "File";
+      }
+      function nextAttachToken(prefix) {
+        let max = 0;
+        const re = new RegExp("^\\[" + prefix + " #(\\d+)\\]$");
+        state.attachments.forEach((att) => {
+          const hit = String(att.token || "").match(re);
+          if (hit) max = Math.max(max, Number(hit[1]));
+        });
+        return "[" + prefix + " #" + (max + 1) + "]";
+      }
+      function insertAttachToken(token) {
+        const draft = document.getElementById("draft");
+        if (!draft || !token) return;
+        if (draft.value.indexOf(token) !== -1) {
+          draft.focus();
+          return;
+        }
+        insertDraft(token + " ");
+      }
+      function renderAttachChips() {
+        const root = document.getElementById("attach-chips");
+        root.hidden = !state.attachments.length;
+        root.innerHTML = state.attachments
+          .map(
+            (att) =>
+              '<span class="attach-chip"><button type="button" class="attach-chip-name" data-chip-insert="' +
+              escapeHtml(att.id) +
+              '" title="' +
+              escapeHtml(t("insert", { name: att.token })) +
+              '">' +
+              escapeHtml(att.title) +
+              '</button><button type="button" class="attach-chip-x" data-chip="' +
+              escapeHtml(att.id) +
+              '" title="' +
+              escapeHtml(t("remove")) +
+              '" aria-label="' +
+              escapeHtml(t("remove")) +
+              '">×</button></span>',
+          )
+          .join("");
+      }
+      function addAttachment(att) {
+        const item = {
+          id: "a" + Date.now().toString(36) + Math.random().toString(16).slice(2, 6),
+          kind: att.kind,
+          title: att.title,
+          body: att.body || "",
+          image: Boolean(att.image),
+          mime: att.mime || "",
+          token: "",
+        };
+        item.token = nextAttachToken(attachPrefix(item));
+        state.attachments.push(item);
+        renderAttachChips();
+        hideAttach();
+        insertAttachToken(item.token);
+      }
+      function composeSendBody(text) {
+        const missing = state.attachments
+          .map((att) => att.token)
+          .filter((token) => token && text.indexOf(token) === -1);
+        if (!missing.length) return text;
+        const lead = missing.join(" ");
+        return text ? lead + " " + text : lead;
+      }
+      function youAttachHtml(msg) {
+        const atts = msg.attachments || [];
+        if (!atts.length) return "";
+        return (
+          '<div class="msg-atts">' +
+          atts
+            .map(
+              (att) =>
+                '<button type="button" class="attach-chip" data-chip-insert-token="' +
+                escapeHtml(att.token) +
+                '" title="' +
+                escapeHtml(t("insert", { name: att.token })) +
+                '"><span>' +
+                escapeHtml(att.title) +
+                "</span></button>",
+            )
+            .join("") +
+          "</div>"
+        );
+      }
+      function formatYouBody(text) {
+        return escapeHtml(text).replace(
+          /\[([A-Za-z]+ #\d+)\]/g,
+          '<code class="att-token">[$1]</code>',
+        );
+      }
+      function attachCwd() {
+        return state.attachCwd || sessionStorage.getItem("guild-cwd") || "~";
+      }
+      function setAttachCwd(path) {
+        state.attachCwd = path;
+        try {
+          sessionStorage.setItem("guild-cwd", path);
+        } catch {
+          /* ignore */
+        }
+      }
+      function filterRows(rows, q) {
+        const needle = String(q || "").toLowerCase();
+        if (!needle) return rows;
+        return rows.filter((row) =>
+          String(row.label || row.name || "")
+            .toLowerCase()
+            .includes(needle),
+        );
+      }
+      function renderAttachSheet() {
+        const sheet = state.attachSheet;
+        const root = document.getElementById("attach-sheet");
+        const title = document.getElementById("attach-sheet-title");
+        const pathEl = document.getElementById("attach-path");
+        const body = document.getElementById("attach-sheet-body");
+        const q = document.getElementById("attach-q");
+        if (!sheet) {
+          root.hidden = true;
+          return;
+        }
+        root.hidden = false;
+        document.getElementById("attach-pop").hidden = true;
+        title.textContent = sheet.title;
+        q.hidden = sheet.kind === "term";
+        q.value = sheet.q || "";
+        if (sheet.path) {
+          pathEl.hidden = false;
+          pathEl.textContent = sheet.path;
+        } else {
+          pathEl.hidden = true;
+          pathEl.textContent = "";
+        }
+        if (sheet.kind === "term") {
+          body.innerHTML =
+            '<form class="attach-term" id="attach-term"><input id="attach-term-cmd" placeholder="ls -la" autocomplete="off" /><button type="submit">' +
+            t("add") +
+            "</button></form>";
+          const cmd = document.getElementById("attach-term-cmd");
+          cmd.focus();
+          document.getElementById("attach-term").addEventListener("submit", (event) => {
+            event.preventDefault();
+            const value = cmd.value.trim();
+            if (!value) return;
+            addAttachment({
+              kind: "term",
+              title: "$ " + value,
+              body: t("attach.run", { cmd: value }),
+            });
+          });
+          return;
+        }
+        const rows = filterRows(sheet.rows || [], sheet.q);
+        const extras = (sheet.extras || [])
+          .map(
+            (row) =>
+              '<button type="button" class="attach-row" data-extra="' +
+              escapeHtml(row.id) +
+              '">' +
+              escapeHtml(row.label) +
+              "</button>",
+          )
+          .join("");
+        body.innerHTML =
+          extras +
+          (rows.length
+            ? rows
+                .map(
+                  (row) =>
+                    '<button type="button" class="attach-row" data-pick="' +
+                    escapeHtml(row.id) +
+                    '">' +
+                    escapeHtml(row.label) +
+                    (row.hint ? "<em>" + escapeHtml(row.hint) + "</em>" : "") +
+                    "</button>",
+                )
+                .join("")
+            : '<div class="members-empty">' + t("attach.empty") + "</div>");
+      }
+      async function hostJson(path) {
+        const res = await fetch(path);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "request failed");
+        return body;
+      }
+      async function openFsSheet(kind) {
+        const listed = await hostJson(
+          "/host/ls?path=" + encodeURIComponent(attachCwd()),
+        );
+        setAttachCwd(listed.path);
+        const dirsOnly = kind === "dirs";
+        const rows = (listed.entries || [])
+          .filter((entry) => (dirsOnly ? entry.kind === "dir" : true))
+          .map((entry) => ({
+            id: entry.name,
+            label: (entry.kind === "dir" ? "📁 " : "📄 ") + entry.name,
+            hint: entry.kind === "dir" ? t("attach.dirs") : entry.size != null ? String(entry.size) : "",
+            kind: entry.kind,
+            name: entry.name,
+          }));
+        const extras = [];
+        if (listed.parent) extras.push({ id: "..", label: t("attach.parent") });
+        if (kind === "dirs" || kind === "tree") {
+          extras.push({
+            id: ".",
+            label: kind === "tree" ? t("attach.addTree") : t("attach.addDir"),
+          });
+        }
+        state.attachSheet = {
+          kind: kind,
+          title:
+            kind === "tree"
+              ? t("attach.tree")
+              : kind === "dirs"
+                ? t("attach.dirs")
+                : t("attach.files"),
+          path: listed.path,
+          parent: listed.parent,
+          q: "",
+          rows: rows,
+          extras: extras,
+        };
+        renderAttachSheet();
+      }
+      async function pickFs(id) {
+        const sheet = state.attachSheet;
+        if (!sheet) return;
+        if (id === "..") {
+          setAttachCwd(sheet.parent || "~");
+          await openFsSheet(sheet.kind);
+          return;
+        }
+        if (id === ".") {
+          if (sheet.kind === "tree") {
+            const tree = await hostJson(
+              "/host/tree?path=" + encodeURIComponent(sheet.path),
+            );
+            addAttachment({
+              kind: "tree",
+              title: tree.path,
+              body: t("attach.treeBody") + "\n```\n" + tree.text + "\n```",
+            });
+            return;
+          }
+          addAttachment({
+            kind: "dir",
+            title: sheet.path,
+            body: t("attach.listDir", { path: sheet.path }),
+          });
+          return;
+        }
+        const row = (sheet.rows || []).find((item) => item.id === id);
+        if (!row) return;
+        const next = sheet.path.replace(/\/+$/, "") + "/" + row.name;
+        if (row.kind === "dir") {
+          setAttachCwd(next);
+          await openFsSheet(sheet.kind);
+          return;
+        }
+        if (sheet.kind !== "files") return;
+        try {
+          const file = await hostJson("/host/read?path=" + encodeURIComponent(next));
+          addAttachment({
+            kind: "file",
+            title: file.name || next,
+            body:
+              t("attach.fileBody", {
+                path: file.path,
+                trunc: file.truncated ? t("attach.truncated") : "",
+              }) +
+              "\n```\n" +
+              file.text +
+              "\n```",
+          });
+        } catch (err) {
+          addAttachment({
+            kind: "file",
+            title: row.name,
+            body: t("attach.readFile", { path: next, err: err.message }),
+          });
+        }
+      }
+      async function openSkillsSheet() {
+        const skills = await fetch("/library/skills").then((r) => r.json());
+        const rows = (Array.isArray(skills) ? skills : []).map((item) => ({
+          id: item.id,
+          label: item.name,
+          hint: item.slug || "",
+          name: item.name,
+          body: item.body || "",
+        }));
+        state.attachSheet = {
+          kind: "skills",
+          title: t("attach.skills"),
+          q: "",
+          rows: rows,
+        };
+        renderAttachSheet();
+      }
+      function openConvSheet() {
+        const rows = (state.channels || []).map((ch) => ({
+          id: "c:" + ch.id,
+          label: "#" + ch.name,
+          hint: t("channels"),
+        }));
+        (state.bots || []).forEach((bot) => {
+          rows.push({
+            id: "d:" + bot.id,
+            label: bot.name,
+            hint: "@" + bot.handle,
+          });
+        });
+        state.attachSheet = { kind: "conv", title: t("attach.conv"), q: "", rows: rows };
+        renderAttachSheet();
+      }
+      async function pickConv(id) {
+        const kind = id.slice(0, 1);
+        const rest = id.slice(2);
+        const url =
+          kind === "c"
+            ? "/channels/" + encodeURIComponent(rest) + "/messages"
+            : "/dms/" + encodeURIComponent(rest) + "/messages";
+        const messages = await fetch(url).then((r) => r.json());
+        const list = Array.isArray(messages) ? messages.slice(-12) : [];
+        const title =
+          kind === "c"
+            ? "#" + ((state.channels.find((ch) => ch.id === rest) || {}).name || rest)
+            : "@" + ((botById(rest) || {}).handle || rest);
+        const body = list
+          .map((msg) => {
+            const who =
+              msg.author === "you"
+                ? t("you")
+                : (botById(msg.author) || {}).handle || msg.author;
+            return who + ": " + String(msg.body || "").slice(0, 400);
+          })
+          .join("\n");
+        addAttachment({
+          kind: "conv",
+          title: title,
+          body:
+            t("attach.convBody", { title: title }) +
+            "\n```\n" +
+            (body || t("emptyParen")) +
+            "\n```",
+        });
+      }
+      async function attachGit() {
+        const git = await hostJson(
+          "/host/git?path=" + encodeURIComponent(attachCwd()),
+        );
+        addAttachment({
+          kind: "git",
+          title: "git " + (git.root || ""),
+          body: t("attach.gitBody") + "\n```\n" + git.text + "\n```",
+        });
+      }
+      async function attachRules() {
+        if (state.kind === "channel") {
+          const res = await fetch(
+            "/channels/" + encodeURIComponent(state.id) + "/channel.md",
+          );
+          const payload = await res.json();
+          const body =
+            payload && typeof payload.body === "string" ? payload.body.trim() : "";
+          addAttachment({
+            kind: "rules",
+            title: "Channel.md",
+            body: body
+              ? "Channel.md：\n" + body
+              : t("attach.noChannelMd"),
+          });
+          return;
+        }
+        const bot = botById(state.id);
+        if (!bot) return;
+        const detail = await fetch("/bots/" + encodeURIComponent(bot.id)).then((r) =>
+          r.json(),
+        );
+        const chunks = [
+          detail.soul && detail.soul.body
+            ? "# Soul\n" + String(detail.soul.body).slice(0, 1800)
+            : "",
+          detail.agent && detail.agent.body
+            ? "# Agent\n" + String(detail.agent.body).slice(0, 1200)
+            : "",
+          detail.position && detail.position.body
+            ? "# Position\n" + String(detail.position.body).slice(0, 800)
+            : "",
+        ].filter(Boolean);
+        addAttachment({
+          kind: "rules",
+          title: t("attach.botRulesTitle", { handle: bot.handle }),
+          body: chunks.join("\n\n") || t("attach.noPersona"),
+        });
+      }
+      function openSlashSheet() {
+        const rows = [
+          { id: "channel-md", label: t("slash.editMd"), hint: t("slash.editMdHint") },
+          { id: "rules", label: t("slash.rules"), hint: t("slash.rulesHint") },
+          { id: "git", label: t("slash.git"), hint: "status + diff" },
+          { id: "here", label: t("slash.here"), hint: t("slash.hereHint") },
+          { id: "library", label: t("slash.library"), hint: "/library" },
+        ];
+        if (state.kind !== "channel") {
+          rows.splice(0, 1);
+          rows.splice(2, 1);
+        }
+        state.attachSheet = { kind: "slash", title: t("attach.slash"), q: "", rows: rows };
+        renderAttachSheet();
+      }
+      async function pickSlash(id) {
+        if (id === "channel-md") {
+          hideAttach();
+          openChannelMd();
+          return;
+        }
+        if (id === "rules") {
+          await attachRules();
+          return;
+        }
+        if (id === "git") {
+          await attachGit();
+          return;
+        }
+        if (id === "here") {
+          hideAttach();
+          insertDraft("@channel ");
+          return;
+        }
+        if (id === "library") {
+          window.location.href = "/library";
+        }
+      }
+      async function runAttach(kind) {
+        if (kind === "upload") {
+          document.getElementById("attach-upload").click();
+          document.getElementById("attach-pop").hidden = true;
+          return;
+        }
+        if (kind === "files") return openFsSheet("files");
+        if (kind === "dirs") return openFsSheet("dirs");
+        if (kind === "tree") return openFsSheet("tree");
+        if (kind === "skills") return openSkillsSheet();
+        if (kind === "conv") return openConvSheet();
+        if (kind === "git") return attachGit();
+        if (kind === "rules") return attachRules();
+        if (kind === "term") {
+          state.attachSheet = { kind: "term", title: t("attach.term"), q: "", rows: [] };
+          renderAttachSheet();
+          return;
+        }
+        if (kind === "slash") return openSlashSheet();
+      }
+      function setBusy(on, botIds, opts) {
+        state.busy = on;
+        state.liveGen += 1;
+        const gen = state.liveGen;
+        if (!opts || !opts.keepLive) {
+          state.live = { botId: "", thinking: "", steps: [] };
+        }
+        if (on) {
+          const started = opts && opts.startedAt ? Date.parse(opts.startedAt) : NaN;
+          state.busySince = Number.isFinite(started) ? started : Date.now();
+          state.busyRoom = { kind: state.kind, id: state.id };
+          state.busyBots = {};
+          (botIds || []).forEach((id) => {
+            state.busyBots[id] = true;
+          });
+        } else {
+          state.busyBots = {};
+          state.busyRoom = null;
+        }
+        if (state.clockTimer) {
+          clearInterval(state.clockTimer);
+          state.clockTimer = null;
+        }
+        if (state.liveTimer) {
+          clearInterval(state.liveTimer);
+          state.liveTimer = null;
+        }
+        syncSendButton();
+        renderThread();
+        renderNav();
+        if (on) {
+          pollLive(gen);
+          state.liveTimer = setInterval(() => pollLive(gen), 400);
+          state.clockTimer = setInterval(() => {
+            if (!currentRoomBusy()) return;
+            const el = document.querySelector(".turn-status");
+            if (!el) return;
+            const elapsed = Date.now() - state.busySince;
+            if (elapsed < 15000) return;
+            let clock = el.querySelector(".clock");
+            if (!clock) {
+              clock = document.createElement("span");
+              clock.className = "clock";
+              el.appendChild(clock);
+            }
+            clock.textContent = Math.floor(elapsed / 1000) + "s";
+          }, 1000);
+        }
+      }
+      async function postChat(path, payload, sent, botIds) {
+        const controller = new AbortController();
+        state.abort = controller;
+        state.posting = true;
+        setBusy(true, botIds);
+        let ok = false;
+        try {
+          const res = await fetch(path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || "send failed");
+          ok = true;
+          const here =
+            state.kind === sent.kind && state.id === sent.id;
+          if (here) {
+            await loadMessages();
+          } else {
+            const lastReply =
+              Array.isArray(body.replies) && body.replies.length
+                ? body.replies[body.replies.length - 1]
+                : body.message;
+            touchNavTime(
+              sent.kind,
+              sent.id,
+              lastReply && lastReply.createdAt,
+              lastReply || { author: "you", body: payload.body },
+            );
+            state.unread.add(roomKey(sent.kind, sent.id));
+            (botIds || []).forEach((id) => {
+              if (sent.kind === "dm") state.unread.add(roomKey("dm", id));
+            });
+            saveUnread();
+            renderNav();
+          }
+        } catch (err) {
+          if (err.name === "AbortError") {
+            if (state.kind === sent.kind && state.id === sent.id) {
+              await loadMessages({ resume: false }).catch(() => {});
+            }
+            return;
+          }
+          throw err;
+        } finally {
+          state.posting = false;
+          state.abort = null;
+          setBusy(false);
+        }
+        if (ok) await flushQueued(sent);
+      }
+      async function flushQueued(sent) {
+        const idx = (state.queue || []).findIndex(
+          (item) => item.room.kind === sent.kind && item.room.id === sent.id,
+        );
+        if (idx < 0) return;
+        const next = state.queue.splice(idx, 1)[0];
+        renderQueue();
+        await flushSend(
+          next.raw,
+          next.packed,
+          next.replyTo,
+          next.botIds,
+          next.assigneeId,
+          next.room,
+        );
+      }
+      async function sendSteer(pending) {
+        const attachments = pending.packed.map((att) => ({
+          token: att.token,
+          title: att.title,
+          body: att.body || "",
+        }));
+        const payload = { body: composeSendBody(pending.raw) };
+        if (attachments.length) payload.attachments = attachments;
+        const res = await fetch(steerUrl(state.kind, state.id), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          enqueuePending({
+            raw: pending.raw,
+            packed: pending.packed,
+            replyTo: pending.replyTo,
+            botIds: pending.botIds || botsFromSend(pending.raw) || [],
+            assigneeId: pending.assigneeId || "",
+          });
+          return;
+        }
+        if (!res.ok) throw new Error(body.error || "steer failed");
+        if (body.message) {
+          state.messages = state.messages.concat([body.message]);
+          renderThread();
+        }
+      }
+      let pendingAssign = null;
+      async function flushSend(raw, packed, replyTo, botIds, assigneeId, dest) {
+        const draft = document.getElementById("draft");
+        const text = composeSendBody(raw);
+        const attachments = packed.map((att) => ({
+          token: att.token,
+          title: att.title,
+          body: att.body || "",
+        }));
+        const room = dest || { kind: state.kind, id: state.id };
+        const here = state.kind === room.kind && state.id === room.id;
+        if (here) {
+          draft.value = "";
+          fitDraft();
+          clearReply();
+          state.attachments = [];
+          renderAttachChips();
+        }
+        const payload = { body: text };
+        if (replyTo) payload.replyTo = replyTo;
+        if (attachments.length) payload.attachments = attachments;
+        if (assigneeId) payload.assigneeId = assigneeId;
+        if (here) {
+          state.messages = state.messages.concat([
+            {
+              id: "pending-you",
+              author: "you",
+              body: text,
+              replyTo: replyTo || undefined,
+              attachments: attachments.length ? attachments : undefined,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          touchNavTime(undefined, undefined, undefined, {
+            author: "you",
+            body: text,
+            createdAt: new Date().toISOString(),
+          });
+          renderThread();
+          renderNav();
+        }
+        try {
+          await postChat(
+            roomMessagesUrl(room.kind, room.id),
+            payload,
+            room,
+            botIds,
+          );
+        } catch (err) {
+          alert(err.message);
+          if (here) {
+            state.attachments = packed;
+            renderAttachChips();
+            draft.value = raw;
+            fitDraft();
+            await loadMessages().catch(() => {});
+          }
+        } finally {
+          draft.focus();
+        }
+      }
+      function openAssign(cands, pending) {
+        pendingAssign = pending;
+        document.getElementById("assign-list").innerHTML = cands
+          .map((bot) => {
+            return (
+              '<button type="button" data-assign="' +
+              escapeHtml(bot.id) +
+              '"><span class="avatar sm" style="background:' +
+              hue(bot.handle) +
+              '">' +
+              escapeHtml(initials(bot.name)) +
+              '</span><span class="assign-copy"><strong>' +
+              escapeHtml(bot.name) +
+              "</strong><span>@" +
+              escapeHtml(bot.handle) +
+              "</span></span></button>"
+            );
+          })
+          .join("");
+        document.getElementById("assign").showModal();
+      }
+      document.getElementById("assign-list").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-assign]");
+        if (!btn || !pendingAssign) return;
+        const id = btn.getAttribute("data-assign");
+        const pending = pendingAssign;
+        pendingAssign = null;
+        document.getElementById("assign").close();
+        if (pending.queue) {
+          takeComposerPending();
+          enqueuePending({
+            raw: pending.raw,
+            packed: pending.packed,
+            replyTo: pending.replyTo,
+            botIds: [id],
+            assigneeId: id,
+          });
+          return;
+        }
+        await flushSend(pending.raw, pending.packed, pending.replyTo, [id], id);
+      });
+      document.getElementById("assign-cancel").addEventListener("click", () => {
+        pendingAssign = null;
+        document.getElementById("assign").close();
+      });
+      document.getElementById("assign").addEventListener("close", () => {
+        pendingAssign = null;
+      });
+      document.getElementById("composer").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (currentRoomBusy()) {
+          if (!composerHasPayload()) {
+            if (canStopHere()) stopTurn();
+            return;
+          }
+          const draft = document.getElementById("draft");
+          const raw = draft.value.trim();
+          const packed = state.attachments.slice();
+          const replyTo = state.replyTo ? state.replyTo.id : "";
+          const cands = assignCandidates(raw);
+          if (cands.length > 1) {
+            openAssign(cands, {
+              raw: raw,
+              packed: packed,
+              replyTo: replyTo,
+              queue: true,
+            });
+            return;
+          }
+          const pending = takeComposerPending();
+          if (!pending) return;
+          enqueuePending({
+            raw: pending.raw,
+            packed: pending.packed,
+            replyTo: pending.replyTo,
+            botIds: botsFromSend(pending.raw) || [],
+            assigneeId: cands.length === 1 ? cands[0].id : "",
+          });
+          return;
+        }
+        if (canStopHere()) {
+          stopTurn();
+          return;
+        }
+        if (state.busy) return;
+        const draft = document.getElementById("draft");
+        const raw = draft.value.trim();
+        const packed = state.attachments.slice();
+        const text = composeSendBody(raw);
+        if (!text) return;
+        const replyTo = state.replyTo ? state.replyTo.id : "";
+        const cands = assignCandidates(raw);
+        if (cands.length > 1) {
+          openAssign(cands, { raw: raw, packed: packed, replyTo: replyTo });
+          return;
+        }
+        const botIds = botsFromSend(raw);
+        const assigneeId = cands.length === 1 ? cands[0].id : "";
+        await flushSend(raw, packed, replyTo, botIds, assigneeId);
+      });
+      function mentionAt(text, caret) {
+        const before = text.slice(0, caret);
+        const match = before.match(/(^|[\s])@([^\s@]*)$/);
+        if (!match) return null;
+        return { start: before.length - match[2].length - 1, query: match[2] };
+      }
+      function mentionChoices(query) {
+        if (state.kind !== "channel") return [];
+        const ch = currentChannel();
+        const taken = new Set((ch && ch.memberIds) || []);
+        const needle = String(query || "").toLowerCase();
+        const specials = [
+          {
+            kind: "all",
+            insert: "@channel",
+            name: t("mention.channel"),
+            hint: t("mention.channelHint"),
+            glyph: "#",
+          },
+          {
+            kind: "all",
+            insert: "@here",
+            name: t("mention.here"),
+            hint: t("mention.hereHint"),
+            glyph: "#",
+          },
+        ].filter((row) => {
+          if (!needle) return true;
+          return (
+            row.insert.slice(1).startsWith(needle) ||
+            row.name.toLowerCase().includes(needle)
+          );
+        });
+        const bots = (state.bots || []).filter((bot) => {
+          if (!needle) return true;
+          return (
+            bot.handle.toLowerCase().includes(needle) ||
+            bot.name.toLowerCase().includes(needle)
+          );
+        });
+        const inside = bots.filter((bot) => taken.has(bot.id));
+        const outside = bots.filter((bot) => !taken.has(bot.id));
+        return specials.concat(
+          inside.map((bot) => ({
+            kind: "bot",
+            insert: "@" + bot.handle,
+            name: bot.name,
+            hint: "@" + bot.handle,
+            glyph: initials(bot.name),
+            color: hue(bot.handle),
+            outside: false,
+          })),
+          outside.map((bot) => ({
+            kind: "bot",
+            insert: "@" + bot.handle,
+            name: bot.name,
+            hint: "@" + bot.handle,
+            glyph: initials(bot.name),
+            color: hue(bot.handle),
+            outside: true,
+          })),
+        );
+      }
+      function hideMention() {
+        state.mention = null;
+        document.getElementById("mention-pop").hidden = true;
+      }
+      function renderMention() {
+        const pop = document.getElementById("mention-pop");
+        const rows = state.mention ? mentionChoices(state.mention.query) : [];
+        if (!rows.length) {
+          hideMention();
+          return;
+        }
+        if (state.mentionIndex >= rows.length) state.mentionIndex = 0;
+        if (state.mentionIndex < 0) state.mentionIndex = rows.length - 1;
+        pop.hidden = false;
+        document.getElementById("mention-results").innerHTML = rows
+          .map((row, index) => {
+            const on = index === state.mentionIndex ? " on" : "";
+            const avStyle = row.color ? "background:" + row.color : "";
+            const out = row.outside
+              ? '<span class="out">' + t("notInChannel") + "</span>"
+              : "";
+            return (
+              '<button type="button" class="mention-item' +
+              on +
+              '" data-mention="' +
+              index +
+              '"><span class="mention-glyph" style="' +
+              avStyle +
+              '">' +
+              escapeHtml(row.glyph) +
+              "</span><span><strong>" +
+              escapeHtml(row.name) +
+              "</strong><em>" +
+              escapeHtml(row.hint) +
+              "</em></span>" +
+              out +
+              "</button>"
+            );
+          })
+          .join("");
+        const active = pop.querySelector(".mention-item.on");
+        if (active && active.scrollIntoView) {
+          active.scrollIntoView({ block: "nearest" });
+        }
+      }
+      function applyMention(row) {
+        const draft = document.getElementById("draft");
+        if (!state.mention || !row) return;
+        const text = draft.value;
+        const before = text.slice(0, state.mention.start);
+        const after = text.slice(draft.selectionStart);
+        const insert = row.insert + " ";
+        draft.value = before + insert + after;
+        const caret = (before + insert).length;
+        draft.setSelectionRange(caret, caret);
+        hideMention();
+        fitDraft();
+        draft.focus();
+      }
+      function syncMention() {
+        if (state.kind !== "channel") {
+          hideMention();
+          return;
+        }
+        const draft = document.getElementById("draft");
+        const found = mentionAt(draft.value, draft.selectionStart);
+        if (!found) {
+          hideMention();
+          return;
+        }
+        if (!state.mention || state.mention.query !== found.query) {
+          state.mentionIndex = 0;
+        }
+        state.mention = found;
+        renderMention();
+      }
+      document.getElementById("draft").addEventListener("input", () => {
+        fitDraft();
+        syncMention();
+        syncSendButton();
+      });
+      document.getElementById("queue-chips").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-queue-del]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-queue-del");
+        state.queue = (state.queue || []).filter((item) => item.id !== id);
+        renderQueue();
+      });
+      document.getElementById("draft").addEventListener("click", syncMention);
+      document.getElementById("draft").addEventListener("keyup", (event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") syncMention();
+      });
+      document.getElementById("mention-results").addEventListener("mousedown", (event) => {
+        const btn = event.target.closest("[data-mention]");
+        if (!btn) return;
+        event.preventDefault();
+        const rows = mentionChoices(state.mention ? state.mention.query : "");
+        applyMention(rows[Number(btn.getAttribute("data-mention"))]);
+      });
+      document.getElementById("draft").addEventListener("keydown", (event) => {
+        if (event.isComposing || event.keyCode === 229) return;
+        const open = Boolean(state.mention) && !document.getElementById("mention-pop").hidden;
+        if (open) {
+          const rows = mentionChoices(state.mention.query);
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            state.mentionIndex = (state.mentionIndex + 1) % rows.length;
+            renderMention();
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            state.mentionIndex = (state.mentionIndex - 1 + rows.length) % rows.length;
+            renderMention();
+            return;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            hideMention();
+            return;
+          }
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            applyMention(rows[state.mentionIndex] || rows[0]);
+            return;
+          }
+          if (event.key === "Tab") {
+            event.preventDefault();
+            applyMention(rows[state.mentionIndex] || rows[0]);
+            return;
+          }
+        }
+        if (event.key === "Escape" && state.replyTo) {
+          event.preventDefault();
+          clearReply();
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          if (
+            currentRoomBusy() &&
+            composerHasPayload() &&
+            (event.metaKey || event.ctrlKey)
+          ) {
+            const pending = takeComposerPending();
+            if (!pending) return;
+            sendSteer({
+              raw: pending.raw,
+              packed: pending.packed,
+              replyTo: pending.replyTo,
+              botIds: botsFromSend(pending.raw) || [],
+              assigneeId: "",
+            }).catch((err) => alert(err.message));
+            return;
+          }
+          document.getElementById("composer").requestSubmit();
+        }
+      });
+      fitDraft();
+
+      let modelCfg = {
+        default: null,
+        reasoning: "medium",
+        fast: false,
+        recent: [],
+        picker: [],
+      };
+      function setModelPickerVisible(on) {
+        const wrap = document.querySelector(".model-wrap");
+        if (wrap) wrap.hidden = !on;
+        if (!on) document.getElementById("model-pop").hidden = true;
+      }
+      function activeModelRef() {
+        if (state.kind === "dm") {
+          const bot = botById(state.id);
+          if (bot && bot.model && bot.model.provider) return bot.model;
+        }
+        return null;
+      }
+      function modelGlyph(kind, name) {
+        const hay = String(name || "");
+        if (/claude|anthropic/i.test(hay)) return { mark: "✶", tone: "claude" };
+        if (/grok|xai/i.test(hay)) return { mark: "✦", tone: "grok" };
+        if (/gpt|openai|codex/i.test(hay)) return { mark: "◎", tone: "openai" };
+        if (/gemini|google/i.test(hay)) return { mark: "✧", tone: "gemini" };
+        if (kind === "oauth") return { mark: "⌁", tone: "" };
+        return { mark: "●", tone: "" };
+      }
+      function allModels() {
+        const rows = [];
+        for (const p of modelCfg.picker || []) {
+          for (const m of p.models || []) {
+            rows.push({
+              provider: p.id,
+              model: m.id,
+              name: m.name || m.id,
+              group: p.name || p.id,
+              ready: Boolean(p.ready),
+              kind: p.kind || "key",
+            });
+          }
+        }
+        return rows;
+      }
+      function displayName(ref) {
+        if (!ref) return t("local");
+        const hit = allModels().find(
+          (row) => row.provider === ref.provider && row.model === ref.model,
+        );
+        return hit ? hit.name : ref.model;
+      }
+      function reasonLabel(value) {
+        if (value === "minimal") return t("reason.min");
+        if (value === "low") return t("reason.low");
+        if (value === "high") return t("reason.high");
+        return t("reason.mid");
+      }
+      function speedLabel() {
+        return modelCfg.fast ? t("speed.fast") : t("speed.normal");
+      }
+      function showModelSheet(name) {
+        ["models", "reasoning", "speed", "advanced"].forEach((id) => {
+          const el = document.getElementById("model-sheet-" + id);
+          if (el) el.hidden = id !== name;
+        });
+        document.querySelectorAll(".model-nav [data-sheet]").forEach((btn) => {
+          btn.classList.toggle("on", btn.getAttribute("data-sheet") === name);
+        });
+      }
+      function paneModels() {
+        const needle = (
+          document.getElementById("model-q")?.value || ""
+        )
+          .trim()
+          .toLowerCase();
+        return allModels().filter((row) => {
+          if (!row.ready) return false;
+          if (!needle) return true;
+          return (
+            row.name.toLowerCase().includes(needle) ||
+            row.model.toLowerCase().includes(needle) ||
+            row.group.toLowerCase().includes(needle)
+          );
+        });
+      }
+      function renderModelList() {
+        const current = activeModelRef();
+        const recents = (modelCfg.recent || [])
+          .map((ref) =>
+            allModels().find(
+              (row) =>
+                row.ready &&
+                row.provider === ref.provider &&
+                row.model === ref.model,
+            ),
+          )
+          .filter(Boolean);
+        const needle = (document.getElementById("model-q")?.value || "").trim();
+        const rows = paneModels();
+        function itemHtml(row) {
+          const on =
+            current &&
+            current.provider === row.provider &&
+            current.model === row.model
+              ? " on"
+              : "";
+          const locked = row.ready ? "" : " locked";
+          const glyph = modelGlyph(row.kind, row.group + " " + row.name);
+          const tick = on ? '<span class="tick">✓</span>' : "";
+          const label = row.name + " · " + row.group;
+          return (
+            '<button type="button" class="model-choice' +
+            on +
+            locked +
+            '" data-provider="' +
+            escapeHtml(row.provider) +
+            '" data-model="' +
+            escapeHtml(row.model) +
+            '"><span class="glyph' +
+            (glyph.tone ? " " + glyph.tone : "") +
+            '">' +
+            glyph.mark +
+            '</span><span class="model-choice-name">' +
+            escapeHtml(label) +
+            "</span>" +
+            tick +
+            "</button>"
+          );
+        }
+        let html = "";
+        if (!needle && recents.length) {
+          const shown = recents.filter((row) =>
+            rows.some(
+              (r) => r.provider === row.provider && r.model === row.model,
+            ),
+          );
+          if (shown.length) {
+            html += '<div class="model-sec">' + t("recent") + "</div>" + shown.map(itemHtml).join("");
+          }
+        }
+        const rest = needle
+          ? rows
+          : rows.filter(
+              (row) =>
+                !recents.some(
+                  (r) => r.provider === row.provider && r.model === row.model,
+                ),
+            );
+        if (rest.length) {
+          html +=
+            '<div class="model-sec">' +
+            (needle ? t("searchResults") : t("allModels")) +
+            "</div>" +
+            rest.map(itemHtml).join("");
+        }
+        document.getElementById("model-results").innerHTML =
+          html || '<p class="model-empty">' + t("noModels") + "</p>";
+        document.getElementById("model-reasoning").value = modelCfg.reasoning || "medium";
+        document.getElementById("model-fast").checked = Boolean(modelCfg.fast);
+        const reason = reasonLabel(modelCfg.reasoning || "medium");
+        const speed = speedLabel();
+        const name = displayName(current);
+        document.getElementById("model-btn-label").textContent = current
+          ? name + " " + reason
+          : name;
+        document.getElementById("model-row-model").textContent = name;
+        document.getElementById("model-row-reason").textContent = reason;
+        document.getElementById("model-row-speed").textContent = speed;
+        document.getElementById("model-reason-list").innerHTML = [
+          ["minimal", t("reason.min")],
+          ["low", t("reason.low")],
+          ["medium", t("reason.mid")],
+          ["high", t("reason.high")],
+        ]
+          .map(([value, label]) => {
+            const on = (modelCfg.reasoning || "medium") === value ? " on" : "";
+            const tick = on ? '<span class="tick">✓</span>' : "";
+            return (
+              '<button type="button" class="model-choice' +
+              on +
+              '" data-reason="' +
+              value +
+              '">' +
+              label +
+              tick +
+              "</button>"
+            );
+          })
+          .join("");
+        const fast = Boolean(modelCfg.fast);
+        document.getElementById("model-speed-list").innerHTML =
+          '<button type="button" class="model-choice' +
+          (fast ? "" : " on") +
+          '" data-fast="0">' +
+          t("speed.normal") +
+          (fast ? "" : '<span class="tick">✓</span>') +
+          "</button>" +
+          '<button type="button" class="model-choice' +
+          (fast ? " on" : "") +
+          '" data-fast="1">' +
+          t("speed.fast") +
+          (fast ? '<span class="tick">✓</span>' : "") +
+          "</button>";
+      }
+      async function loadModelPick() {
+        modelCfg = await fetch("/settings/models").then((r) => r.json());
+        renderModelList();
+        renderNav();
+      }
+      async function applyChatModel(ref) {
+        if (state.kind !== "dm") return;
+        const bot = botById(state.id);
+        if (!bot) return;
+        const res = await fetch("/bots/" + encodeURIComponent(bot.id), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: ref }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          alert(body.error || t("modelSwitchFailed"));
+          return;
+        }
+        const updated = await res.json();
+        const i = state.bots.findIndex((item) => item.id === bot.id);
+        if (i >= 0) state.bots[i] = { ...state.bots[i], model: updated.model };
+        await fetch("/settings/models", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            reasoning: document.getElementById("model-reasoning").value,
+            fast: document.getElementById("model-fast").checked,
+          }),
+        }).then(async (r) => {
+          if (r.ok) modelCfg = await r.json();
+        });
+        renderModelList();
+        renderNav();
+      }
+      const modelPop = document.getElementById("model-pop");
+      document.getElementById("model-btn").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (state.kind !== "dm") return;
+        modelPop.hidden = !modelPop.hidden;
+        if (!modelPop.hidden) {
+          showModelSheet("models");
+          renderModelList();
+          const q = document.getElementById("model-q");
+          if (q) {
+            q.value = "";
+            q.focus();
+          }
+        }
+      });
+      document.getElementById("model-pop").addEventListener("click", (event) => {
+        const sheet = event.target.closest("[data-sheet]");
+        if (!sheet) return;
+        event.stopPropagation();
+        showModelSheet(sheet.getAttribute("data-sheet"));
+        if (sheet.getAttribute("data-sheet") === "models") {
+          document.getElementById("model-q")?.focus();
+        }
+      });
+      document.getElementById("model-q").addEventListener("input", renderModelList);
+      document.getElementById("model-q").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+        event.stopPropagation();
+      });
+      document.getElementById("model-results").addEventListener("click", async (event) => {
+        const item = event.target.closest("[data-provider][data-model]");
+        if (!item) return;
+        const row = allModels().find(
+          (m) =>
+            m.provider === item.getAttribute("data-provider") &&
+            m.model === item.getAttribute("data-model"),
+        );
+        if (!row) return;
+        if (!row.ready) {
+          window.location.href = "/settings";
+          return;
+        }
+        await applyChatModel({ provider: row.provider, model: row.model });
+      });
+      document.getElementById("model-reason-list").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-reason]");
+        if (!btn) return;
+        document.getElementById("model-reasoning").value = btn.getAttribute("data-reason");
+        await applyChatModel(activeModelRef());
+      });
+      document.getElementById("model-speed-list").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-fast]");
+        if (!btn) return;
+        document.getElementById("model-fast").checked = btn.getAttribute("data-fast") === "1";
+        await applyChatModel(activeModelRef());
+      });
+      document.getElementById("model-reasoning").addEventListener("change", () => {
+        applyChatModel(activeModelRef());
+      });
+      document.getElementById("model-fast").addEventListener("change", () => {
+        applyChatModel(activeModelRef());
+      });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".model-wrap")) modelPop.hidden = true;
+      });
+
+      const trajEl = document.getElementById("traj");
+      let trajEvents = [];
+      let trajSel = 0;
+      function trajUrl() {
+        return state.kind === "dm"
+          ? "/dms/" + encodeURIComponent(state.id) + "/trajectory"
+          : "/channels/" + encodeURIComponent(state.id) + "/trajectory";
+      }
+      function prettyJson(value) {
+        if (value == null) return "";
+        if (typeof value === "string") return value;
+        try {
+          return JSON.stringify(value, null, 2);
+        } catch {
+          return String(value);
+        }
+      }
+      function trajActor(event) {
+        if (!event || event.kind === "user" || !event.botId) return t("you");
+        const bot = botById(event.botId);
+        if (bot) return bot.handle || bot.name;
+        return String(event.botId).replace(/^bot-/, "");
+      }
+      function trajActorLabel(event) {
+        if (!event || event.kind === "user" || !event.botId) return t("you");
+        const bot = botById(event.botId);
+        if (bot) return bot.name + " @" + bot.handle;
+        return event.botId;
+      }
+      function renderTrajDetail(event) {
+        const el = document.getElementById("traj-detail");
+        if (!event) {
+          el.innerHTML = '<p class="traj-empty">' + t("trace.pick") + "</p>";
+          return;
+        }
+        const when = event.ts
+          ? new Date(event.ts).toLocaleString(
+              guildLocale() === "en" ? "en" : "zh-Hant",
+              { hour12: false },
+            )
+          : "";
+        el.innerHTML =
+          "<h3>" +
+          escapeHtml(String(event.kind || "").toUpperCase()) +
+          "</h3><p class='meta'>" +
+          escapeHtml(
+            [trajActorLabel(event), when, "turn " + (event.turnId || "")]
+              .filter(Boolean)
+              .join(" · "),
+          ) +
+          "</p><h4>SUMMARY</h4><pre>" +
+          escapeHtml(event.summary || "") +
+          "</pre>" +
+          (event.payload != null
+            ? "<h4>PAYLOAD</h4><pre>" + escapeHtml(prettyJson(event.payload)) + "</pre>"
+            : "") +
+          (event.result
+            ? "<h4>RESULT</h4><pre>" + escapeHtml(event.result) + "</pre>"
+            : "") +
+          (event.durationMs
+            ? "<h4>TIMING</h4><pre>" + escapeHtml(String(event.durationMs) + " ms") + "</pre>"
+            : "");
+      }
+      function renderTrajList() {
+        const q = document.getElementById("traj-q").value.trim().toLowerCase();
+        const rows = trajEvents.filter((event) => {
+          if (!q) return true;
+          const hay = [
+            event.kind,
+            trajActor(event),
+            trajActorLabel(event),
+            event.botId || "",
+            event.summary,
+            prettyJson(event.payload),
+            event.result || "",
+          ]
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        });
+        const list = document.getElementById("traj-list");
+        if (!rows.length) {
+          list.innerHTML = '<p class="traj-empty">' + t("trace.empty") + "</p>";
+          renderTrajDetail(null);
+          return;
+        }
+        if (!rows[trajSel]) trajSel = 0;
+        list.innerHTML = rows
+          .map((event, i) => {
+            const bot = event.botId ? botById(event.botId) : null;
+            const who = trajActor(event);
+            const whoLabel =
+              event.botId && event.kind !== "user" ? "@" + who : who;
+            const glyph = bot
+              ? Array.from(String(bot.name || bot.handle || "?").trim())[0] || "?"
+              : Array.from(t("you"))[0] || "?";
+            const av = bot
+              ? '<span class="traj-av" style="background:' +
+                hue(bot.handle) +
+                '">' +
+                escapeHtml(glyph) +
+                "</span>"
+              : '<span class="traj-av you">' + escapeHtml(glyph) + "</span>";
+            return (
+              '<button type="button" class="traj-row' +
+              (i === trajSel ? " on" : "") +
+              (event.isError ? " err" : "") +
+              '" data-i="' +
+              i +
+              '">' +
+              av +
+              '<span class="traj-who">' +
+              escapeHtml(whoLabel) +
+              '</span><span class="traj-kind ' +
+              escapeHtml(event.kind) +
+              '">' +
+              escapeHtml(String(event.kind || "").toUpperCase()) +
+              '</span><span class="sum">' +
+              escapeHtml(event.summary || "") +
+              "</span></button>"
+            );
+          })
+          .join("");
+        renderTrajDetail(rows[trajSel]);
+        list.querySelectorAll("[data-i]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            trajSel = Number(btn.getAttribute("data-i"));
+            renderTrajList();
+          });
+        });
+      }
+      async function openTraj() {
+        trajEl.hidden = false;
+        document.getElementById("traj-src").textContent = t("trace.loading");
+        try {
+          const res = await fetch(trajUrl());
+          const body = await res.json();
+          trajEvents = Array.isArray(body.events) ? body.events : [];
+          trajSel = Math.max(0, trajEvents.length - 1);
+          document.getElementById("traj-src").textContent =
+            body.source === "log" ? t("trace.log") : t("trace.derived");
+          renderTrajList();
+        } catch (err) {
+          document.getElementById("traj-src").textContent = "";
+          document.getElementById("traj-list").innerHTML =
+            '<p class="traj-empty">' + escapeHtml(err.message) + "</p>";
+        }
+      }
+      document.getElementById("traj-btn").addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (trajEl.hidden) openTraj();
+        else trajEl.hidden = true;
+      });
+      document.getElementById("traj-close").addEventListener("click", () => {
+        trajEl.hidden = true;
+      });
+      document.getElementById("traj-q").addEventListener("input", () => {
+        trajSel = 0;
+        renderTrajList();
+      });
+
+      window.addEventListener("guild-locale", () => {
+        applyI18n();
+        renderNav();
+        renderHead();
+        renderThread();
+        renderModelList();
+        renderAttachChips();
+        renderReplyBar();
+        if (state.mention) renderMention();
+        if (state.attachSheet) {
+          const kind = state.attachSheet.kind;
+          if (kind === "slash") openSlashSheet();
+          else if (kind === "conv") openConvSheet();
+          else if (kind === "skills") openSkillsSheet();
+          else if (kind === "files" || kind === "dirs" || kind === "tree") {
+            openFsSheet(kind).catch(() => {});
+          } else {
+            state.attachSheet.title = t("attach." + kind) || state.attachSheet.title;
+            renderAttachSheet();
+          }
+        }
+        if (!trajEl.hidden) renderTrajList();
+        syncSendButton();
+      });
+      window.addEventListener("hashchange", () => {
+        trajEl.hidden = true;
+        openFromHash().catch((err) => alert(err.message));
+      });
+      Promise.all([openFromHash(), loadModelPick()]).catch((err) => {
+        document.getElementById("thread").textContent = err.message;
+      });
+    </script>
+  </body>
+</html>

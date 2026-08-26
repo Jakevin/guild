@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Guild — 酒吧</title>
+    <script src="/i18n.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="bar-page" data-i18n-page="studio">
+    <header class="appbar">
+      <a class="logo" href="/">Guild</a>
+      <nav>
+        <a class="nav-link" href="/" data-i18n="nav.chat">訊息</a>
+        <a class="nav-link on" href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a class="nav-link" href="/library" data-i18n="nav.library">技能庫</a>
+        <a class="nav-link" href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a class="nav-link" href="/settings" data-i18n="nav.settings">模型</a>
+        <div class="locale-switch">
+          <button type="button" data-locale="zh-Hant" data-i18n="lang.zh">中</button>
+          <button type="button" data-locale="en" data-i18n="lang.en">EN</button>
+        </div>
+      </nav>
+    </header>
+    <div class="rpg-wrap">
+      <div class="rpg-screen" id="rpg-screen" data-scene="street">
+        <div class="rpg-scene is-street" id="scene-street">
+          <img class="rpg-bg" src="/rpg/inn-street.jpg" alt="Guild 酒館門口" data-i18n-aria="studio.streetAlt" />
+          <button type="button" class="rpg-door" id="enter-inn" title="進酒館" data-i18n-title="studio.enter">
+            <span class="rpg-arrow" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="rpg-scene is-inn" id="scene-inn" hidden>
+          <div class="inn-map">
+            <div class="inn-wall"></div>
+            <div class="inn-rail"></div>
+            <div class="inn-bar"></div>
+            <div class="inn-bottles" id="inn-bottles"></div>
+            <div class="inn-table t1"></div>
+            <div class="inn-table t2"></div>
+            <div class="inn-barrel b1"></div>
+            <div class="inn-barrel b2"></div>
+            <div class="inn-hearth"></div>
+            <div class="inn-actors" id="inn-actors"></div>
+          </div>
+          <button type="button" class="rpg-exit" id="leave-inn" data-i18n="studio.leave">出門</button>
+        </div>
+        <div class="rpg-dialog" id="rpg-dialog">
+          <div class="rpg-dialog-inner">
+            <div class="rpg-name" id="rpg-name">酒館</div>
+            <p class="rpg-line" id="rpg-line">夜晚的酒館還開著。點那扇門進去。</p>
+            <div class="rpg-acts" id="rpg-acts"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <main class="shell shell-wide" id="hire">
+      <p class="eyebrow" id="page-eyebrow">今晚</p>
+      <h1 id="page-title">招募新人</h1>
+      <p class="lede" id="page-lede">寫好 Soul / Agent / Position，勾技能（含本機 Codex、Grok 等 CLI），請他入座。</p>
+      <p id="flash" class="muted"></p>
+      <form id="create-bot">
+        <section class="card">
+          <label>Name</label>
+          <input name="name" required placeholder="Ada" />
+          <label>Handle</label>
+          <input name="handle" required placeholder="ada" />
+          <label data-i18n="studio.oneLiner">一句話</label>
+          <input name="oneLiner" placeholder="這個 bot 在團隊裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
+          <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
+        </section>
+
+        <section class="card markdown-block" data-kind="soul">
+          <h2>Soul · Markdown</h2>
+          <p class="muted" data-i18n="studio.soulHint">性格、聲音、邊界。</p>
+          <label data-i18n="studio.desc">描述</label>
+          <input class="prompt" placeholder="謹慎、少廢話的資深工程師" data-i18n-placeholder="studio.soulPh" />
+          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <label>SOUL.md</label>
+          <textarea class="body" name="soulBody" required placeholder="# Soul"></textarea>
+          <input type="hidden" class="gen-name" name="soulName" />
+          <button type="button" class="save-md" data-save="soul" hidden>儲存 SOUL.md</button>
+        </section>
+
+        <section class="card markdown-block" data-kind="agent">
+          <h2>Agent · Markdown</h2>
+          <p class="muted" data-i18n="studio.agentHint">怎麼做事的 SOP。</p>
+          <label data-i18n="studio.desc">描述</label>
+          <input class="prompt" placeholder="先寫測試，再改最小程式" data-i18n-placeholder="studio.agentPh" />
+          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <label>AGENTS.md</label>
+          <textarea class="body" name="agentBody" required placeholder="# Agent"></textarea>
+          <input type="hidden" class="gen-name" name="agentName" />
+          <button type="button" class="save-md" data-save="agent" hidden>儲存 AGENTS.md</button>
+        </section>
+
+        <section class="card markdown-block" data-kind="position">
+          <h2>Position · Markdown</h2>
+          <p class="muted" data-i18n="studio.posHint">職位職責與完成定義。</p>
+          <label data-i18n="studio.desc">描述</label>
+          <input class="prompt" placeholder="這個專案的 Engineer" data-i18n-placeholder="studio.posPh" />
+          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <label>POSITION.md</label>
+          <textarea class="body" name="positionBody" required placeholder="# Position"></textarea>
+          <input type="hidden" class="gen-name" name="positionName" />
+          <button type="button" class="save-md" data-save="position" hidden>儲存 POSITION.md</button>
+        </section>
+
+        <section class="skill-picker">
+          <h2 data-i18n="studio.botSkills">這個 bot 的技能（含本機 CLI）</h2>
+          <p class="muted" data-i18n-html="studio.botSkillsHint">Guild 技能庫，加上本機 Claude、Codex、Pi、Grok、Cursor、DSH 的 SKILL.md。勾或取消會立刻存檔，拷進 Guild 再配給這個人。沒有的可到 <a href="/skills/add">追加技能</a> 安裝，不影響其他人。</p>
+          <div class="toolbar">
+            <div class="search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor"/>
+                <path d="M10.5 10.5 14 14" stroke="currentColor"/>
+              </svg>
+              <input id="skill-search" type="search" placeholder="搜尋技能庫" data-i18n-placeholder="studio.searchSkills" />
+            </div>
+          </div>
+          <div id="tag-row" class="chips tag-row"></div>
+          <p class="section-label" id="skill-summary">尚未勾選</p>
+          <div id="skill-grid" class="skill-grid"></div>
+        </section>
+
+        <button type="submit" id="submit-btn">請他入座</button>
+        <button type="button" class="secondary danger" id="delete-bot" hidden data-i18n="bot.delete">刪除這個人</button>
+      </form>
+    </main>
+    <script>
+      const flash = document.getElementById("flash");
+      const form = document.getElementById("create-bot");
+      const EDIT_ID = (location.pathname.match(/^\/edit\/([^/]+)$/) || [])[1];
+      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+      let allSkills = [];
+      let selected = new Set();
+      let openId = "";
+      let activeTags = new Set();
+      let showAllSkills = false;
+      let rpgTalk = { name: "", line: "", acts: "" };
+      const PICKED = "__picked__";
+      const REST_CAP = 12;
+
+      function applyStudioCopy() {
+        const submit = document.getElementById("submit-btn");
+        const mdSaves = document.querySelectorAll(".save-md");
+        if (EDIT_ID) {
+          document.getElementById("page-eyebrow").textContent = t("studio.editEyebrow");
+          document.getElementById("page-title").textContent = t("studio.editTitle");
+          document.getElementById("page-lede").textContent = t("studio.editLede");
+          document.title = t("studio.editDocTitle");
+          submit.hidden = true;
+          document.getElementById("delete-bot").hidden = false;
+          mdSaves.forEach((btn) => {
+            btn.hidden = false;
+            const kind = btn.getAttribute("data-save");
+            btn.textContent =
+              kind === "identity"
+                ? t("studio.saveIdentity")
+                : t("studio.saveMd", { file: mdFile(kind) });
+          });
+        } else {
+          document.getElementById("page-eyebrow").textContent = t("studio.tonight");
+          document.getElementById("page-title").textContent = t("studio.hire");
+          document.getElementById("page-lede").textContent = t("studio.hireLede");
+          submit.hidden = false;
+          submit.textContent = t("studio.seat");
+          document.getElementById("delete-bot").hidden = true;
+          document.title = t("title.studio");
+          mdSaves.forEach((btn) => {
+            btn.hidden = true;
+          });
+        }
+        document.getElementById("enter-inn").setAttribute("title", t("studio.enter"));
+        document.querySelector(".rpg-bg").setAttribute("alt", t("studio.streetAlt"));
+      }
+      applyStudioCopy();
+
+      function setFlash(kind, text) {
+        flash.className = kind;
+        flash.textContent = text;
+      }
+      function hue(key) {
+        let n = 0;
+        for (const ch of key) n = (n + ch.charCodeAt(0) * 13) % COLORS.length;
+        return COLORS[n];
+      }
+      function initials(name) {
+        const parts = String(name).trim().split(/[\s-]+/);
+        const letters = parts.map((p) => p[0]).join("").slice(0, 2);
+        return letters.toUpperCase() || "?";
+      }
+      function esc(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      function checkedIds() {
+        return selected;
+      }
+      function skillKeyOf(skill) {
+        return String(skill.slug || skill.name || "").toLowerCase();
+      }
+      function isChecked(skill) {
+        if (!skill) return false;
+        if (selected.has(skill.id)) return true;
+        const key = skillKeyOf(skill);
+        if (!key) return false;
+        for (const id of selected) {
+          const other = allSkills.find((item) => item.id === id);
+          if (other && skillKeyOf(other) === key) return true;
+        }
+        return false;
+      }
+      function relatedIds(id) {
+        const skill = allSkills.find((item) => item.id === id);
+        if (!skill) return [id];
+        const key = skillKeyOf(skill);
+        const ids = [id];
+        if (!key) return ids;
+        for (const item of allSkills) {
+          if (item.id !== id && skillKeyOf(item) === key) ids.push(item.id);
+        }
+        for (const sid of selected) {
+          if (ids.includes(sid)) continue;
+          const other = allSkills.find((item) => item.id === sid);
+          if (other && skillKeyOf(other) === key) ids.push(sid);
+        }
+        return ids;
+      }
+      function mergeSkills(guild, host) {
+        const out = [];
+        const slugs = new Set();
+        const names = new Set();
+        const push = (skill) => {
+          if (!skill || !skill.id) return;
+          const slug = String(skill.slug || "").toLowerCase();
+          const name = String(skill.name || "").toLowerCase();
+          if (slug && slugs.has(slug)) return;
+          if (name && names.has(name)) return;
+          if (slug) slugs.add(slug);
+          if (name) names.add(name);
+          out.push(skill);
+        };
+        for (const skill of Array.isArray(guild) ? guild : []) push(skill);
+        for (const skill of Array.isArray(host) ? host : []) push(skill);
+        return out;
+      }
+      function cardHtml(skill, checked) {
+        const desc = skill.description || "";
+        const open = openId === skill.id;
+        const hostTag = skill.source === "host" ? skill.host : "";
+        const pills = (skill.tags || [])
+          .filter((tag) => tag !== hostTag)
+          .map((tag) => {
+            const on = activeTags.has(tag) ? " on" : "";
+            return (
+              '<button type="button" class="mini-tag' +
+              on +
+              '" data-tag="' +
+              esc(tag) +
+              '">' +
+              esc(tagLabel(tag)) +
+              "</button>"
+            );
+          })
+          .join("");
+        const origin =
+          skill.source === "host"
+            ? '<p class="hint" title="' +
+              esc(skill.path || "") +
+              '">' +
+              esc(skill.hostName || skill.host || t("library.local")) +
+              "</p>"
+            : "";
+        return (
+          '<article class="lib-card skill-card' +
+          (checked ? " on" : "") +
+          (open ? " open" : "") +
+          '" data-id="' +
+          esc(skill.id) +
+          '" data-slug="' +
+          esc(skill.slug || "") +
+          '">' +
+          '<div class="skill-ico" style="background:' +
+          hue(skill.slug || skill.id) +
+          '">' +
+          esc(initials(skill.name)) +
+          "</div>" +
+          '<div class="skill-meta"><strong>' +
+          esc(skill.name) +
+          '</strong><em class="lib-desc">' +
+          esc(desc) +
+          "</em>" +
+          origin +
+          (pills ? '<p class="tag-list">' + pills + "</p>" : "") +
+          "</div>" +
+          '<button type="button" class="skill-check" data-check="' +
+          esc(skill.id) +
+          '" aria-pressed="' +
+          (checked ? "true" : "false") +
+          '" aria-label="' +
+          esc(t("studio.checkSkill", { name: skill.name })) +
+          '"></button>' +
+          (open
+            ? '<pre class="lib-body">' +
+              esc(skill.body || t("studio.skillLoading")) +
+              "</pre>"
+            : "") +
+          "</article>"
+        );
+      }
+      function visibleSkills() {
+        const q = document.getElementById("skill-search").value.toLowerCase();
+        const pickedOnly = activeTags.has(PICKED);
+        const tags = new Set(
+          [...activeTags].filter((tag) => tag && tag !== PICKED),
+        );
+        return allSkills.filter((skill) => {
+          if (pickedOnly && !isChecked(skill)) return false;
+          const skillTags = skill.tags || [];
+          const tagOk =
+            tags.size === 0 || skillTags.some((tag) => tags.has(tag));
+          const hay = (
+            skill.name +
+            " " +
+            (skill.description || "") +
+            " " +
+            (skill.hostName || "") +
+            " " +
+            (skill.host || "") +
+            " " +
+            (skill.path || "") +
+            " " +
+            skillTags.map(tagLabel).join(" ") +
+            " " +
+            skillTags.join(" ")
+          ).toLowerCase();
+          return tagOk && (!q || hay.includes(q));
+        });
+      }
+      function renderChips() {
+        const counts = new Map();
+        for (const skill of allSkills) {
+          for (const tag of skill.tags || []) {
+            counts.set(tag, (counts.get(tag) || 0) + 1);
+          }
+        }
+        const tags = [...counts.entries()].sort(
+          (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+        );
+        const allOn = activeTags.size === 0;
+        const pickedN = allSkills.filter((s) => isChecked(s)).length;
+        const pickedOn = activeTags.has(PICKED) && activeTags.size === 1;
+        document.getElementById("tag-row").innerHTML =
+          '<button type="button" class="chip' +
+          (allOn ? " on" : "") +
+          '" data-tag="">' +
+          t("library.all") +
+          "</button>" +
+          '<button type="button" class="chip' +
+          (pickedOn ? " on" : "") +
+          '" data-tag="' +
+          PICKED +
+          '">' +
+          t("studio.pickedChip") +
+          ' <span class="chip-n">' +
+          pickedN +
+          "</span></button>" +
+          tags
+            .map(([tag, n]) => {
+              const on = activeTags.has(tag) ? " on" : "";
+              return (
+                '<button type="button" class="chip' +
+                on +
+                '" data-tag="' +
+                tag +
+                '">' +
+                tagLabel(tag) +
+                ' <span class="chip-n">' +
+                n +
+                "</span></button>"
+              );
+            })
+            .join("");
+      }
+      function sortPool(list) {
+        const q = document.getElementById("skill-search").value.trim();
+        return list.slice().sort((a, b) => {
+          if (!q) {
+            const ac = isChecked(a) ? 0 : 1;
+            const bc = isChecked(b) ? 0 : 1;
+            if (ac !== bc) return ac - bc;
+          }
+          return String(a.name).localeCompare(String(b.name), "zh");
+        });
+      }
+      function updateSkillSummary() {
+        const guildN = allSkills.filter((s) => s.source !== "host").length;
+        const hostN = allSkills.filter((s) => s.source === "host").length;
+        const n = allSkills.filter((s) => isChecked(s)).length;
+        document.getElementById("skill-summary").textContent = allSkills.length
+          ? t("studio.picked", { n: n, guild: guildN, host: hostN })
+          : t("studio.emptyLib");
+      }
+      function paintCardCheck(card, on) {
+        if (!card) return;
+        card.classList.toggle("on", on);
+        const btn = card.querySelector("[data-check]");
+        if (btn) btn.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+      function syncCardChecks() {
+        document.querySelectorAll(".lib-card.skill-card").forEach((card) => {
+          const oldId = card.getAttribute("data-id");
+          const slug = String(card.getAttribute("data-slug") || "").toLowerCase();
+          let skill =
+            allSkills.find((item) => item.id === oldId) ||
+            allSkills.find((item) => String(item.slug || "").toLowerCase() === slug);
+          if (skill && skill.id !== oldId) {
+            card.setAttribute("data-id", skill.id);
+            const btn = card.querySelector("[data-check]");
+            if (btn) btn.setAttribute("data-check", skill.id);
+            if (openId === oldId) openId = skill.id;
+          }
+          paintCardCheck(card, isChecked(skill || { id: oldId, slug: slug }));
+        });
+        updateSkillSummary();
+      }
+      function render() {
+        const y = window.scrollY;
+        renderChips();
+        updateSkillSummary();
+        const q = document.getElementById("skill-search").value.trim();
+        const filtering = Boolean(q) || activeTags.size > 0;
+        let pool = sortPool(visibleSkills());
+        let moreHtml = "";
+        if (!filtering && !showAllSkills) {
+          const checked = pool.filter((s) => isChecked(s));
+          const rest = pool.filter((s) => !isChecked(s));
+          if (rest.length > REST_CAP) {
+            pool = checked.concat(rest.slice(0, REST_CAP));
+            moreHtml =
+              '<button type="button" class="more" id="skill-more">' +
+              t("studio.moreN", { n: rest.length - REST_CAP }) +
+              "</button>";
+          }
+        }
+        const grid = document.getElementById("skill-grid");
+        if (pool.length === 0) {
+          grid.innerHTML = '<p class="muted">' + t("studio.noMatch") + "</p>";
+        } else {
+          grid.innerHTML =
+            pool.map((s) => cardHtml(s, isChecked(s))).join("") + moreHtml;
+        }
+        window.scrollTo(0, y);
+      }
+
+      document.getElementById("skill-search").addEventListener("input", () => {
+        showAllSkills = false;
+        render();
+      });
+      document.getElementById("skill-search").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+      });
+      document.getElementById("tag-row").addEventListener("click", (event) => {
+        const chip = event.target.closest("[data-tag]");
+        if (!chip) return;
+        const tag = chip.getAttribute("data-tag");
+        showAllSkills = false;
+        if (!tag || (activeTags.has(tag) && activeTags.size === 1)) {
+          activeTags.clear();
+        } else {
+          activeTags = new Set(tag ? [tag] : []);
+        }
+        render();
+      });
+      document.getElementById("skill-grid").addEventListener("click", (event) => {
+        if (event.target.closest("#skill-more")) {
+          event.preventDefault();
+          showAllSkills = true;
+          render();
+          return;
+        }
+        const mini = event.target.closest(".mini-tag");
+        if (mini) {
+          event.preventDefault();
+          event.stopPropagation();
+          const tag = mini.getAttribute("data-tag");
+          activeTags =
+            tag && activeTags.has(tag) && activeTags.size === 1
+              ? new Set()
+              : new Set(tag ? [tag] : []);
+          render();
+          return;
+        }
+        const check = event.target.closest("[data-check]");
+        if (check) {
+          event.preventDefault();
+          event.stopPropagation();
+          const id = check.getAttribute("data-check");
+          if (!id) return;
+          const group = relatedIds(id);
+          const on = group.some((sid) => selected.has(sid));
+          if (on) group.forEach((sid) => selected.delete(sid));
+          else selected.add(id);
+          if (EDIT_ID && allSkills.filter((s) => isChecked(s)).length === 0) {
+            selected.add(id);
+            setFlash("error", t("studio.needSkill"));
+            paintCardCheck(check.closest(".lib-card"), true);
+            return;
+          }
+          paintCardCheck(check.closest(".lib-card"), !on);
+          updateSkillSummary();
+          if (EDIT_ID) saveSkills();
+          return;
+        }
+        const card = event.target.closest(".lib-card");
+        if (!card) return;
+        const id = card.getAttribute("data-id");
+        if (!id) return;
+        openId = openId === id ? "" : id;
+        render();
+        const skill = allSkills.find((item) => item.id === id);
+        if (openId === id && skill && skill.source === "host" && !skill.body) {
+          fetch("/library/skills/host?id=" + encodeURIComponent(id))
+            .then((r) => r.json())
+            .then((full) => {
+              if (!full || !full.body) return;
+              skill.body = full.body;
+              if (openId === id) render();
+            })
+            .catch(() => {});
+        }
+      });
+
+      document.querySelectorAll(".generate").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const block = button.closest(".markdown-block");
+          const kind = block.getAttribute("data-kind");
+          const prompt = block.querySelector(".prompt").value.trim();
+          if (!prompt) {
+            setFlash("error", t("studio.needPrompt", { kind: kind }));
+            return;
+          }
+          button.disabled = true;
+          button.textContent = t("studio.generating");
+          try {
+            const response = await fetch("/generate", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ kind, prompt }),
+            });
+            const body = await response.json();
+            if (!response.ok) {
+              setFlash("error", body.error || "generate failed");
+              return;
+            }
+            block.querySelector(".body").value = body.body;
+            block.querySelector(".gen-name").value = body.name;
+            setFlash(
+              "health",
+              body.source === "llm"
+                ? t("studio.generated", { kind: kind })
+                : t("studio.generatedLocal", { kind: kind }),
+            );
+          } catch (err) {
+            setFlash("error", err.message);
+          } finally {
+            button.disabled = false;
+            button.textContent = t("studio.genMd");
+          }
+        });
+      });
+
+      function mdFile(kind) {
+        if (kind === "soul") return "SOUL.md";
+        if (kind === "agent") return "AGENTS.md";
+        if (kind === "position") return "POSITION.md";
+        return kind;
+      }
+      function mdDraft(kind) {
+        const block = document.querySelector('[data-kind="' + kind + '"]');
+        if (!block) return null;
+        const body = block.querySelector(".body").value;
+        const name =
+          (block.querySelector(".gen-name") && block.querySelector(".gen-name").value) ||
+          block.querySelector(".prompt").value;
+        return { name: name, body: body };
+      }
+      async function patchBot(payload, okText) {
+        const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setFlash("error", body.error || "save failed");
+          return null;
+        }
+        setFlash("health", okText);
+        return body;
+      }
+      async function saveMarkdown(kind) {
+        if (!EDIT_ID) return;
+        if (kind === "identity") {
+          await patchBot(
+            {
+              name: form.name.value,
+              handle: form.handle.value,
+              oneLiner: form.oneLiner.value,
+            },
+            t("studio.savedIdentity"),
+          );
+          return;
+        }
+        const draft = mdDraft(kind);
+        if (!draft || !String(draft.body || "").trim()) {
+          setFlash("error", t("studio.needPrompt", { kind: kind }));
+          return;
+        }
+        await patchBot({ [kind]: draft }, t("studio.savedMd", { file: mdFile(kind) }));
+      }
+      document.querySelectorAll(".save-md").forEach((button) => {
+        button.addEventListener("click", () => {
+          saveMarkdown(button.getAttribute("data-save"));
+        });
+      });
+
+      let skillSaveSeq = 0;
+      async function saveSkills() {
+        const ids = [...checkedIds()];
+        if (ids.length === 0) {
+          setFlash("error", t("studio.needSkill"));
+          return;
+        }
+        const seq = ++skillSaveSeq;
+        try {
+          const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID), {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ skillIds: ids }),
+          });
+          const body = await response.json();
+          if (seq !== skillSaveSeq) return;
+          if (!response.ok) {
+            setFlash("error", body.error || "save failed");
+            return;
+          }
+          if (Array.isArray(body.skillIds)) {
+            const guild = await fetch("/library/skills")
+              .then((r) => r.json())
+              .catch(() => []);
+            const host = allSkills.filter((item) => item.source === "host");
+            allSkills = mergeSkills(Array.isArray(guild) ? guild : [], host);
+            selected = new Set(body.skillIds);
+          }
+          setFlash("health", t("studio.skillsSaved"));
+          syncCardChecks();
+        } catch (err) {
+          if (seq !== skillSaveSeq) return;
+          setFlash("error", err.message);
+        }
+      }
+
+      document.getElementById("delete-bot").addEventListener("click", async () => {
+        if (!EDIT_ID) return;
+        const handle = (form.handle.value || "").replace(/^@/, "");
+        if (!confirm(t("bot.deleteConfirm", { handle: handle || EDIT_ID }))) return;
+        try {
+          const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID), {
+            method: "DELETE",
+          });
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(body.error || t("deleteFailed"));
+          window.location.href = "/studio";
+        } catch (err) {
+          setFlash("error", err.message);
+        }
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (EDIT_ID) {
+          saveMarkdown("identity");
+          return;
+        }
+        const payload = {
+          name: form.name.value,
+          handle: form.handle.value,
+          oneLiner: form.oneLiner.value,
+          soul: {
+            name: form.soulName.value || form.querySelector('[data-kind="soul"] .prompt').value,
+            body: form.soulBody.value,
+          },
+          agent: {
+            name: form.agentName.value || form.querySelector('[data-kind="agent"] .prompt').value,
+            body: form.agentBody.value,
+          },
+          position: {
+            name:
+              form.positionName.value ||
+              form.querySelector('[data-kind="position"] .prompt').value,
+            body: form.positionBody.value,
+          },
+          skillIds: [...checkedIds()],
+        };
+        const response = await fetch("/bots", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+        const body = await response.json();
+        if (!response.ok) {
+          setFlash("error", body.error || "create failed");
+          return;
+        }
+        flash.className = "health";
+        const chatHref = "/#d/" + encodeURIComponent(body.id);
+        flash.innerHTML = t("studio.seatedHtml", { handle: body.handle, href: chatHref });
+        const roster = await fetch("/bots").then((r) => r.json());
+        renderBar(Array.isArray(roster) ? roster : []);
+        setScene("inn");
+        talk(body.name, t("studio.hireToast"), npcActs(body));
+      });
+
+      function seedOf(key) {
+        let n = 0;
+        for (const ch of key) n = (n + ch.charCodeAt(0) * 17) % 997;
+        return n;
+      }
+      function shirtColor(key) {
+        return COLORS[seedOf(key) % COLORS.length];
+      }
+      function px(ctx, x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+      }
+      function drawBuddy(canvas, shirt, seed) {
+        const ctx = canvas.getContext("2d");
+        canvas.width = 16;
+        canvas.height = 24;
+        ctx.imageSmoothingEnabled = false;
+        const skin = ["#f0c8a0", "#e2b184", "#c68642", "#8d5524"][seed % 4];
+        const hair = ["#2a1c12", "#c4a35a", "#1a1a1a", "#6b2d3c", "#3c4a6e"][seed % 5];
+        const outline = "#1b1510";
+        const pants = "#2a3140";
+        const style = seed % 3;
+        px(ctx, 4, 12, 8, 7, outline);
+        px(ctx, 5, 13, 6, 5, shirt);
+        px(ctx, 3, 13, 2, 5, shirt);
+        px(ctx, 11, 13, 2, 5, shirt);
+        px(ctx, 3, 18, 2, 1, skin);
+        px(ctx, 11, 18, 2, 1, skin);
+        px(ctx, 4, 4, 8, 8, outline);
+        px(ctx, 5, 5, 6, 6, skin);
+        px(ctx, 6, 7, 1, 1, outline);
+        px(ctx, 9, 7, 1, 1, outline);
+        if (style === 0) {
+          px(ctx, 4, 3, 8, 3, hair);
+          px(ctx, 4, 5, 2, 3, hair);
+          px(ctx, 10, 5, 2, 3, hair);
+        } else if (style === 1) {
+          px(ctx, 4, 2, 8, 4, hair);
+          px(ctx, 3, 5, 2, 4, hair);
+          px(ctx, 11, 5, 2, 4, hair);
+        } else {
+          px(ctx, 5, 2, 6, 2, hair);
+          px(ctx, 4, 4, 8, 2, hair);
+          px(ctx, 7, 1, 2, 2, hair);
+        }
+        px(ctx, 5, 19, 3, 4, pants);
+        px(ctx, 8, 19, 3, 4, pants);
+        px(ctx, 5, 23, 3, 1, outline);
+        px(ctx, 8, 23, 3, 1, outline);
+      }
+      const SPOTS = [
+        [22, 38],
+        [36, 34],
+        [50, 40],
+        [64, 36],
+        [26, 54],
+        [42, 58],
+        [58, 52],
+        [74, 56],
+      ];
+      let barBots = [];
+      function setScene(name) {
+        document.getElementById("scene-street").hidden = name !== "street";
+        document.getElementById("scene-inn").hidden = name !== "inn";
+        document.getElementById("rpg-screen").setAttribute("data-scene", name);
+      }
+      function talk(name, line, acts) {
+        rpgTalk = { name: name, line: line, acts: acts || "" };
+        document.getElementById("rpg-name").textContent = name;
+        document.getElementById("rpg-line").textContent = line;
+        document.getElementById("rpg-acts").innerHTML = acts || "";
+      }
+      function npcActs(bot) {
+        return (
+          '<a href="/#d/' +
+          encodeURIComponent(bot.id) +
+          '">' +
+          t("dm") +
+          '</a><a href="/edit/' +
+          encodeURIComponent(bot.id) +
+          '">' +
+          t("bot.settings") +
+          "</a>"
+        );
+      }
+      function renderBar(bots) {
+        barBots = bots || [];
+        const bottles = ["#c44", "#4a8", "#c84", "#48c", "#a4c", "#cc8", "#844", "#4cc"];
+        document.getElementById("inn-bottles").innerHTML = bottles
+          .map((c) => '<span style="background:' + c + '"></span>')
+          .join("");
+        const roster = barBots.slice(0, SPOTS.length - 1);
+        const nodes = roster.map((bot, i) => {
+          const spot = SPOTS[i];
+          const on = EDIT_ID === bot.id ? " on" : "";
+          return (
+            '<button type="button" class="rpg-npc' +
+            on +
+            '" style="left:' +
+            spot[0] +
+            "%;top:" +
+            spot[1] +
+            '%" data-id="' +
+            bot.id +
+            '"><canvas class="buddy" data-handle="' +
+            bot.handle +
+            '"></canvas><span class="tag">' +
+            esc(bot.name) +
+            "</span></button>"
+          );
+        });
+        const hireSpot = SPOTS[Math.min(roster.length, SPOTS.length - 1)];
+        nodes.push(
+          '<button type="button" class="rpg-npc vacant" style="left:' +
+            hireSpot[0] +
+            "%;top:" +
+            hireSpot[1] +
+            '%" data-id="hire"><canvas class="buddy" data-handle="recruit"></canvas><span class="tag">' +
+          t("studio.hireChip") +
+          "</span></button>",
+        );
+        document.getElementById("inn-actors").innerHTML = nodes.join("");
+        document.querySelectorAll("#inn-actors canvas.buddy").forEach((canvas) => {
+          const handle = canvas.getAttribute("data-handle") || "";
+          drawBuddy(canvas, shirtColor(handle), seedOf(handle));
+        });
+      }
+      document.getElementById("enter-inn").addEventListener("click", () => {
+        setScene("inn");
+        talk(t("studio.keeper"), t("studio.keeperLine"), "");
+      });
+      document.getElementById("leave-inn").addEventListener("click", () => {
+        setScene("street");
+        talk(t("studio.inn"), t("studio.streetLine"), "");
+      });
+      document.getElementById("inn-actors").addEventListener("click", (event) => {
+        const npc = event.target.closest(".rpg-npc");
+        if (!npc) return;
+        document.querySelectorAll(".rpg-npc").forEach((el) => {
+          el.classList.toggle("on", el === npc);
+        });
+        const id = npc.getAttribute("data-id");
+        if (id === "hire") {
+          talk(t("studio.vacant"), t("studio.vacantLine"), '<a href="#hire">' + t("studio.hireChip") + "</a>");
+          document.getElementById("hire").hidden = false;
+          return;
+        }
+        const bot = barBots.find((item) => item.id === id);
+        if (!bot) return;
+        talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot));
+      });
+      document.getElementById("rpg-acts").addEventListener("click", (event) => {
+        const link = event.target.closest('a[href="#hire"]');
+        if (link) document.getElementById("hire").hidden = false;
+      });
+
+      async function boot() {
+        let guild = [];
+        let host = [];
+        try {
+          const [g, h] = await Promise.all([
+            fetch("/library/skills").then((r) => r.json()),
+            fetch("/library/skills/host?body=0").then(async (r) => {
+              if (!r.ok) throw new Error("host skills " + r.status);
+              return r.json();
+            }),
+          ]);
+          guild = Array.isArray(g) ? g : [];
+          host = Array.isArray(h) ? h : [];
+        } catch (err) {
+          setFlash("error", t("studio.hostFail") + " " + (err && err.message ? err.message : err));
+        }
+        allSkills = mergeSkills(guild, host);
+        const bots = await fetch("/bots").then((r) => r.json());
+        renderBar(Array.isArray(bots) ? bots : []);
+        if (EDIT_ID) {
+          const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID));
+          const bot = await response.json();
+          if (!response.ok) {
+            setFlash("error", bot.error || t("studio.notFound"));
+            return;
+          }
+          form.name.value = bot.name;
+          form.handle.value = bot.handle;
+          form.oneLiner.value = bot.oneLiner || "";
+          form.soulBody.value = (bot.soul && bot.soul.body) || "";
+          form.agentBody.value = (bot.agent && bot.agent.body) || "";
+          form.positionBody.value = (bot.position && bot.position.body) || "";
+          if (bot.soul) form.soulName.value = bot.soul.name;
+          if (bot.agent) form.agentName.value = bot.agent.name;
+          if (bot.position) form.positionName.value = bot.position.name;
+          selected = new Set(bot.skillIds || []);
+          setFlash("muted", t("studio.editing", { handle: bot.handle }));
+          setScene("inn");
+          talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot));
+        } else {
+          setScene("street");
+          document.getElementById("hire").hidden = true;
+        }
+        render();
+        if (!EDIT_ID) talk(t("studio.inn"), t("studio.streetLine"), "");
+      }
+      window.addEventListener("guild-locale", () => {
+        applyStudioCopy();
+        render();
+        renderBar(barBots);
+        if (rpgTalk.name) talk(rpgTalk.name, rpgTalk.line, rpgTalk.acts);
+      });
+      boot().catch((err) => setFlash("error", err.message));
+    </script>
+  </body>
+</html>
