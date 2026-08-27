@@ -35,6 +35,34 @@ pnpm dev
 - 在 Bot Studio（`/studio`）雇人。技能是 markdown；可從本機 CLI 拷進來。
 - 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter）。
 
+## 工坊
+
+打開 `/library`。一頁三個 tab。
+
+| Tab | 是什麼 |
+|---|---|
+| **技能** | Markdown 說明書。掛到 bot 身上。模型要 call `skill` 才會載入正文。 |
+| **子代理** | 對話裡 call `spawn`。子代理回一份摘要。不能再套一層。沒有 MCP 工具。 |
+| **MCP** | stdio 工具伺服器，**不是技能**。不要放進技能庫。 |
+
+### MCP
+
+1. 工坊 → MCP → [連接伺服器](http://127.0.0.1:7420/mcp/add)，或把本機 Codex / Claude / Cursor 的卡片匯入。
+2. Name + command + args。沒有 URL 欄。HTTP MCP 沒接。
+3. 連上之後，頻道裡**每個** bot 都能 call 這些工具。名字長得像 `mcp__server__tool`。
+
+設定在 `{GUILD_HOME}/mcp.json`（預設 `~/.guild/mcp.json`）。本機檔（`~/.claude.json`、`~/.cursor/mcp.json`、`~/.codex/config.toml`）只列出來；**匯入 Guild 之後**對話才用得上。匯入是把啟動方式拷進 Guild，不會直接讀 host 檔。
+
+```json
+{
+  "mcpServers": {
+    "echo": { "command": "node", "args": ["echo-mcp.mjs"] }
+  }
+}
+```
+
+有 `url` 沒有 `command` 會被拒（`stdio MCP needs a command`）。上限：每個 server 40 個工具，合計 80。`tools/call` timeout 5 分鐘。Session 跟 `guildd` 活一樣久。
+
 ## 它不是什麼
 
 - 不是 Codex harness
@@ -45,9 +73,11 @@ pnpm dev
 
 ## 現況限制
 
-**`run` 與 `write` 以你的身分、在你的 shell 執行，沒有沙盒。** `run` 的預設 cwd 是 `$HOME`。`write` 能寫行程式能寫的任何路徑。少數破壞性指令會被拒絕；那不是防護。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
+**`run` 與 `write` 以你的身分、在你的 shell 執行，沒有沙盒。** `run` 的預設 cwd 是 `$HOME`。`write` 能寫行程式能寫的任何路徑。少數破壞性指令會被拒絕；那不是防護。
 
-也還沒做：Tauri app、SQLite、staffing、approvals、每 bot 一份 `CODEX_HOME`。`docs/` 裡的設計文件是之後的形狀——不是 changelog。
+**MCP 會以你的身分 spawn 本機 process。** env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
+
+也還沒做：Tauri app、SQLite、staffing、approvals、每 bot 一份 `CODEX_HOME`、HTTP MCP。`docs/` 裡的設計文件是之後的形狀——不是 changelog。
 
 ## 授權
 

@@ -35,6 +35,34 @@ Data: `GUILD_HOME` (default `~/.guild`). Not a cloud account.
 - Hire in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI.
 - Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter).
 
+## Workshop
+
+Open `/library`. One page, three tabs.
+
+| Tab | What |
+|---|---|
+| **Skills** | Markdown instructions. Staff onto a bot. The model must call `skill` to load the body. |
+| **Subagents** | Chat calls `spawn`. The child returns a summary. Cannot nest. No MCP tools. |
+| **MCP** | A stdio tool server, **not a skill**. Do not put it in the skills library. |
+
+### MCP
+
+1. Workshop → MCP → [Add server](http://127.0.0.1:7420/mcp/add), or import a host card from Codex / Claude / Cursor on this machine.
+2. Name + command + args. There is no URL field. HTTP MCP is not wired.
+3. After it is connected, **every** bot in chat can call those tools. Names look like `mcp__server__tool`.
+
+Config is `{GUILD_HOME}/mcp.json` (default `~/.guild/mcp.json`). Host files (`~/.claude.json`, `~/.cursor/mcp.json`, `~/.codex/config.toml`) are listed read-only until you import. Import copies the launch into Guild; chat does not use the host file directly.
+
+```json
+{
+  "mcpServers": {
+    "echo": { "command": "node", "args": ["echo-mcp.mjs"] }
+  }
+}
+```
+
+If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a command`). Caps: 40 tools per server, 80 total. `tools/call` timeout is 5 minutes. Sessions live with `guildd`.
+
 ## What it is not
 
 - Not a Codex harness
@@ -45,9 +73,11 @@ Data: `GUILD_HOME` (default `~/.guild`). Not a cloud account.
 
 ## Current limits
 
-**`run` and `write` execute as you, in your shell, with no sandbox.** Default cwd for `run` is `$HOME`. `write` can write any path the process can write. A couple of destructive commands are refused; that is not protection. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
+**`run` and `write` execute as you, in your shell, with no sandbox.** Default cwd for `run` is `$HOME`. `write` can write any path the process can write. A couple of destructive commands are refused; that is not protection.
 
-Also not built: Tauri app, SQLite, staffing, approvals, per-bot `CODEX_HOME`. Design docs under `docs/` describe a later shape — they are not a changelog.
+**MCP spawns a local process as you.** Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
+
+Also not built: Tauri app, SQLite, staffing, approvals, per-bot `CODEX_HOME`, HTTP MCP. Design docs under `docs/` describe a later shape — they are not a changelog.
 
 ## License
 
