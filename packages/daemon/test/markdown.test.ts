@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -135,21 +135,18 @@ test("chat page loads the shipped markdown renderer", async () => {
   assert.match(home, /data-fence-copy/);
   assert.match(home, /insertDraft/);
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
-  const server = createGuildServer({ dataDir, env: {} });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
+  const { server, origin } = await listenApp(dataDir, {});
   try {
-    const res = await fetch(`http://127.0.0.1:${bound.port}/md.js`);
+    const res = await fetch(`${origin}/md.js`);
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /function renderMarkdown/);
-    const i18n = await fetch(`http://127.0.0.1:${bound.port}/i18n.js`);
+    const i18n = await fetch(`${origin}/i18n.js`);
     assert.equal(i18n.status, 200);
     const dict = await i18n.text();
     assert.match(dict, /function t\(/);
     assert.match(dict, /zh-Hant/);
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    await closeServer(server);
   }
 });

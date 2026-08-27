@@ -12,10 +12,11 @@ import {
   DEFAULT_GUILD_PORT,
 } from "@guild/protocol";
 import http from "node:http";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { listenGuildServer } from "../src/server.ts";
 import { healthPayload } from "../src/handlers.ts";
 import { handleRequest } from "../src/router.ts";
 import { clipNavPreview, GuildStore } from "../src/store.ts";
+import { closeServer, listen as listenApp, tempHome as makeHome } from "./app.ts";
 
 const DAEMON_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -30,7 +31,7 @@ const STUDIO_HTML = fileURLToPath(
 );
 
 function tempHome(): string {
-  return mkdtempSync(join(tmpdir(), "guild-home-"));
+  return makeHome();
 }
 
 async function freePort(): Promise<number> {
@@ -49,16 +50,8 @@ async function freePort(): Promise<number> {
 }
 
 async function listen(dataDir: string) {
-  const server = createGuildServer({ dataDir });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  const origin = `http://127.0.0.1:${bound.port}`;
-  return { server, origin };
-}
-
-async function closeServer(server: { close: (cb: (err?: Error) => void) => void }) {
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
+  const app = await listenApp(dataDir);
+  return { server: app.server, origin: app.origin, ctx: app.ctx };
 }
 
 async function getJson(

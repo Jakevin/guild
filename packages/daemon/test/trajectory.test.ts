@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import { synthesizeTrajectory, turnTrajectoryEvents } from "../src/trajectory.ts";
 
 function tempHome(): string {
@@ -65,9 +65,7 @@ test("synthesizeTrajectory rebuilds a log from stored parts", () => {
 test("POST then GET trajectory includes the user event and a log file", async () => {
   const dataDir = tempHome();
   writeModelsFile(dataDir, { default: null, providers: {} });
-  const server = createGuildServer({ dataDir });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  const origin = `http://127.0.0.1:${bound.port}`;
+  const { server, origin } = await listenApp(dataDir);
   try {
     const bots = (await fetch(`${origin}/workspace`).then((r) => r.json())) as {
       bots: { id: string; handle: string }[];
@@ -89,8 +87,6 @@ test("POST then GET trajectory includes the user event and a log file", async ()
     assert.ok(traj.events.some((e: { kind: string }) => e.kind === "assistant"));
     assert.ok(traj.events.some((e: { kind: string }) => e.kind === "system"));
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    await closeServer(server);
   }
 });

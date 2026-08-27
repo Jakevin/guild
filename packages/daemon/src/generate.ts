@@ -7,7 +7,7 @@ import {
 } from "./compact.ts";
 import { MEMORY_INJECT_CAP } from "./memory.ts";
 import { llmComplete } from "./llm.ts";
-import { listMcpToolRefs } from "./mcp.ts";
+import { listMcpToolRefs, type McpToolRef } from "./mcp.ts";
 import { StoreError } from "./store.ts";
 import {
   hostContext,
@@ -247,6 +247,7 @@ export async function chatReply(input: {
   onProgress?: (update: ToolProgress) => void;
   pullSteers?: () => string[];
   signal?: AbortSignal;
+  mcpTools?: McpToolRef[];
 }): Promise<ChatReply> {
   const env = input.env ?? process.env;
   const system = buildChatSystem({
@@ -306,6 +307,7 @@ async function tryChatLlm(
     onProgress?: (update: ToolProgress) => void;
     pullSteers?: () => string[];
     signal?: AbortSignal;
+    mcpTools?: McpToolRef[];
   },
   env: NodeJS.ProcessEnv,
   dataDir: string,
@@ -356,7 +358,7 @@ async function tryChatLlm(
       onProgress: input.onProgress,
       pullSteers: input.pullSteers,
       signal: input.signal,
-      mcpTools: await listMcpToolRefs(dataDir),
+      mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
     },
   });
   if (!result) return null;

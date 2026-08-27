@@ -33,6 +33,22 @@ import {
 } from "./mcp.ts";
 import { isBroadcastMention, summonedHandles } from "./mention.ts";
 import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
+import type { McpToolRef } from "./mcp.ts";
+
+export type TurnComplete = {
+  roomId: string;
+  botId: string;
+  userText: string;
+  reply: string;
+};
+
+export type HandlerExtras = {
+  mcp?: boolean;
+  oauth?: boolean;
+  harvest?: boolean;
+  mcpTools?: McpToolRef[];
+  onTurnComplete?: (turn: TurnComplete) => void;
+};
 
 export function healthPayload(): HealthResponse {
   return {
@@ -652,6 +668,7 @@ async function generateReplies(
   onlyBotId?: string,
   env: NodeJS.ProcessEnv = process.env,
   parent?: ChatMessage,
+  extras: HandlerExtras = {},
 ) {
   const extraBotId =
     parent && parent.author !== "you" ? parent.author : undefined;
@@ -674,6 +691,7 @@ async function generateReplies(
         ...chatTurnForBot(store, roomId, botId, history, asked),
         env,
         signal,
+        mcpTools: extras.mcp === false ? [] : extras.mcpTools,
         onProgress: (update) => {
           const prev = store.getLiveTurn(roomId);
           store.setLiveTurn(roomId, {
@@ -699,24 +717,32 @@ async function generateReplies(
     );
     recordTurn(store, roomId, botId, generated, reply);
     replies.push(reply);
+    extras.onTurnComplete?.({
+      roomId,
+      botId,
+      userText: asked,
+      reply: generated.body,
+    });
     if (generated.source === "llm") {
       harvested.push({
         handle: store.getBot(botId)?.handle || botId,
         author: botId,
         body: generated.body,
       });
-      await harvestBotMemory({
-        store,
-        botId,
-        userMessage: asked,
-        reply: generated.body,
-        env,
-        prefer: store.getBot(botId)?.model ?? null,
-      }).catch(() => {});
+      if (extras.harvest !== false) {
+        await harvestBotMemory({
+          store,
+          botId,
+          userMessage: asked,
+          reply: generated.body,
+          env,
+          prefer: store.getBot(botId)?.model ?? null,
+        }).catch(() => {});
+      }
     }
   }
   const room = store.getRoom(roomId);
-  if (room?.kind === "channel" && harvested.length) {
+  if (room?.kind === "channel" && harvested.length && extras.harvest !== false) {
     await harvestChannelMemory({
       store,
       roomId,
@@ -803,6 +829,7 @@ export async function postUserMessage(
   replyTo?: string,
   attachments?: ChatAttachment[],
   assigneeId?: string,
+  extras: HandlerExtras = {},
 ) {
   const room = store.getRoom(roomId);
   if (!room) throw new StoreError(404, "room not found");
@@ -852,6 +879,7 @@ export async function postUserMessage(
     assignee || undefined,
     env,
     parent,
+    extras,
   );
   return { message, replies };
 }
@@ -863,6 +891,7 @@ export async function retryMessage(
   body?: string,
   env: NodeJS.ProcessEnv = process.env,
   assigneeId?: string,
+  extras: HandlerExtras = {},
 ) {
   const room = store.getRoom(roomId);
   if (!room) throw new StoreError(404, "room not found");
@@ -905,6 +934,7 @@ export async function retryMessage(
       assignee || undefined,
       env,
       parent,
+      extras,
     );
     return { message, replies };
   }
@@ -938,6 +968,7 @@ export async function retryMessage(
       ),
       env,
       signal,
+      mcpTools: extras.mcp === false ? [] : extras.mcpTools,
       onProgress: (update) => {
         const prev = store.getLiveTurn(roomId);
         store.setLiveTurn(roomId, {
@@ -964,7 +995,13 @@ export async function retryMessage(
     usage,
   );
   recordTurn(store, roomId, current.author, generated, reply);
-  if (generated.source === "llm") {
+  extras.onTurnComplete?.({
+    roomId,
+    botId: current.author,
+    userText: userMessage.body,
+    reply: generated.body,
+  });
+  if (generated.source === "llm" && extras.harvest !== false) {
     await harvestBotMemory({
       store,
       botId: current.author,

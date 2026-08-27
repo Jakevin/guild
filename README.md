@@ -26,7 +26,7 @@ Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 2. Open a channel. Write `Channel.md` if the room has a job.
 3. `@pm` to scope, `@rd` to look at code. They reply when mentioned (or when you reply to them). `@channel` pings everyone — usually the wrong move.
 
-Data: `GUILD_HOME` (default `~/.guild`). Not a cloud account.
+Data: `GUILD_HOME` (default `~/.guild`). Not a cloud account. `guildd` is a Cordis 4 app; plugin composition lives in `packages/daemon/cordis.yml`. `GUILD_*` env vars still win over YAML.
 
 ## What it is
 

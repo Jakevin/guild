@@ -10,7 +10,7 @@ import {
   applyMemoryUpdate,
   shouldHarvestMemory,
 } from "../src/memory.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import { GuildStore } from "../src/store.ts";
 
 const CHAT_HTML = fileURLToPath(
@@ -23,17 +23,8 @@ function tempHome(): string {
 
 async function listen(dataDir: string) {
   writeModelsFile(dataDir, { default: null, providers: {} });
-  const server = createGuildServer({ dataDir, env: {} });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  return { server, origin: `http://127.0.0.1:${bound.port}` };
-}
-
-async function closeServer(server: {
-  close: (cb: (err?: Error) => void) => void;
-}) {
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
+  const app = await listenApp(dataDir, {});
+  return { server: app.server, origin: app.origin };
 }
 
 async function json(origin: string, path: string, init?: RequestInit) {

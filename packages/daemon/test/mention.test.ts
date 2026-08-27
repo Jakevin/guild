@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import {
   summonedHandles,
   mentionedHandles,
@@ -24,17 +24,8 @@ function tempHome(): string {
 }
 
 async function listen(dataDir: string, env: NodeJS.ProcessEnv = {}) {
-  const server = createGuildServer({ dataDir, env });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  return { server, origin: `http://127.0.0.1:${bound.port}` };
-}
-
-async function closeServer(server: {
-  close: (cb: (err?: Error) => void) => void;
-}) {
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
+  const app = await listenApp(dataDir, env);
+  return { server: app.server, origin: app.origin };
 }
 
 async function json(

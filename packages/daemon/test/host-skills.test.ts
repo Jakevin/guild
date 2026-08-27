@@ -9,7 +9,7 @@ import {
   resolveStaffSkillIds,
   updateBot,
 } from "../src/handlers.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import { GuildStore, StoreError } from "../src/store.ts";
 
 function tempDir(prefix: string): string {
@@ -77,30 +77,23 @@ test("GET /library/skills/host?body=0 omits SKILL.md bodies", async () => {
 
 test("GET /library/skills/host returns an array", async () => {
   const dataDir = tempDir("guild-host-skills-data-");
-  const server = createGuildServer({ dataDir });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
+  const { server, origin } = await listenApp(dataDir);
   try {
-    const res = await fetch(
-      `http://127.0.0.1:${bound.port}/library/skills/host`,
-    );
+    const res = await fetch(`${origin}/library/skills/host`);
     assert.equal(res.status, 200);
     const body = (await res.json()) as unknown;
     assert.ok(Array.isArray(body));
-    const slimRes = await fetch(
-      `http://127.0.0.1:${bound.port}/library/skills/host?body=0`,
-    );
+    const slimRes = await fetch(`${origin}/library/skills/host?body=0`);
     assert.equal(slimRes.status, 200);
     const slim = (await slimRes.json()) as { body?: string }[];
     assert.ok(Array.isArray(slim));
     assert.ok(slim.every((item) => !item.body));
     const missing = await fetch(
-      `http://127.0.0.1:${bound.port}/library/skills/host?id=host:codex:no-such-skill`,
+      `${origin}/library/skills/host?id=host:codex:no-such-skill`,
     );
     assert.equal(missing.status, 404);
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    await closeServer(server);
   }
 });
 

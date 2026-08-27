@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { parseAgentFile } from "../src/agent-file.ts";
 import { listHostAgents } from "../src/host-agents.ts";
 import { mergeSpawnRefs, resolveSubagent } from "../src/subagent.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 import { GuildStore } from "../src/store.ts";
 
 function tempDir(prefix: string): string {
@@ -163,9 +163,7 @@ Run the test suite.
 `,
   });
   assert.equal(created.slug, "qa-runner");
-  const server = createGuildServer({ dataDir });
-  const listening = await listenGuildServer(server, "127.0.0.1", 0);
-  const origin = `http://127.0.0.1:${listening.port}`;
+  const { server, origin } = await listenApp(dataDir);
   try {
     const listed = await fetch(`${origin}/library/subagents`);
     assert.equal(listed.status, 200);
@@ -187,6 +185,6 @@ Run the test suite.
     assert.equal(host.status, 200);
     assert.ok(Array.isArray(await host.json()));
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await closeServer(server);
   }
 });

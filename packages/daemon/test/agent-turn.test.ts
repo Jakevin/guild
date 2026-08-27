@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { chatReply } from "../src/generate.ts";
 import { toLiveTurn } from "../src/handlers.ts";
 import { writeModelsFile } from "../src/llm.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 
 const CHAT_HTML = fileURLToPath(
   new URL("../src/public/chat.html", import.meta.url),
@@ -18,20 +18,8 @@ function tempHome(): string {
 }
 
 async function listen(dataDir: string, env: NodeJS.ProcessEnv = {}) {
-  const server = createGuildServer({ dataDir, env });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  return {
-    server,
-    origin: `http://127.0.0.1:${bound.port}`,
-  };
-}
-
-async function closeServer(server: {
-  close: (cb: (err?: Error) => void) => void;
-}) {
-  await new Promise<void>((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
+  const app = await listenApp(dataDir, env);
+  return { server: app.server, origin: app.origin };
 }
 
 test("chatReply without a model skips host tools", async () => {

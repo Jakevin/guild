@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { hostList, hostRead, hostTree } from "../src/host-browse.ts";
-import { createGuildServer, listenGuildServer } from "../src/server.ts";
+import { closeServer, listen as listenApp } from "./app.ts";
 
 const CHAT_HTML = fileURLToPath(
   new URL("../src/public/chat.html", import.meta.url),
@@ -36,9 +36,7 @@ test("hostList and hostRead round-trip a temp folder", () => {
 test("GET /host/ls and /host/read serve local files", async () => {
   const dir = tempDir();
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
-  const server = createGuildServer({ dataDir, env: {} });
-  const bound = await listenGuildServer(server, "127.0.0.1", 0);
-  const origin = `http://127.0.0.1:${bound.port}`;
+  const { server, origin } = await listenApp(dataDir, {});
   try {
     const ls = await fetch(
       `${origin}/host/ls?path=${encodeURIComponent(dir)}`,
@@ -57,9 +55,7 @@ test("GET /host/ls and /host/read serve local files", async () => {
     );
     assert.equal(missing.status, 404);
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
-    });
+    await closeServer(server);
   }
 });
 

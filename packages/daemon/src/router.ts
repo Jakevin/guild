@@ -41,6 +41,7 @@ import {
   StoreError,
   updateBot,
   workspace,
+  type HandlerExtras,
 } from "./handlers.ts";
 import type { GuildStore } from "./store.ts";
 import {
@@ -204,6 +205,7 @@ export async function handleRequest(
   res: ServerResponse,
   store: GuildStore,
   env: NodeJS.ProcessEnv = process.env,
+  extras: HandlerExtras = {},
 ): Promise<void> {
   const method = req.method ?? "GET";
   const path = pathname(req);
@@ -432,6 +434,7 @@ export async function handleRequest(
           str(body, "body") || undefined,
           env,
           str(body, "assigneeId") || undefined,
+          extras,
         ),
       );
       return;
@@ -453,6 +456,7 @@ export async function handleRequest(
           str(body, "body") || undefined,
           env,
           str(body, "assigneeId") || undefined,
+          extras,
         ),
       );
       return;
@@ -544,6 +548,7 @@ export async function handleRequest(
           str(body, "replyTo") || undefined,
           parseAttachments(body.attachments),
           str(body, "assigneeId") || undefined,
+          extras,
         ),
       );
       return;
@@ -569,12 +574,17 @@ export async function handleRequest(
           str(body, "replyTo") || undefined,
           parseAttachments(body.attachments),
           str(body, "assigneeId") || undefined,
+          extras,
         ),
       );
       return;
     }
 
     if (method === "GET" && path === "/mcp/servers") {
+      if (extras.mcp === false) {
+        json(res, 200, []);
+        return;
+      }
       json(res, 200, listMcpServers(store));
       return;
     }
@@ -583,6 +593,10 @@ export async function handleRequest(
       return;
     }
     if (method === "POST" && path === "/mcp/servers") {
+      if (extras.mcp === false) {
+        json(res, 503, { error: "mcp_disabled" });
+        return;
+      }
       const body = asRecord(await readJson(req));
       const envValue = body.env;
       const env: Record<string, string> = {};
@@ -608,12 +622,20 @@ export async function handleRequest(
       return;
     }
     if (method === "POST" && path === "/mcp/import") {
+      if (extras.mcp === false) {
+        json(res, 503, { error: "mcp_disabled" });
+        return;
+      }
       const body = asRecord(await readJson(req));
       json(res, 201, importMcpServer(store, str(body, "id")));
       return;
     }
     const mcpOne = path.match(/^\/mcp\/servers\/([^/]+)$/);
     if (mcpOne && method === "DELETE") {
+      if (extras.mcp === false) {
+        json(res, 503, { error: "mcp_disabled" });
+        return;
+      }
       json(res, 200, deleteMcpServer(store, decodeURIComponent(mcpOne[1])));
       return;
     }
@@ -709,21 +731,37 @@ export async function handleRequest(
     }
 
     if (method === "GET" && path === "/settings/oauth") {
+      if (extras.oauth === false) {
+        json(res, 200, { subscriptions: [] });
+        return;
+      }
       json(res, 200, { subscriptions: listSubscriptions(store.dataDir) });
       return;
     }
     const oauthLogin = path.match(/^\/settings\/oauth\/([^/]+)\/login$/);
     if (oauthLogin && method === "POST") {
+      if (extras.oauth === false) {
+        json(res, 503, { error: "oauth_disabled" });
+        return;
+      }
       json(res, 200, await startLogin(store.dataDir, decodeURIComponent(oauthLogin[1])));
       return;
     }
     const oauthPoll = path.match(/^\/settings\/oauth\/([^/]+)\/poll$/);
     if (oauthPoll && method === "POST") {
+      if (extras.oauth === false) {
+        json(res, 503, { error: "oauth_disabled" });
+        return;
+      }
       json(res, 200, await pollLogin(store.dataDir, decodeURIComponent(oauthPoll[1])));
       return;
     }
     const oauthComplete = path.match(/^\/settings\/oauth\/([^/]+)\/complete$/);
     if (oauthComplete && method === "POST") {
+      if (extras.oauth === false) {
+        json(res, 503, { error: "oauth_disabled" });
+        return;
+      }
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -737,6 +775,10 @@ export async function handleRequest(
     }
     const oauthLogout = path.match(/^\/settings\/oauth\/([^/]+)\/logout$/);
     if (oauthLogout && method === "POST") {
+      if (extras.oauth === false) {
+        json(res, 503, { error: "oauth_disabled" });
+        return;
+      }
       json(res, 200, await logoutOAuth(store.dataDir, decodeURIComponent(oauthLogout[1])));
       return;
     }

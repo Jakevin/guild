@@ -15,8 +15,14 @@
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "@cordisjs/plugin-include": "1.0.4",
+    "@cordisjs/plugin-loader": "1.0.0-rc.5",
+    "@cordisjs/plugin-logger-console": "1.0.0",
+    "@cordisjs/plugin-timer": "1.1.2",
     "@earendil-works/pi-ai": "^0.84.2",
-    "@guild/protocol": "workspace:*"
+    "@guild/protocol": "workspace:*",
+    "cordis": "4.0.0-rc.8",
+    "schemastery": "^3.18.0"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
