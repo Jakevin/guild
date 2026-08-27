@@ -1,10 +1,10 @@
 # Guild
 
-**本機人材庫。用 @handle 叫人，不要再開一個什麼都會的聊天窗.**
+[English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md)
+
+**Staff a local bench of bots. @mention the one you actually want. Not another omniscient chat.**
 
 Local-first. Your files. Your models.
-
-Staff a local bench of bots. @mention the one you actually want. Not another omniscient chat.
 
 ![Staff a local bench. @mention one.](docs/demo.gif)
 
@@ -20,7 +20,7 @@ pnpm dev
 
 Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 
-1. **模型** (`/settings`) — wire a provider or a subscription. Without a model, bots can still ack; they cannot think.
+1. **Models** (`/settings`) — wire a provider or a subscription. Without a model, bots can still ack; they cannot think.
 2. Open a channel. Write `Channel.md` if the room has a job.
 3. `@pm` to scope, `@rd` to look at code. They reply when mentioned (or when you reply to them). `@channel` pings everyone — usually the wrong move.
 
