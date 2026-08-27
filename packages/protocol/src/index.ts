@@ -108,6 +108,8 @@ export type ChatMessage = {
   createdAt: string;
   /** When an agent turn finished. User messages omit this. */
   finishedAt?: string;
+  /** Injected into a live turn (⌘/Ctrl+Enter), not a new user turn. */
+  steer?: boolean;
 };
 
 export type LlmApi =

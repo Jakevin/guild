@@ -11,76 +11,131 @@
     <link rel="stylesheet" href="/style.css" />
     <script src="/i18n.js"></script>
   </head>
-  <body class="app library-page" data-i18n-page="library">
+  <body class="app library-page" data-i18n-page="library" data-lib="skills">
+    <script>
+      (function () {
+        var p = location.pathname.replace(/\/+$/, "") || "/";
+        var lib =
+          p === "/subagents" ? "subagents" : p === "/mcp" ? "mcp" : "skills";
+        document.body.setAttribute("data-lib", lib);
+        document.body.setAttribute(
+          "data-i18n-page",
+          lib === "skills" ? "library" : lib,
+        );
+      })();
+    </script>
     <aside class="sidebar">
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">訊息</a>
         <a href="/studio" data-i18n="nav.studio">酒吧</a>
-        <a class="on" href="/library" data-i18n="nav.library">技能庫</a>
-        <a href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a class="on" href="/library" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
       </nav>
       <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
     </aside>
     <section class="pane">
       <header class="pane-head">
-        <h1 data-i18n="library.title">技能庫</h1>
-        <div class="meta" id="skill-summary"></div>
-        <a class="btn" href="/skills/add" data-i18n="library.install">安裝新技能</a>
+        <nav class="tabs">
+          <a class="tab" href="/library" data-lib="skills" data-i18n="library.sub.skills">技能</a>
+          <a class="tab" href="/subagents" data-lib="subagents" data-i18n="nav.subagents">子代理</a>
+          <a class="tab" href="/mcp" data-lib="mcp" data-i18n="nav.mcp">MCP</a>
+        </nav>
+        <script>
+          (function () {
+            var lib = document.body.getAttribute("data-lib");
+            document.querySelectorAll(".pane-head .tab").forEach(function (a) {
+              a.classList.toggle("on", a.getAttribute("data-lib") === lib);
+            });
+          })();
+        </script>
+        <div class="meta" id="lib-summary"></div>
+        <div class="head-actions">
+          <a class="btn" data-lib-action="skills" href="/skills/add" data-i18n="library.install">安裝新技能</a>
+          <a class="btn" data-lib-action="subagents" href="/subagents/add" data-i18n="subagents.install">新增子代理</a>
+          <a class="btn" data-lib-action="mcp" href="/mcp/add" data-i18n="mcp.install">連接伺服器</a>
+        </div>
       </header>
       <div class="page-body">
-        <p class="lede" data-i18n-html="library.lede">
-          Guild 自己的技能，加上本機 Claude、Codex、Pi、Grok、Cursor 留下的 SKILL.md。
-          安裝走 <a href="/skills/add">追加技能</a>；酒吧可以直接勾本機 CLI 技能。
-        </p>
         <p id="flash" class="muted"></p>
-        <div class="toolbar">
-          <div class="search">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="7" cy="7" r="4.5" stroke="currentColor"/>
-              <path d="M10.5 10.5 14 14" stroke="currentColor"/>
-            </svg>
-            <input id="skill-search" type="search" placeholder="搜尋技能" data-i18n-placeholder="search.skills" />
+
+        <section data-lib-panel="skills">
+          <p class="lede" data-i18n-html="library.lede">
+            Guild 自己的技能，加上本機 Claude、Codex、Pi、Grok、Cursor 留下的 SKILL.md。
+            安裝走 <a href="/skills/add">追加技能</a>；酒吧可以直接勾本機 CLI 技能。
+          </p>
+          <div class="toolbar">
+            <div class="search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor"/>
+                <path d="M10.5 10.5 14 14" stroke="currentColor"/>
+              </svg>
+              <input id="skill-search" type="search" placeholder="搜尋技能" data-i18n-placeholder="search.skills" />
+            </div>
           </div>
-        </div>
-        <div id="tag-row" class="chips tag-row"></div>
-        <div id="skill-grid" class="skill-grid"></div>
+          <div id="skill-tags" class="chips tag-row"></div>
+          <div id="skill-grid" class="skill-grid"></div>
+        </section>
+
+        <section data-lib-panel="subagents">
+          <p class="lede" data-i18n-html="subagents.lede">
+            Guild 內建 explorer / worker / reviewer，加上本機 Codex、Grok、Claude 留下的 agent 檔。
+            對話裡用 spawn 叫它們；自己建的走 <a href="/subagents/add">新增子代理</a>。
+          </p>
+          <div class="toolbar">
+            <div class="search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor"/>
+                <path d="M10.5 10.5 14 14" stroke="currentColor"/>
+              </svg>
+              <input id="agent-search" type="search" placeholder="搜尋子代理" data-i18n-placeholder="search.subagents" />
+            </div>
+          </div>
+          <div id="agent-tags" class="chips tag-row"></div>
+          <div id="agent-grid" class="skill-grid"></div>
+        </section>
+
+        <section data-lib-panel="mcp">
+          <p class="lede" data-i18n-html="mcp.lede">
+            連接器，不是技能。Skill 是說明書；MCP 是工具伺服器。連上之後，對話裡的 bot 可以直接 call 這些 tools。
+          </p>
+          <div class="toolbar">
+            <div class="search">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor"/>
+                <path d="M10.5 10.5 14 14" stroke="currentColor"/>
+              </svg>
+              <input id="mcp-search" type="search" placeholder="搜尋 MCP" data-i18n-placeholder="search.mcp" />
+            </div>
+          </div>
+          <div id="mcp-tags" class="chips tag-row"></div>
+          <div id="mcp-grid" class="skill-grid"></div>
+        </section>
       </div>
     </section>
     <script>
       const flash = document.getElementById("flash");
       const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
-      let allSkills = [];
-      let bots = [];
-      let openId = "";
-      let activeTags = new Set();
-      function tagPills(skill) {
-        return (skill.tags || [])
-          .map((tag) => {
-            const on = activeTags.has(tag) ? " on" : "";
-            return (
-              '<span class="mini-tag' +
-              on +
-              '" data-tag="' +
-              escapeHtml(tag) +
-              '">' +
-              escapeHtml(tagLabel(tag)) +
-              "</span>"
-            );
-          })
-          .join("");
-      }
-      function tagCounts() {
-        const counts = new Map();
-        for (const skill of allSkills) {
-          for (const tag of skill.tags || []) {
-            counts.set(tag, (counts.get(tag) || 0) + 1);
-          }
-        }
-        return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-      }
+      const summaryEl = document.getElementById("lib-summary");
 
+      function libSection() {
+        const p = location.pathname.replace(/\/+$/, "") || "/";
+        if (p === "/subagents") return "subagents";
+        if (p === "/mcp") return "mcp";
+        return "skills";
+      }
+      function showLib() {
+        const lib = libSection();
+        document.body.setAttribute("data-lib", lib);
+        document.body.setAttribute(
+          "data-i18n-page",
+          lib === "skills" ? "library" : lib,
+        );
+        document.querySelectorAll(".pane-head .tab").forEach((a) => {
+          a.classList.toggle("on", a.getAttribute("data-lib") === lib);
+        });
+        document.title = t("title." + (lib === "skills" ? "library" : lib));
+      }
       function escapeHtml(value) {
         return String(value)
           .replace(/&/g, "&amp;")
@@ -90,7 +145,7 @@
       }
       function hue(key) {
         let n = 0;
-        for (const ch of key) n = (n + ch.charCodeAt(0) * 13) % COLORS.length;
+        for (const ch of String(key)) n = (n + ch.charCodeAt(0) * 13) % COLORS.length;
         return COLORS[n];
       }
       function initials(name) {
@@ -98,77 +153,15 @@
         const letters = parts.map((p) => p[0]).join("").slice(0, 2);
         return letters.toUpperCase() || "?";
       }
-      function usedBy(skillId) {
-        return bots.filter((bot) => (bot.skillIds || []).includes(skillId));
-      }
-      function cardHtml(skill) {
-        const desc = skill.description || "";
-        const users = usedBy(skill.id);
-        const source =
-          skill.source === "host"
-            ? skill.hostName || skill.host || t("library.local")
-            : skill.source === "catalog"
-              ? t("library.catalog")
-              : t("library.user");
-        const sourceTitle = skill.source === "host" && skill.path ? skill.path : "";
-        const who =
-          skill.source === "host"
-            ? '<span class="muted">' + t("library.host") + "</span>"
-            : users.length === 0
-              ? '<span class="muted">' + t("library.unused") + "</span>"
-              : users
-                  .map(
-                    (bot) =>
-                      '<a href="/edit/' +
-                      encodeURIComponent(bot.id) +
-                      '">' +
-                      escapeHtml(bot.name) +
-                      "</a>",
-                  )
-                  .join("、");
-        const open = openId === skill.id;
-        return (
-          '<article class="lib-card' +
-          (open ? " open" : "") +
-          '" data-id="' +
-          escapeHtml(skill.id) +
-          '">' +
-          '<div class="skill-ico" style="background:' +
-          hue(skill.slug || skill.id) +
-          '">' +
-          initials(skill.name) +
-          "</div>" +
-          '<div class="skill-meta"><strong>' +
-          escapeHtml(skill.name) +
-          '</strong><em class="lib-desc">' +
-          escapeHtml(desc) +
-          "</em>" +
-          (skill.tags && skill.tags.length
-            ? '<p class="tag-list">' + tagPills(skill) + "</p>"
-            : "") +
-          '<p class="used-by">' +
-          who +
-          "</p>" +
-          '<p class="hint"' +
-          (sourceTitle ? ' title="' + escapeHtml(sourceTitle) + '"' : "") +
-          ">" +
-          escapeHtml(source) +
-          "</p></div>" +
-          (open
-            ? '<pre class="lib-body">' + escapeHtml(skill.body || "") + "</pre>"
-            : "") +
-          "</article>"
-        );
-      }
-      function renderChips() {
+      function chipRow(counts, activeTags) {
         const allOn = activeTags.size === 0;
-        document.getElementById("tag-row").innerHTML =
+        return (
           '<button type="button" class="chip' +
           (allOn ? " on" : "") +
           '" data-tag="">' +
           t("library.all") +
           "</button>" +
-          tagCounts()
+          counts
             .map(([tag, n]) => {
               const on = activeTags.has(tag) ? " on" : "";
               return (
@@ -183,90 +176,519 @@
                 "</span></button>"
               );
             })
-            .join("");
+            .join("")
+        );
       }
-      function render() {
-        renderChips();
-        const q = document.getElementById("skill-search").value.toLowerCase();
-        const pool = allSkills.filter((skill) => {
-          const tags = skill.tags || [];
-          const tagOk =
-            activeTags.size === 0 || tags.some((tag) => activeTags.has(tag));
-          const hay = (
-            skill.name +
-            " " +
-            (skill.description || "") +
-            " " +
-            (skill.hostName || "") +
-            " " +
-            (skill.path || "") +
-            " " +
-            tags.map(tagLabel).join(" ") +
-            " " +
-            tags.join(" ")
-          ).toLowerCase();
-          return tagOk && (!q || hay.includes(q));
-        });
-        const filtering = Boolean(q) || activeTags.size > 0;
-        document.getElementById("skill-summary").textContent = filtering
-          ? t("library.found", { n: pool.length, total: allSkills.length })
-          : t("library.count", { n: allSkills.length });
-        const grid = document.getElementById("skill-grid");
-        if (pool.length === 0) {
-          grid.innerHTML =
-            '<section class="empty">' + t("library.emptyHtml") + "</section>";
-          return;
-        }
-        grid.innerHTML = pool.map(cardHtml).join("");
-      }
-
-      document.getElementById("skill-search").addEventListener("input", render);
-      document.getElementById("tag-row").addEventListener("click", (event) => {
-        const chip = event.target.closest("[data-tag]");
-        if (!chip) return;
-        const tag = chip.getAttribute("data-tag");
+      function toggleTag(activeTags, tag) {
         if (!tag || (activeTags.has(tag) && activeTags.size === 1)) {
           activeTags.clear();
         } else {
-          activeTags = new Set(tag ? [tag] : []);
+          activeTags.clear();
+          if (tag) activeTags.add(tag);
         }
-        render();
-      });
-      document.getElementById("skill-grid").addEventListener("click", (event) => {
-        const mini = event.target.closest(".mini-tag");
-        if (mini) {
-          const tag = mini.getAttribute("data-tag");
-          activeTags = tag && activeTags.has(tag) && activeTags.size === 1
-            ? new Set()
-            : new Set(tag ? [tag] : []);
-          render();
-          return;
-        }
-        if (event.target.closest("a")) return;
-        const card = event.target.closest(".lib-card");
-        if (!card) return;
-        const id = card.getAttribute("data-id");
-        openId = openId === id ? "" : id;
-        render();
-      });
+      }
+      function fail(err) {
+        flash.className = "error";
+        flash.textContent = err && err.message ? err.message : String(err);
+      }
 
-      Promise.all([
-        fetch("/library/skills").then((r) => r.json()),
-        fetch("/library/skills/host").then((r) => r.json()).catch(() => []),
-        fetch("/bots").then((r) => r.json()),
-      ])
-        .then(([skills, host, roster]) => {
-          const guild = Array.isArray(skills) ? skills : [];
-          const local = Array.isArray(host) ? host : [];
-          allSkills = guild.concat(local);
-          bots = Array.isArray(roster) ? roster : [];
+      function initSkills() {
+        let allSkills = [];
+        let bots = [];
+        let openId = "";
+        const activeTags = new Set();
+        function tagPills(skill) {
+          return (skill.tags || [])
+            .map((tag) => {
+              const on = activeTags.has(tag) ? " on" : "";
+              return (
+                '<span class="mini-tag' +
+                on +
+                '" data-tag="' +
+                escapeHtml(tag) +
+                '">' +
+                escapeHtml(tagLabel(tag)) +
+                "</span>"
+              );
+            })
+            .join("");
+        }
+        function tagCounts() {
+          const counts = new Map();
+          for (const skill of allSkills) {
+            for (const tag of skill.tags || []) {
+              counts.set(tag, (counts.get(tag) || 0) + 1);
+            }
+          }
+          return [...counts.entries()].sort(
+            (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+          );
+        }
+        function usedBy(skillId) {
+          return bots.filter((bot) => (bot.skillIds || []).includes(skillId));
+        }
+        function cardHtml(skill) {
+          const desc = skill.description || "";
+          const users = usedBy(skill.id);
+          const source =
+            skill.source === "host"
+              ? skill.hostName || skill.host || t("library.local")
+              : skill.source === "catalog"
+                ? t("library.catalog")
+                : t("library.user");
+          const sourceTitle = skill.source === "host" && skill.path ? skill.path : "";
+          const who =
+            skill.source === "host"
+              ? '<span class="muted">' + t("library.host") + "</span>"
+              : users.length === 0
+                ? '<span class="muted">' + t("library.unused") + "</span>"
+                : users
+                    .map(
+                      (bot) =>
+                        '<a href="/edit/' +
+                        encodeURIComponent(bot.id) +
+                        '">' +
+                        escapeHtml(bot.name) +
+                        "</a>",
+                    )
+                    .join("、");
+          const open = openId === skill.id;
+          return (
+            '<article class="lib-card' +
+            (open ? " open" : "") +
+            '" data-id="' +
+            escapeHtml(skill.id) +
+            '">' +
+            '<div class="skill-ico" style="background:' +
+            hue(skill.slug || skill.id) +
+            '">' +
+            initials(skill.name) +
+            "</div>" +
+            '<div class="skill-meta"><strong>' +
+            escapeHtml(skill.name) +
+            '</strong><em class="lib-desc">' +
+            escapeHtml(desc) +
+            "</em>" +
+            (skill.tags && skill.tags.length
+              ? '<p class="tag-list">' + tagPills(skill) + "</p>"
+              : "") +
+            '<p class="used-by">' +
+            who +
+            "</p>" +
+            '<p class="hint"' +
+            (sourceTitle ? ' title="' + escapeHtml(sourceTitle) + '"' : "") +
+            ">" +
+            escapeHtml(source) +
+            "</p></div>" +
+            (open
+              ? '<pre class="lib-body">' + escapeHtml(skill.body || "") + "</pre>"
+              : "") +
+            "</article>"
+          );
+        }
+        function render() {
+          document.getElementById("skill-tags").innerHTML = chipRow(
+            tagCounts(),
+            activeTags,
+          );
+          const q = document.getElementById("skill-search").value.toLowerCase();
+          const pool = allSkills.filter((skill) => {
+            const tags = skill.tags || [];
+            const tagOk =
+              activeTags.size === 0 || tags.some((tag) => activeTags.has(tag));
+            const hay = (
+              skill.name +
+              " " +
+              (skill.description || "") +
+              " " +
+              (skill.hostName || "") +
+              " " +
+              (skill.path || "") +
+              " " +
+              tags.map(tagLabel).join(" ") +
+              " " +
+              tags.join(" ")
+            ).toLowerCase();
+            return tagOk && (!q || hay.includes(q));
+          });
+          const filtering = Boolean(q) || activeTags.size > 0;
+          summaryEl.textContent = filtering
+            ? t("library.found", { n: pool.length, total: allSkills.length })
+            : t("library.count", { n: allSkills.length });
+          const grid = document.getElementById("skill-grid");
+          if (pool.length === 0) {
+            grid.innerHTML =
+              '<section class="empty">' + t("library.emptyHtml") + "</section>";
+            return;
+          }
+          grid.innerHTML = pool.map(cardHtml).join("");
+        }
+        document.getElementById("skill-search").addEventListener("input", render);
+        document.getElementById("skill-tags").addEventListener("click", (event) => {
+          const chip = event.target.closest("[data-tag]");
+          if (!chip) return;
+          toggleTag(activeTags, chip.getAttribute("data-tag"));
           render();
-        })
-        .catch((err) => {
-          flash.className = "error";
-          flash.textContent = err.message;
         });
-      window.addEventListener("guild-locale", render);
+        document.getElementById("skill-grid").addEventListener("click", (event) => {
+          const mini = event.target.closest(".mini-tag");
+          if (mini) {
+            toggleTag(activeTags, mini.getAttribute("data-tag"));
+            render();
+            return;
+          }
+          if (event.target.closest("a")) return;
+          const card = event.target.closest(".lib-card");
+          if (!card) return;
+          const id = card.getAttribute("data-id");
+          openId = openId === id ? "" : id;
+          render();
+        });
+        window.addEventListener("guild-locale", render);
+        Promise.all([
+          fetch("/library/skills").then((r) => r.json()),
+          fetch("/library/skills/host").then((r) => r.json()).catch(() => []),
+          fetch("/bots").then((r) => r.json()),
+        ])
+          .then(([skills, host, roster]) => {
+            allSkills = (Array.isArray(skills) ? skills : []).concat(
+              Array.isArray(host) ? host : [],
+            );
+            bots = Array.isArray(roster) ? roster : [];
+            render();
+          })
+          .catch(fail);
+      }
+
+      function initSubagents() {
+        let allAgents = [];
+        let openId = "";
+        const activeTags = new Set();
+        function tagPills(agent) {
+          return (agent.tags || [])
+            .map((tag) => {
+              const on = activeTags.has(tag) ? " on" : "";
+              return (
+                '<span class="mini-tag' +
+                on +
+                '" data-tag="' +
+                escapeHtml(tag) +
+                '">' +
+                escapeHtml(tagLabel(tag)) +
+                "</span>"
+              );
+            })
+            .join("");
+        }
+        function tagCounts() {
+          const counts = new Map();
+          for (const agent of allAgents) {
+            for (const tag of agent.tags || []) {
+              counts.set(tag, (counts.get(tag) || 0) + 1);
+            }
+          }
+          return [...counts.entries()].sort(
+            (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+          );
+        }
+        function cardHtml(agent) {
+          const desc = agent.description || "";
+          const source =
+            agent.source === "host"
+              ? agent.hostName || agent.host || t("library.local")
+              : agent.source === "catalog"
+                ? t("library.catalog")
+                : t("library.user");
+          const sourceTitle = agent.source === "host" && agent.path ? agent.path : "";
+          const who =
+            agent.source === "host"
+              ? '<span class="muted">' + t("subagents.host") + "</span>"
+              : '<span class="muted">' + t("subagents.spawnHint") + "</span>";
+          const open = openId === agent.id;
+          return (
+            '<article class="lib-card' +
+            (open ? " open" : "") +
+            '" data-id="' +
+            escapeHtml(agent.id) +
+            '">' +
+            '<div class="skill-ico" style="background:' +
+            hue(agent.slug || agent.id) +
+            '">' +
+            initials(agent.name) +
+            "</div>" +
+            '<div class="skill-meta"><strong>' +
+            escapeHtml(agent.name) +
+            '</strong><em class="lib-desc">' +
+            escapeHtml(desc) +
+            "</em>" +
+            (agent.tags && agent.tags.length
+              ? '<p class="tag-list">' + tagPills(agent) + "</p>"
+              : "") +
+            '<p class="used-by">' +
+            who +
+            "</p>" +
+            '<p class="hint"' +
+            (sourceTitle ? ' title="' + escapeHtml(sourceTitle) + '"' : "") +
+            ">" +
+            escapeHtml(source) +
+            "</p></div>" +
+            (open
+              ? '<pre class="lib-body">' +
+                escapeHtml(agent.body || agent.instructions || "") +
+                "</pre>"
+              : "") +
+            "</article>"
+          );
+        }
+        function render() {
+          document.getElementById("agent-tags").innerHTML = chipRow(
+            tagCounts(),
+            activeTags,
+          );
+          const q = document.getElementById("agent-search").value.toLowerCase();
+          const pool = allAgents.filter((agent) => {
+            const tags = agent.tags || [];
+            const tagOk =
+              activeTags.size === 0 || tags.some((tag) => activeTags.has(tag));
+            const hay = (
+              agent.name +
+              " " +
+              (agent.description || "") +
+              " " +
+              (agent.hostName || "") +
+              " " +
+              (agent.path || "") +
+              " " +
+              tags.map(tagLabel).join(" ") +
+              " " +
+              tags.join(" ")
+            ).toLowerCase();
+            return tagOk && (!q || hay.includes(q));
+          });
+          const filtering = Boolean(q) || activeTags.size > 0;
+          summaryEl.textContent = filtering
+            ? t("library.found", { n: pool.length, total: allAgents.length })
+            : t("subagents.count", { n: allAgents.length });
+          const grid = document.getElementById("agent-grid");
+          if (pool.length === 0) {
+            grid.innerHTML =
+              '<section class="empty">' + t("subagents.emptyHtml") + "</section>";
+            return;
+          }
+          grid.innerHTML = pool.map(cardHtml).join("");
+        }
+        document.getElementById("agent-search").addEventListener("input", render);
+        document.getElementById("agent-tags").addEventListener("click", (event) => {
+          const chip = event.target.closest("[data-tag]");
+          if (!chip) return;
+          toggleTag(activeTags, chip.getAttribute("data-tag"));
+          render();
+        });
+        document.getElementById("agent-grid").addEventListener("click", (event) => {
+          const mini = event.target.closest(".mini-tag");
+          if (mini) {
+            toggleTag(activeTags, mini.getAttribute("data-tag"));
+            render();
+            return;
+          }
+          if (event.target.closest("a")) return;
+          const card = event.target.closest(".lib-card");
+          if (!card) return;
+          const id = card.getAttribute("data-id");
+          openId = openId === id ? "" : id;
+          render();
+        });
+        window.addEventListener("guild-locale", render);
+        Promise.all([
+          fetch("/library/subagents").then((r) => r.json()),
+          fetch("/library/subagents/host").then((r) => r.json()).catch(() => []),
+        ])
+          .then(([guild, host]) => {
+            allAgents = (Array.isArray(guild) ? guild : []).concat(
+              Array.isArray(host) ? host : [],
+            );
+            render();
+          })
+          .catch(fail);
+      }
+
+      function initMcp() {
+        let allServers = [];
+        let openId = "";
+        const activeTags = new Set();
+        function launchLine(server) {
+          const launch = server.launch || {};
+          if (launch.command) {
+            return [launch.command].concat(launch.args || []).join(" ");
+          }
+          return launch.url || "";
+        }
+        function tagsOf(server) {
+          if (server.source === "user") return ["Guild"];
+          return [server.host || "host"];
+        }
+        function cardHtml(server) {
+          const open = openId === server.id;
+          const tags = tagsOf(server);
+          const cmd = launchLine(server);
+          const who =
+            server.source === "host" ? t("mcp.host") : t("mcp.guildHint");
+          const extra = open
+            ? '<pre class="lib-body">' +
+              escapeHtml(cmd) +
+              "</pre>" +
+              (server.source === "host"
+                ? '<p><button type="button" class="btn" data-import="' +
+                  escapeHtml(server.id) +
+                  '">' +
+                  t("mcp.import") +
+                  "</button></p>"
+                : '<p><button type="button" class="btn danger" data-del="' +
+                  escapeHtml(server.name) +
+                  '">' +
+                  t("mcp.delete") +
+                  "</button></p>")
+            : "";
+          return (
+            '<article class="lib-card' +
+            (open ? " open" : "") +
+            '" data-id="' +
+            escapeHtml(server.id) +
+            '"><div class="skill-ico" style="background:' +
+            hue(server.name) +
+            '">M</div><div class="skill-meta"><strong>' +
+            escapeHtml(server.name) +
+            '</strong><em class="lib-desc">' +
+            escapeHtml(cmd) +
+            '</em><p class="tag-list">' +
+            tags
+              .map(function (tag) {
+                const on = activeTags.has(tag) ? " on" : "";
+                return (
+                  '<span class="mini-tag' +
+                  on +
+                  '" data-tag="' +
+                  escapeHtml(tag) +
+                  '">' +
+                  escapeHtml(tag) +
+                  "</span>"
+                );
+              })
+              .join("") +
+            '</p><p class="used-by">' +
+            who +
+            "</p></div>" +
+            extra +
+            "</article>"
+          );
+        }
+        function render() {
+          const q = document.getElementById("mcp-search").value.toLowerCase();
+          const pool = allServers.filter((server) => {
+            const tags = tagsOf(server);
+            const tagOk =
+              activeTags.size === 0 || tags.some((tag) => activeTags.has(tag));
+            const hay = (
+              server.name +
+              " " +
+              launchLine(server) +
+              " " +
+              tags.join(" ")
+            ).toLowerCase();
+            return tagOk && (!q || hay.includes(q));
+          });
+          const counts = new Map();
+          for (const server of allServers) {
+            for (const tag of tagsOf(server)) {
+              counts.set(tag, (counts.get(tag) || 0) + 1);
+            }
+          }
+          const chips = [...counts.entries()].sort(
+            (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+          );
+          document.getElementById("mcp-tags").innerHTML = chipRow(chips, activeTags);
+          summaryEl.textContent = t("mcp.count", { n: allServers.length });
+          const grid = document.getElementById("mcp-grid");
+          if (!pool.length) {
+            grid.innerHTML =
+              '<section class="empty">' + t("mcp.emptyHtml") + "</section>";
+            return;
+          }
+          grid.innerHTML = pool.map(cardHtml).join("");
+        }
+        document.getElementById("mcp-search").addEventListener("input", render);
+        document.getElementById("mcp-tags").addEventListener("click", (event) => {
+          const chip = event.target.closest("[data-tag]");
+          if (!chip) return;
+          toggleTag(activeTags, chip.getAttribute("data-tag"));
+          render();
+        });
+        document.getElementById("mcp-grid").addEventListener("click", async (event) => {
+          const mini = event.target.closest(".mini-tag");
+          if (mini) {
+            toggleTag(activeTags, mini.getAttribute("data-tag"));
+            render();
+            return;
+          }
+          const imp = event.target.closest("[data-import]");
+          if (imp) {
+            event.stopPropagation();
+            const res = await fetch("/mcp/import", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ id: imp.getAttribute("data-import") }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              flash.className = "error";
+              flash.textContent = body.error || t("saveFailed");
+              return;
+            }
+            location.reload();
+            return;
+          }
+          const del = event.target.closest("[data-del]");
+          if (del) {
+            event.stopPropagation();
+            const name = del.getAttribute("data-del");
+            const res = await fetch("/mcp/servers/" + encodeURIComponent(name), {
+              method: "DELETE",
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              flash.className = "error";
+              flash.textContent = body.error || t("deleteFailed");
+              return;
+            }
+            location.reload();
+            return;
+          }
+          const card = event.target.closest(".lib-card");
+          if (!card) return;
+          const id = card.getAttribute("data-id");
+          openId = openId === id ? "" : id;
+          render();
+        });
+        window.addEventListener("guild-locale", render);
+        Promise.all([
+          fetch("/mcp/servers").then((r) => r.json()),
+          fetch("/mcp/host").then((r) => r.json()).catch(() => []),
+        ])
+          .then(([guild, host]) => {
+            allServers = (Array.isArray(guild) ? guild : []).concat(
+              Array.isArray(host) ? host : [],
+            );
+            render();
+          })
+          .catch(fail);
+      }
+
+      showLib();
+      const section = libSection();
+      if (section === "subagents") initSubagents();
+      else if (section === "mcp") initMcp();
+      else initSkills();
+      window.addEventListener("guild-locale", showLib);
     </script>
   </body>
 </html>

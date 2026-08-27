@@ -7,6 +7,7 @@ import {
 } from "./compact.ts";
 import { MEMORY_INJECT_CAP } from "./memory.ts";
 import { llmComplete } from "./llm.ts";
+import { listMcpToolRefs } from "./mcp.ts";
 import { StoreError } from "./store.ts";
 import {
   hostContext,
@@ -355,6 +356,7 @@ async function tryChatLlm(
       onProgress: input.onProgress,
       pullSteers: input.pullSteers,
       signal: input.signal,
+      mcpTools: await listMcpToolRefs(dataDir),
     },
   });
   if (!result) return null;

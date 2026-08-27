@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Type, type Tool } from "@earendil-works/pi-ai";
 import { listHostSkills } from "./host-skills.ts";
+import type { McpToolRef } from "./mcp.ts";
 
 const execFileAsync = promisify(execFile);
 const HOME = homedir();
@@ -55,6 +56,7 @@ export type ToolContext = {
   /** Drain user steers injected mid-turn (Codex-style). */
   pullSteers?: () => string[];
   signal?: AbortSignal;
+  mcpTools?: McpToolRef[];
 };
 
 const BASE_TOOLS: Tool[] = [
@@ -163,6 +165,13 @@ export function guildTools(
       }),
     });
   }
+  for (const mcp of ctx.mcpTools ?? []) {
+    tools.push({
+      name: mcp.callName,
+      description: mcp.description,
+      parameters: Type.Object({}, { additionalProperties: true }),
+    });
+  }
   return tools;
 }
 
@@ -236,14 +245,19 @@ function openaiParameters(name: string): {
 }
 
 export function openaiTools(skills: SkillRef[] = [], ctx: ToolContext = {}) {
-  return guildTools(skills, ctx).map((tool) => ({
-    type: "function" as const,
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: openaiParameters(tool.name),
-    },
-  }));
+  return guildTools(skills, ctx).map((tool) => {
+    const mcp = (ctx.mcpTools ?? []).find((item) => item.callName === tool.name);
+    return {
+      type: "function" as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: mcp
+          ? mcp.inputSchema
+          : openaiParameters(tool.name),
+      },
+    };
+  });
 }
 
 export const OPENAI_TOOLS = openaiTools();
@@ -289,6 +303,11 @@ export async function executeTool(
         dataDir: ctx.dataDir,
         env: ctx.env,
       });
+    }
+    if (name.startsWith("mcp__")) {
+      const { callMcpTool } = await import("./mcp.ts");
+      if (!ctx.dataDir) return { text: "mcp needs a dataDir", isError: true };
+      return callMcpTool(ctx.dataDir, name, args, ctx.mcpTools ?? []);
     }
     return { text: `unknown tool: ${name}`, isError: true };
   } catch (error) {
@@ -594,7 +613,7 @@ export function nextToolRound(round: number): ToolRoundPhase {
 }
 
 export const TOOL_SYSTEM = `You ARE already running on the user's local computer (Guild, same design as Pi / DeepSeek Harness).
-Tools: run, read, write, list, skill, spawn, image_gen.
+Tools: run, read, write, list, skill, spawn, image_gen, plus any connected MCP tools (names start with mcp__).
 You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.

@@ -23,11 +23,11 @@ const STUDIO = fileURLToPath(new URL("../src/public/studio.html", import.meta.ur
 const SKILLS_ADD = fileURLToPath(
   new URL("../src/public/skills-add.html", import.meta.url),
 );
-const SUBAGENTS = fileURLToPath(
-  new URL("../src/public/subagents.html", import.meta.url),
-);
 const SUBAGENTS_ADD = fileURLToPath(
   new URL("../src/public/subagents-add.html", import.meta.url),
+);
+const MCP_ADD = fileURLToPath(
+  new URL("../src/public/mcp-add.html", import.meta.url),
 );
 
 test("zh-Hant and en packs share the same keys", () => {
@@ -55,10 +55,19 @@ test("t interpolates and switches locale in memory", () => {
 });
 
 test("every public page loads i18n.js", () => {
-  for (const path of [CHAT, LIBRARY, SETTINGS, STUDIO, SKILLS_ADD, SUBAGENTS, SUBAGENTS_ADD]) {
+  for (const path of [
+    CHAT,
+    LIBRARY,
+    SETTINGS,
+    STUDIO,
+    SKILLS_ADD,
+    SUBAGENTS_ADD,
+    MCP_ADD,
+  ]) {
     const html = readFileSync(path, "utf8");
     assert.match(html, /src="\/i18n\.js/);
     assert.match(html, /data-i18n-page=/);
+    assert.match(html, /href="\/favicon\.svg"/);
   }
   const chat = readFileSync(CHAT, "utf8");
   assert.match(chat, /sidebar-resizer/);

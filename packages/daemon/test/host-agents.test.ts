@@ -177,7 +177,10 @@ Run the test suite.
     assert.ok(slugs.includes("qa-runner"));
     const page = await fetch(`${origin}/subagents`);
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /子代理庫/);
+    const pageHtml = await page.text();
+    assert.match(pageHtml, /data-lib-panel="subagents"/);
+    assert.match(pageHtml, /data-lib-panel="skills"/);
+    assert.match(pageHtml, /data-lib-panel="mcp"/);
     const add = await fetch(`${origin}/subagents/add`);
     assert.equal(add.status, 200);
     const host = await fetch(`${origin}/library/subagents/host`);

@@ -25,6 +25,11 @@ import {
   publicModels,
   listBench,
   listLibrary,
+  listMcpServers,
+  listHostMcpServers,
+  createMcpServer,
+  importMcpServer,
+  deleteMcpServer,
   listRoomMessages,
   listRoomTrajectory,
   openDm,
@@ -56,8 +61,10 @@ const PAGES: Record<string, { file: string; type: string }> = {
   "/": { file: "chat.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "chat.html", type: "text/html; charset=utf-8" },
   "/library": { file: "library.html", type: "text/html; charset=utf-8" },
-  "/subagents": { file: "subagents.html", type: "text/html; charset=utf-8" },
+  "/subagents": { file: "library.html", type: "text/html; charset=utf-8" },
   "/subagents/add": { file: "subagents-add.html", type: "text/html; charset=utf-8" },
+  "/mcp": { file: "library.html", type: "text/html; charset=utf-8" },
+  "/mcp/add": { file: "mcp-add.html", type: "text/html; charset=utf-8" },
   "/studio": { file: "studio.html", type: "text/html; charset=utf-8" },
   "/skills/add": { file: "skills-add.html", type: "text/html; charset=utf-8" },
   "/chat": { file: "chat.html", type: "text/html; charset=utf-8" },
@@ -564,6 +571,50 @@ export async function handleRequest(
           str(body, "assigneeId") || undefined,
         ),
       );
+      return;
+    }
+
+    if (method === "GET" && path === "/mcp/servers") {
+      json(res, 200, listMcpServers(store));
+      return;
+    }
+    if (method === "GET" && path === "/mcp/host") {
+      json(res, 200, listHostMcpServers());
+      return;
+    }
+    if (method === "POST" && path === "/mcp/servers") {
+      const body = asRecord(await readJson(req));
+      const envValue = body.env;
+      const env: Record<string, string> = {};
+      if (envValue && typeof envValue === "object" && !Array.isArray(envValue)) {
+        for (const [key, value] of Object.entries(
+          envValue as Record<string, unknown>,
+        )) {
+          if (typeof value === "string") env[key] = value;
+        }
+      }
+      json(
+        res,
+        201,
+        createMcpServer(store, {
+          name: str(body, "name"),
+          command: str(body, "command"),
+          args: strList(body, "args"),
+          env: Object.keys(env).length ? env : undefined,
+          cwd: str(body, "cwd") || undefined,
+          url: str(body, "url") || undefined,
+        }),
+      );
+      return;
+    }
+    if (method === "POST" && path === "/mcp/import") {
+      const body = asRecord(await readJson(req));
+      json(res, 201, importMcpServer(store, str(body, "id")));
+      return;
+    }
+    const mcpOne = path.match(/^\/mcp\/servers\/([^/]+)$/);
+    if (mcpOne && method === "DELETE") {
+      json(res, 200, deleteMcpServer(store, decodeURIComponent(mcpOne[1])));
       return;
     }
 

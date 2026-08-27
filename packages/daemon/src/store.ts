@@ -306,6 +306,10 @@ export class GuildStore {
     return list;
   }
 
+  peekSteers(roomId: string): string[] {
+    return this.pendingSteers.get(roomId) ?? [];
+  }
+
   listBots(): Bot[] {
     const root = join(this.dataDir, "bots");
     const ids = readdirSync(root, { withFileTypes: true })
@@ -733,6 +737,7 @@ export class GuildStore {
     replyTo?: string,
     attachments?: ChatAttachment[],
     usage?: ChatUsage,
+    steer?: boolean,
   ): ChatMessage {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
@@ -751,6 +756,7 @@ export class GuildStore {
       ...(usage ? { usage } : {}),
       createdAt: startedAt || now,
       ...(author !== "you" ? { finishedAt: now } : {}),
+      ...(steer ? { steer: true } : {}),
     };
     this.writeMessages(roomId, [...this.readMessages(roomId), message]);
     return message;

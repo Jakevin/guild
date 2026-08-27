@@ -135,16 +135,41 @@ test("shipped router health is ready/ok", async () => {
 test("shipped router serves bench, library, and studio HTML", async () => {
   const { server, origin } = await listen(tempHome());
   try {
-    for (const path of ["/", "/library", "/subagents", "/subagents/add", "/studio", "/chat", "/settings"]) {
+    for (const path of ["/", "/library", "/subagents", "/subagents/add", "/mcp", "/mcp/add", "/studio", "/chat", "/settings"]) {
       const response = await fetch(`${origin}${path}`);
       const html = await response.text();
       assert.equal(response.status, 200);
       assert.match(response.headers.get("content-type") ?? "", /text\/html/);
       assert.doesNotMatch(html, /"error":"not_found"/);
     }
+    const libraryPage = await fetch(`${origin}/library`).then((r) => r.text());
+    const subagentsPage = await fetch(`${origin}/subagents`).then((r) => r.text());
+    const mcpPage = await fetch(`${origin}/mcp`).then((r) => r.text());
+    assert.equal(libraryPage, subagentsPage);
+    assert.equal(libraryPage, mcpPage);
+    assert.match(libraryPage, /data-lib-panel="skills"/);
+    assert.match(libraryPage, /data-lib-panel="subagents"/);
+    assert.match(libraryPage, /data-lib-panel="mcp"/);
     const street = await fetch(`${origin}/rpg/inn-street.jpg`);
     assert.equal(street.status, 200);
     assert.match(street.headers.get("content-type") ?? "", /image\//);
+    const home = await fetch(`${origin}/`).then((r) => r.text());
+    assert.match(home, /href="\/favicon\.ico"/);
+    assert.match(home, /href="\/favicon\.svg"/);
+    const ico = await fetch(`${origin}/favicon.ico`);
+    assert.equal(ico.status, 200);
+    assert.match(ico.headers.get("content-type") ?? "", /image\/(x-icon|vnd\.microsoft\.icon|png)/);
+    const icon = await fetch(`${origin}/favicon.svg`);
+    assert.equal(icon.status, 200);
+    assert.match(icon.headers.get("content-type") ?? "", /image\/svg\+xml/);
+    const svg = await icon.text();
+    assert.match(svg, /aria-label="Guild"/);
+    const png32 = await fetch(`${origin}/favicon-32.png`);
+    assert.equal(png32.status, 200);
+    assert.match(png32.headers.get("content-type") ?? "", /image\/png/);
+    const png16 = await fetch(`${origin}/favicon-16.png`);
+    assert.equal(png16.status, 200);
+    assert.match(png16.headers.get("content-type") ?? "", /image\/png/);
   } finally {
     await closeServer(server);
   }
@@ -494,6 +519,7 @@ test("home is chat and studio is the bar", () => {
   assert.match(home, /msg-head/);
   assert.match(home, /msg-main/);
   assert.match(home, /bot-card/);
+  assert.match(home, /bot-card-actions/);
   assert.match(home, /showBotCard/);
   assert.match(home, /members-btn/);
   assert.doesNotMatch(home, /加入 bot/);
@@ -505,12 +531,17 @@ test("home is chat and studio is the bar", () => {
   assert.match(home, /Trajectory/);
   assert.match(home, /image_gen/);
   assert.match(home, /imageGen/);
-  assert.match(home, /\/subagents/);
+  assert.match(home, /href="\/library"/);
+  assert.doesNotMatch(home, /href="\/subagents"/);
+  assert.doesNotMatch(home, /href="\/mcp"/);
   assert.match(home, /name === "spawn"/);
   assert.match(home, /data-stats/);
   assert.match(home, /stats-panel/);
   assert.match(home, /iconStats/);
   assert.match(home, /id="assign"/);
+  assert.match(home, /function mentionAt/);
+  assert.match(home, /function mentionChoices/);
+  assert.match(home, /id="mention-pop"/);
   assert.match(home, /assignCandidates/);
   assert.match(home, /assigneeId/);
   assert.match(home, /canStopHere/);
@@ -519,7 +550,8 @@ test("home is chat and studio is the bar", () => {
   assert.doesNotMatch(home, /nav-del/);
   assert.doesNotMatch(home, /id="del-room"/);
   assert.match(home, /deleteChannel/);
-  assert.match(home, /deleteBot/);
+  assert.doesNotMatch(home, /id="bot-card-del"/);
+  assert.doesNotMatch(home, /function deleteBot/);
   assert.match(home, /live-steps/);
   assert.match(home, /function liveBot/);
   assert.match(home, /msg bot live/);
@@ -529,6 +561,8 @@ test("home is chat and studio is the bar", () => {
   assert.match(home, /\/abort/);
   assert.match(home, /\/live/);
   assert.match(home, /steer\.queue/);
+  assert.match(home, /steer\.tag/);
+  assert.match(home, /flashSteerAck/);
   assert.match(home, /function sendSteer/);
   assert.match(home, /function enqueuePending/);
   assert.doesNotMatch(home, /\.disabled = stop/);
@@ -542,13 +576,19 @@ test("home is chat and studio is the bar", () => {
   assert.match(library, /\/library\/skills\/host/);
   assert.match(library, /Claude、Codex、Pi、Grok、Cursor/);
   assert.match(library, /\/skills\/add/);
-  assert.match(library, /\/subagents/);
+  assert.match(library, /data-lib-panel="skills"/);
+  assert.match(library, /data-lib-panel="subagents"/);
+  assert.match(library, /data-lib-panel="mcp"/);
+  assert.match(library, /href="\/subagents"/);
+  assert.match(library, /href="\/mcp"/);
+  assert.doesNotMatch(library, /mcpServers/);
   assert.match(library, /tag-row/);
   assert.match(library, /t\("library.all"\)/);
   assert.match(library, /mini-tag/);
   assert.match(library, /lib-desc/);
-  assert.match(library, /activeTags = new Set\(tag \? \[tag\] : \[\]\)/);
-  assert.doesNotMatch(library, /activeTags\.add\(/);
+  assert.match(library, /toggleTag\(/);
+  assert.match(library, /activeTags\.clear\(\)/);
+  assert.doesNotMatch(library, /activeTags\.add\(tag\);[\s\S]*activeTags\.add\(/);
   const style = readFileSync(
     fileURLToPath(new URL("../src/public/style.css", import.meta.url)),
     "utf8",
@@ -1175,10 +1215,19 @@ test("POST steer injects into a live turn and 409s when idle", async () => {
       body: "use the other file",
     });
     assert.equal(steered.status, 201);
-    const message = (steered.body as { message: { author: string; body: string } })
-      .message;
+    const message = (steered.body as {
+      message: { author: string; body: string; steer?: boolean };
+    }).message;
     assert.equal(message.author, "you");
+    assert.equal(message.steer, true);
     assert.match(message.body, /other file/);
+    const live = await getJson(origin, "/channels/channel-general/live");
+    const liveBody = live.body as {
+      steps: { name: string; detail: string; running?: boolean }[];
+    };
+    assert.equal(liveBody.steps[0].name, "steer");
+    assert.equal(liveBody.steps[0].running, true);
+    assert.match(liveBody.steps[0].detail, /other file/);
     const drained = store.drainSteers("channel-general");
     assert.equal(drained.length, 1);
     assert.match(drained[0], /other file/);

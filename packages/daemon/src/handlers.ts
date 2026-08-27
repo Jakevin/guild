@@ -24,6 +24,13 @@ import { harvestBotMemory, harvestChannelMemory } from "./memory.ts";
 import { listHostSkills, type HostSkill } from "./host-skills.ts";
 import { GuildStore, StoreError, type LiveStep, type LiveTurn } from "./store.ts";
 import { listSpawnRefs } from "./subagent.ts";
+import {
+  importHostMcp,
+  listGuildMcp,
+  listHostMcp,
+  removeGuildMcp,
+  upsertGuildMcp,
+} from "./mcp.ts";
 import { isBroadcastMention, summonedHandles } from "./mention.ts";
 import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
 
@@ -41,6 +48,63 @@ export function listBench(store: GuildStore): BenchListing {
 
 export function listLibrary(store: GuildStore, kind: LibraryKind) {
   return store.listLibrary(kind);
+}
+
+export function listMcpServers(store: GuildStore) {
+  return listGuildMcp(store.dataDir);
+}
+
+export function listHostMcpServers() {
+  return listHostMcp();
+}
+
+export function createMcpServer(
+  store: GuildStore,
+  input: {
+    name: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+    url?: string;
+  },
+) {
+  try {
+    return upsertGuildMcp(store.dataDir, input.name, {
+      command: input.command || "",
+      args: input.args || [],
+      env: input.env,
+      cwd: input.cwd,
+      url: input.url,
+    });
+  } catch (error) {
+    throw new StoreError(
+      400,
+      error instanceof Error ? error.message : "invalid mcp server",
+    );
+  }
+}
+
+export function importMcpServer(store: GuildStore, hostId: string) {
+  try {
+    return importHostMcp(store.dataDir, hostId);
+  } catch (error) {
+    throw new StoreError(
+      404,
+      error instanceof Error ? error.message : "host mcp not found",
+    );
+  }
+}
+
+export function deleteMcpServer(store: GuildStore, name: string) {
+  try {
+    return removeGuildMcp(store.dataDir, name);
+  } catch (error) {
+    throw new StoreError(
+      404,
+      error instanceof Error ? error.message : "mcp server not found",
+    );
+  }
 }
 
 export function createLibraryItem(
@@ -490,6 +554,9 @@ function liveDetail(trace: ToolTrace): string {
   if (trace.name === "spawn") {
     return String(args.description || args.name || args.prompt || "");
   }
+  if (trace.name.startsWith("mcp__")) {
+    return JSON.stringify(args).slice(0, 120);
+  }
   return String(args.path || "");
 }
 
@@ -513,7 +580,16 @@ export function toLiveTurn(botId: string, update: ToolProgress): LiveTurn {
 
 export function getLiveTurn(store: GuildStore, roomId: string): LiveTurn {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
-  return store.getLiveTurn(roomId) ?? { botId: "", thinking: "", steps: [] };
+  const live = store.getLiveTurn(roomId) ?? { botId: "", thinking: "", steps: [] };
+  const pending = store.peekSteers(roomId);
+  if (!pending.length) return live;
+  const steers: LiveStep[] = pending.map((text) => ({
+    name: "steer",
+    detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
+    running: true,
+  }));
+  const rest = live.steps.filter((step) => step.name !== "steer");
+  return { ...live, steps: [...steers, ...rest].slice(0, 5) };
 }
 
 export function abortLiveTurn(store: GuildStore, roomId: string) {
@@ -546,7 +622,16 @@ export function steerUserMessage(
   const packed = parseAttachments(attachments);
   const tokens = packed?.map((att) => att.token).join(" ") || "";
   const text = body.trim() || tokens;
-  const message = store.appendMessage(roomId, "you", text, undefined, undefined, packed);
+  const message = store.appendMessage(
+    roomId,
+    "you",
+    text,
+    undefined,
+    undefined,
+    packed,
+    undefined,
+    true,
+  );
   try {
     store.appendTrajectory(roomId, [
       userTrajectoryEvent(message.id, message.body, message.createdAt),

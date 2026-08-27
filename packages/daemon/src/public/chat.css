@@ -279,16 +279,33 @@ a.avatar { text-decoration: none; color: #fff; }
   font-size: 0.88rem;
   line-height: 1.4;
 }
-.bot-card-actions { display: flex; gap: 0.4rem; }
+.bot-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+.bot-card-actions .bot-card-btn:last-child {
+  grid-column: 1 / -1;
+}
 .bot-card-btn {
-  flex: 1;
-  text-align: center;
-  padding: 0.4rem 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  border: 0;
   border-radius: 10px;
   background: #2a2a2a;
   color: var(--text);
   text-decoration: none;
+  font: inherit;
   font-size: 0.82rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 .bot-card-btn:hover { background: #333; text-decoration: none; }
 button.avatar {
@@ -327,12 +344,19 @@ button.avatar {
   display: flex;
   gap: 0.7rem;
   flex-wrap: wrap;
+  align-items: baseline;
   border-top: 1px solid var(--line);
+  font-family: "PingFang TC", "Noto Sans TC", "SF Pro Text", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 400;
+  font-synthesis: none;
 }
-.side-foot a {
+.side-foot a,
+.side-foot a:link,
+.side-foot a:visited {
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.82rem;
+  font: inherit;
 }
 .side-foot a:hover { color: var(--text); }
 
@@ -589,6 +613,16 @@ a.invite-btn:hover { text-decoration: none; }
   line-height: 24px;
   white-space: pre-wrap;
   font-size: 16px;
+}
+.steer-tag {
+  margin: 0 6px 4px;
+  color: #9bb6e8;
+  font-size: 12px;
+  line-height: 16px;
+}
+.msg.you.steer .bubble {
+  background: #243044;
+  box-shadow: inset 0 0 0 1px #3a4d6a;
 }
 .msg.bot .bubble {
   width: fit-content;
@@ -1110,6 +1144,9 @@ a.invite-btn:hover { text-decoration: none; }
 .live-step.running .live-name {
   color: #ececec;
 }
+.live-step.steer .live-name {
+  color: #9bb6e8;
+}
 .turn-status .clock {
   margin-left: 8px;
   font-size: 13px;
@@ -1317,6 +1354,11 @@ a.invite-btn:hover { text-decoration: none; }
   box-shadow: 0 16px 40px #000c;
   z-index: 30;
 }
+.mention-pop.on-edit {
+  position: fixed;
+  right: auto;
+  z-index: 40;
+}
 .mention-pop[hidden] { display: none; }
 .mention-item {
   display: flex;
@@ -1455,26 +1497,33 @@ a.invite-btn:hover { text-decoration: none; }
 }
 .queue-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  margin: 0 12px;
+  margin: 8px 12px 0;
 }
 .queue-chips[hidden] { display: none; }
 .queue-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  max-width: 280px;
+  width: 100%;
+  max-width: none;
   margin: 0;
-  padding: 0 2px 0 10px;
-  border: 1px dashed #4a4a4a;
-  border-radius: 999px;
+  padding: 6px 4px 6px 10px;
+  border: 1px solid #333;
+  border-radius: 10px;
   background: #1a1a1a;
   color: #c8c8c8;
   font: inherit;
   font-size: 12px;
-  line-height: 24px;
+  line-height: 18px;
+}
+.queue-chip .queue-kind {
+  flex: none;
+  margin-right: 8px;
+  color: #8b8b8b;
 }
 .queue-chip span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1496,11 +1545,12 @@ a.invite-btn:hover { text-decoration: none; }
 }
 .queue-chip button:hover { color: #fff; }
 .composer-steer {
-  margin: 0 16px;
+  margin: 6px 16px 0;
   color: #6f6f6f;
   font-size: 12px;
   line-height: 16px;
 }
+.composer-steer.ok { color: #9fdfb2; }
 .composer-steer[hidden] { display: none; }
 .attach-chip {
   display: inline-flex;

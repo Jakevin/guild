@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
+    <title>Guild — 連接 MCP</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/i18n.js"></script>
+  </head>
+  <body class="app skills-add-page" data-i18n-page="mcpAdd">
+    <aside class="sidebar">
+      <div class="side-brand"><a class="logo" href="/">Guild</a></div>
+      <nav class="side-nav">
+        <a href="/" data-i18n="nav.chat">訊息</a>
+        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a class="on" href="/mcp" data-i18n="nav.library">工坊</a>
+        <a href="/settings" data-i18n="nav.settings">模型</a>
+      </nav>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <h1 data-i18n="mcpAdd.title">連接 MCP</h1>
+      </header>
+      <div class="page-body">
+        <p class="lede" data-i18n="mcpAdd.lede">stdio 伺服器（command + args），跟 Codex config.toml / Claude MCP JSON 同一套。這不是技能，不要寫進技能庫。</p>
+        <p id="flash" class="muted"></p>
+        <section class="card">
+          <label data-i18n="mcpAdd.name">名稱</label>
+          <input id="name" placeholder="context7" />
+          <label data-i18n="mcpAdd.command">命令</label>
+          <input id="command" placeholder="npx" />
+          <label data-i18n="mcpAdd.args">參數（空白分隔）</label>
+          <input id="args" placeholder="-y @upstash/context7-mcp" />
+          <label data-i18n="mcpAdd.env">環境變數 KEY=value，一行一個</label>
+          <textarea id="env" class="body" rows="4" placeholder="API_KEY=…"></textarea>
+          <button type="button" id="save" data-i18n="mcpAdd.save">連接</button>
+        </section>
+        <section class="card">
+          <h2 data-i18n="mcpAdd.hostTitle">從本機 CLI 匯入</h2>
+          <div id="host-list"></div>
+        </section>
+      </div>
+    </section>
+    <script>
+      const flash = document.getElementById("flash");
+      function setFlash(kind, text) {
+        flash.className = kind;
+        flash.textContent = text;
+      }
+      function parseEnv(text) {
+        const env = {};
+        String(text || "")
+          .split(/\n/)
+          .forEach((line) => {
+            const eq = line.indexOf("=");
+            if (eq <= 0) return;
+            env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+          });
+        return env;
+      }
+      document.getElementById("save").addEventListener("click", async () => {
+        const name = document.getElementById("name").value.trim();
+        const command = document.getElementById("command").value.trim();
+        if (!name || !command) {
+          setFlash("error", t("mcpAdd.needName"));
+          return;
+        }
+        const args = document.getElementById("args").value.trim()
+          ? document.getElementById("args").value.trim().split(/\s+/)
+          : [];
+        const env = parseEnv(document.getElementById("env").value);
+        const res = await fetch("/mcp/servers", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, command, args, env }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setFlash("error", body.error || t("saveFailed"));
+          return;
+        }
+        setFlash("health", t("mcpAdd.saved", { name: body.name || name }));
+      });
+      fetch("/mcp/host")
+        .then((r) => r.json())
+        .then((rows) => {
+          const root = document.getElementById("host-list");
+          if (!Array.isArray(rows) || !rows.length) {
+            root.innerHTML = '<p class="muted">' + t("mcpAdd.noHost") + "</p>";
+            return;
+          }
+          root.innerHTML = rows
+            .map((row) => {
+              const cmd = [row.launch && row.launch.command]
+                .concat((row.launch && row.launch.args) || [])
+                .filter(Boolean)
+                .join(" ");
+              return (
+                '<div class="lib-card"><div class="skill-meta"><strong>' +
+                String(row.name || "")
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;") +
+                "</strong><em>" +
+                String(row.host || "") +
+                " · " +
+                String(cmd)
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;") +
+                '</em></div><button type="button" data-import="' +
+                String(row.id || "").replace(/"/g, "&quot;") +
+                '">' +
+                t("mcp.import") +
+                "</button></div>"
+              );
+            })
+            .join("");
+        })
+        .catch(() => {});
+      document.getElementById("host-list").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-import]");
+        if (!btn) return;
+        const res = await fetch("/mcp/import", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: btn.getAttribute("data-import") }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setFlash("error", body.error || t("saveFailed"));
+          return;
+        }
+        setFlash("health", t("mcpAdd.imported", { name: body.name || "" }));
+      });
+    </script>
+  </body>
+</html>

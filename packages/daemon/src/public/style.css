@@ -116,13 +116,19 @@ body.app .side-nav {
   flex-direction: column;
   gap: 2px;
   padding: 0.25rem 0.55rem;
+  font-family: "PingFang TC", "Noto Sans TC", "SF Pro Text", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 400;
+  font-synthesis: none;
 }
-body.app .side-nav a {
+body.app .side-nav a,
+body.app .side-nav a:link,
+body.app .side-nav a:visited {
   padding: 0.55rem 0.75rem;
   border-radius: 12px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.92rem;
+  font: inherit;
 }
 body.app .side-nav a:hover { background: var(--lift); color: var(--text); text-decoration: none; }
 body.app .side-nav a.on { background: var(--lift); color: var(--text); }
@@ -133,20 +139,53 @@ body.app .side-group {
   margin-top: 0.15rem;
 }
 body.app .side-group-label {
-  padding: 0.45rem 0.75rem 0.15rem;
-  color: #6f6f6f;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  padding: 0.55rem 0.75rem 0.15rem;
+  color: var(--muted);
+  font: inherit;
 }
 body.app .side-nav .side-sub {
-  padding-left: 1.15rem;
-  font-size: 0.9rem;
+  margin-left: 1.05rem;
+  padding-left: 0.7rem;
 }
 body.settings-page [data-sec-panel] { display: none; }
 body.settings-page[data-section="main"] [data-sec-panel="main"],
 body.settings-page[data-section="subs"] [data-sec-panel="subs"],
 body.settings-page[data-section="keys"] [data-sec-panel="keys"] {
   display: block;
+}
+body.library-page [data-lib-panel],
+body.library-page [data-lib-action] { display: none; }
+body.library-page[data-lib="skills"] [data-lib-panel="skills"],
+body.library-page[data-lib="subagents"] [data-lib-panel="subagents"],
+body.library-page[data-lib="mcp"] [data-lib-panel="mcp"] {
+  display: block;
+}
+body.library-page[data-lib="skills"] [data-lib-action="skills"],
+body.library-page[data-lib="subagents"] [data-lib-action="subagents"],
+body.library-page[data-lib="mcp"] [data-lib-action="mcp"] {
+  display: inline-flex;
+}
+body.app .pane-head .tabs { margin: 0; }
+body.app .pane-head a.tab {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0.38rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 560;
+  color: var(--muted);
+  background: transparent;
+  text-decoration: none;
+}
+body.app .pane-head a.tab:hover {
+  color: var(--text);
+  background: var(--lift);
+  text-decoration: none;
+}
+body.app .pane-head a.tab.on {
+  background: #ececec;
+  color: #111;
 }
 body.app .side-foot {
   margin-top: auto;
@@ -190,6 +229,7 @@ body.app .page-body {
   min-width: 0;
 }
 body.app.library-page .page-body { max-width: 86rem; }
+body.app.library-page .page-body .lede { max-width: 46rem; }
 body.app.settings-page .page-body,
 body.app.skills-add-page .page-body { max-width: 56rem; }
 body.app .page-body > .lede { max-width: 46rem; }
@@ -314,6 +354,22 @@ button:disabled { opacity: 0.45; }
   margin-top: 0.75rem;
   margin-left: auto;
 }
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.75rem;
+}
+.card-foot .save-md { margin: 0 0 0 auto; }
+.card-foot .ghost.danger {
+  margin: 0;
+  padding: 0.45rem 0.15rem;
+  background: transparent;
+  color: #fca5a5;
+  border: 0;
+  font-weight: 400;
+}
+.card-foot .ghost.danger:hover { color: #fecaca; }
 #submit-btn { margin: 0.35rem 0 1.2rem; }
 .skill-picker { margin: 1.2rem 0 1.6rem; }
 .skill-picker h2 { margin: 0 0 0.35rem; }

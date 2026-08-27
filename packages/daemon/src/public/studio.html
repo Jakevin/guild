@@ -23,8 +23,7 @@
       <nav>
         <a class="nav-link" href="/" data-i18n="nav.chat">訊息</a>
         <a class="nav-link on" href="/studio" data-i18n="nav.studio">酒吧</a>
-        <a class="nav-link" href="/library" data-i18n="nav.library">技能庫</a>
-        <a class="nav-link" href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a class="nav-link" href="/library" data-i18n="nav.library">工坊</a>
         <a class="nav-link" href="/settings" data-i18n="nav.settings">模型</a>
         <div class="locale-switch">
           <button type="button" data-locale="zh-Hant" data-i18n="lang.zh">中</button>
@@ -77,7 +76,10 @@
           <input name="handle" required placeholder="ada" />
           <label data-i18n="studio.oneLiner">一句話</label>
           <input name="oneLiner" placeholder="這個 bot 在團隊裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
-          <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
+          <div class="card-foot">
+            <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">刪除這個人</button>
+            <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
+          </div>
         </section>
 
         <section class="card markdown-block" data-kind="soul">
@@ -134,7 +136,6 @@
         </section>
 
         <button type="submit" id="submit-btn">請他入座</button>
-        <button type="button" class="secondary danger" id="delete-bot" hidden data-i18n="bot.delete">刪除這個人</button>
       </form>
     </main>
     <script>

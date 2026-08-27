@@ -30,8 +30,7 @@
       <ul class="navlist" id="dms"></ul>
       <div class="side-foot">
         <a href="/studio" data-i18n="nav.studio">酒吧</a>
-        <a href="/library" data-i18n="nav.library">技能庫</a>
-        <a href="/subagents" data-i18n="nav.subagents">子代理</a>
+        <a href="/library" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
       </div>
       <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
@@ -205,7 +204,6 @@
         <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">訊息</a>
         <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">設定</a>
         <button type="button" class="bot-card-btn" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
-        <button type="button" class="bot-card-btn danger" id="bot-card-del" data-i18n="bot.delete">刪除</button>
       </div>
     </div>
     <dialog id="channel-md">
@@ -877,6 +875,7 @@
       function syncSteerHint() {
         const hint = document.getElementById("composer-steer");
         if (!hint) return;
+        if (hint.classList.contains("ok")) return;
         if (!currentRoomBusy()) {
           hint.hidden = true;
           hint.textContent = "";
@@ -884,6 +883,19 @@
         }
         hint.hidden = false;
         hint.textContent = t("steer.hint", { mod: steerModLabel() });
+      }
+      let steerAckTimer = 0;
+      function flashSteerAck() {
+        const hint = document.getElementById("composer-steer");
+        if (!hint) return;
+        hint.hidden = false;
+        hint.classList.add("ok");
+        hint.textContent = t("steer.done");
+        clearTimeout(steerAckTimer);
+        steerAckTimer = setTimeout(() => {
+          hint.classList.remove("ok");
+          syncSteerHint();
+        }, 2800);
       }
       function syncSendButton() {
         const stop = canStopHere() && !composerHasPayload();
@@ -1311,6 +1323,7 @@
         if (name === "think") return t("think");
         if (name === "skill") return t("skill");
         if (name === "image_gen") return t("imageGen");
+        if (name === "steer") return t("steer.live");
         return toolTitle(name);
       }
       function liveStepsHtml(steps) {
@@ -1321,10 +1334,12 @@
           rows
             .map((step) => {
               const running = step.running ? " running" : "";
+              const kind = step.name === "steer" ? " steer" : "";
               const detail = String(step.detail || "").trim();
               return (
                 '<li class="live-step' +
                 running +
+                kind +
                 '"><span class="live-name">' +
                 escapeHtml(liveStepLabel(step.name)) +
                 "</span>" +
@@ -1516,6 +1531,9 @@
                 : you
                   ? replyQuoteHtml(msg) +
                     youAttachHtml(msg) +
+                    (msg.steer
+                      ? '<p class="steer-tag">' + t("steer.tag") + "</p>"
+                      : "") +
                     '<p class="bubble">' +
                     formatYouBody(msg.body) +
                     "</p>"
@@ -1555,7 +1573,9 @@
               if (you) {
                 return (
                   rule +
-                  '<article class="msg you" data-id="' +
+                  '<article class="msg you' +
+                  (msg.steer ? " steer" : "") +
+                  '" data-id="' +
                   escapeHtml(msg.id) +
                   '">' +
                   clock +
@@ -1673,23 +1693,7 @@
         await loadWorkspace();
         if (state.kind === "channel") await loadMessages();
       }
-      async function deleteBot(id, handle) {
-        if (!id) return;
-        if (!confirm(t("bot.deleteConfirm", { handle: handle || id }))) return;
-        const res = await fetch("/bots/" + encodeURIComponent(id), {
-          method: "DELETE",
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
-        if (state.kind === "dm" && state.id === id) {
-          state.kind = "channel";
-          state.id = "channel-general";
-          setHash();
-        }
-        hideBotCard();
-        await loadWorkspace();
-        await loadMessages();
-      }
+
 
       function roomMessagesUrl(kind, id, suffix) {
         const base =
@@ -1743,7 +1747,9 @@
               .trim()
               .slice(0, 48);
             return (
-              '<span class="queue-chip"><span>' +
+              '<span class="queue-chip"><span class="queue-kind">' +
+              t("steer.queue") +
+              "</span><span>" +
               escapeHtml(preview || t("steer.queue")) +
               '</span><button type="button" data-queue-del="' +
               escapeHtml(item.id) +
@@ -2219,17 +2225,6 @@
         const handle = document.getElementById("bot-card-handle").textContent.replace(/^@/, "");
         const bot = state.bots.find((item) => item.handle === handle);
         openBotMemory(bot);
-      });
-      document.getElementById("bot-card-del").addEventListener("click", async (event) => {
-        event.preventDefault();
-        const handle = document.getElementById("bot-card-handle").textContent.replace(/^@/, "");
-        const bot = state.bots.find((item) => item.handle === handle);
-        if (!bot) return;
-        try {
-          await deleteBot(bot.id, bot.handle);
-        } catch (err) {
-          alert(err.message);
-        }
       });
       document.getElementById("channel-md-del").addEventListener("click", async () => {
         const ch = currentChannel();
@@ -3108,15 +3103,34 @@
           title: att.title,
           body: att.body || "",
         }));
-        const payload = { body: composeSendBody(pending.raw) };
+        const text = composeSendBody(pending.raw);
+        const payload = { body: text };
         if (attachments.length) payload.attachments = attachments;
+        const optimisticId = "pending-steer";
+        state.messages = state.messages
+          .filter((msg) => msg.id !== optimisticId)
+          .concat([
+            {
+              id: optimisticId,
+              author: "you",
+              body: text,
+              steer: true,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        renderThread();
         const res = await fetch(steerUrl(state.kind, state.id), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         });
         const body = await res.json().catch(() => ({}));
+        const dropOptimistic = () => {
+          state.messages = state.messages.filter((msg) => msg.id !== optimisticId);
+        };
         if (res.status === 409) {
+          dropOptimistic();
+          renderThread();
           enqueuePending({
             raw: pending.raw,
             packed: pending.packed,
@@ -3126,11 +3140,19 @@
           });
           return;
         }
-        if (!res.ok) throw new Error(body.error || "steer failed");
+        if (!res.ok) {
+          dropOptimistic();
+          renderThread();
+          throw new Error(body.error || "steer failed");
+        }
         if (body.message) {
-          state.messages = state.messages.concat([body.message]);
+          dropOptimistic();
+          state.messages = state.messages.concat([
+            { ...body.message, steer: true },
+          ]);
           renderThread();
         }
+        flashSteerAck();
       }
       let pendingAssign = null;
       async function flushSend(raw, packed, replyTo, botIds, assigneeId, dest) {
