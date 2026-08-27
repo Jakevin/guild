@@ -26,7 +26,7 @@ pnpm dev
 2. チャンネルを開く。部屋に仕事があるなら `Channel.md` を書く。
 3. `@pm` で範囲を切る。`@rd` にコードを見てもらう。@ されたとき（または返信したとき）だけ返す。`@channel` は全員に飛ぶ——大抵まちがい。
 
-データは `GUILD_HOME`（既定 `~/.guild`）。クラウドアカウントではない。
+データは `GUILD_HOME`（既定 `~/.guild`）。クラウドアカウントではない。`guildd` は Cordis 4 アプリ。プラグイン構成は `packages/daemon/cordis.yml`。`GUILD_*` 環境変数が YAML より優先。
 
 ## これは何か
 

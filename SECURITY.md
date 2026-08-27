@@ -12,8 +12,11 @@ Guild bots can call local tools. The process is `guildd` running as **you**.
 | `write` | Writes any path the process can write. Creates parent folders. |
 | `read` / `list` | Read any path the process can read. |
 | `skill` / `spawn` / `image_gen` | In-process. `spawn` cannot nest. Read-only subagents cannot `write`. |
+| MCP (`mcp__server__tool`) | `guildd` spawns a **stdio child as you**. Env is inherited, then overlayed with that server's `env`. Timeout 5 minutes. Caps: 40 tools per server, 80 total. |
 
 The only hard refusals in `run` are a narrow `rm -rf /` pattern and `mkfs`. That is not a sandbox. Position files do **not** change OS permissions. There is no approval prompt.
+
+MCP blast radius is larger than a skill: it is another process with your uid, your env, and whatever the server binary does. Setting `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml` unloads Guild MCP (`GET /mcp/servers` is empty; mutating routes 503). It does **not** sandbox `run` / `write`.
 
 Data lives under `GUILD_HOME` (default `~/.guild`): bots, rooms, `models.json`, `oauth.json` (mode `0600`). API keys may be env vars (`$OPENAI_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
 
@@ -35,7 +38,7 @@ Those are design, not code. See `docs/2026-08-23-guild-design.md`.
 
 ## Reporting
 
-Until the repo is public with a private vulnerability path, write a **security** issue (or a private note to the maintainer) and include:
+The repo is public (`https://github.com/Jakevin/guild`). Prefer a private note to the maintainer. If you must use GitHub, open a **security** advisory (not a public issue) and include:
 
 1. What the bot could do (path, command, not a full exploit PoC against third parties)
 2. Whether it needs a model in the loop or is a direct HTTP/tool bug

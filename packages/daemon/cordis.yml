@@ -2,9 +2,6 @@
   name: '@cordisjs/plugin-logger-console'
 - id: timer
   name: '@cordisjs/plugin-timer'
-- id: hmr
-  name: '@cordisjs/plugin-hmr'
-  disabled: true
 - id: store
   name: './src/plugins/store.ts'
 - id: oauth

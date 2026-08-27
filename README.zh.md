@@ -26,7 +26,7 @@ pnpm dev
 2. 開一個頻道。房間有任務就寫 `Channel.md`。
 3. `@pm` 收範圍，`@rd` 看程式。被 @ 到（或你回他們）才會回。`@channel` 會叫所有人——通常是錯的。
 
-資料在 `GUILD_HOME`（預設 `~/.guild`）。不是雲端帳號。
+資料在 `GUILD_HOME`（預設 `~/.guild`）。不是雲端帳號。`guildd` 是 Cordis 4 應用；插件組合在 `packages/daemon/cordis.yml`。`GUILD_*` 環境變數仍蓋過 YAML。
 
 ## 它是什麼
 

@@ -2,13 +2,27 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft, awaiting review |
+| Status | **Shipped on `7f6b62a`** (`feat: boot guildd as a Cordis 4 plugin app`). Adapter kernel, not a full rewrite of handlers. |
 | Date | 2026-08-28 |
-| Repo | `bot-cordis` (product name remains Guild) |
+| Repo | product name remains Guild; public `https://github.com/Jakevin/guild` |
 | Decision | Rewrite `guildd` internals as a Cordis 4 app. Composition is Loader + `cordis.yml` (approach C). |
-| Out of scope | DeepSeek Harness, Koishi / `@cordisjs/core` 3, product rename, `@cordisjs/plugin-server`, replacing pi-ai, Tauri / `apps/desktop` |
+| Out of scope | DeepSeek Harness, Koishi / `@cordisjs/core` 3, product rename, `@cordisjs/plugin-server`, replacing pi-ai, Tauri / `apps/desktop`, HMR |
 
-This spec is the contract for the implementation plan. If a later plan disagrees with this file, this file wins until it is edited.
+This spec was the contract for the first kernel cut. **What landed is an adapter layer.** Do not re-implement the items in **Not in v1** below as if they were missing bugs.
+
+### Not in v1 (do not build from this draft)
+
+| Draft said | What shipped |
+|---|---|
+| `api` owns the router; handlers take `ctx` | `plugins/api.ts` only calls `ctx.server.listen()`. Routes stay in `router.ts` + `GuildStore` + `HandlerExtras` flags |
+| `@mention` goes through `ctx.chat.reply` | `handlers.ts` still `import { chatReply } from "./generate.ts"`. `chat` exists so `api.inject` can wait |
+| `ctx.tools` adds MCP tools only via `ctx.get("mcp")` | `generate.ts` calls `listMcpToolRefs` unless `extras.mcp === false` passes `[]` |
+| Each plugin exports schemastery `Config` | `schemastery` is a dependency; plugins export none. Bad YAML config is ignored, not `FAILED` |
+| `@cordisjs/plugin-hmr` in YAML, `disabled: true` | **No HMR entry.** Do not add the package until someone needs HMR |
+| `ctx.server.route()` as reversible effects | One `http.createServer` listener. Unload `api` does not unmount routes; dispose the root fiber to close HTTP |
+| OAuth / memory disabled have composition tests | Router has `oauth_disabled`; **no** composition test for oauth/memory |
+
+`Include.prototype.write` is stubbed to a no-op in `start.ts` so unload does not rewrite `cordis.yml`. That is a private patch; bumping `@cordisjs/plugin-include` must re-check it.
 
 ---
 
@@ -47,9 +61,8 @@ Add to `@guild/daemon`:
 | `@cordisjs/plugin-loader` `1.0.0-rc.5` | `ctx.loader` |
 | `@cordisjs/plugin-include` `1.0.4` | Read `cordis.yml` |
 | `@cordisjs/plugin-logger-console` | `ctx.logger` → stdout |
-| `@cordisjs/plugin-timer` | Needed if HMR is ever enabled; mount anyway, cheap |
-| `@cordisjs/plugin-hmr` | Present in YAML, `disabled: true` |
-| `schemastery` | Standard Schema for plugin `Config` |
+| `@cordisjs/plugin-timer` | Loaded; unused by v1 Guild plugins |
+| `schemastery` | Transitive (logger-console). Guild plugins do not export `Config` |
 
 Do not add `@cordisjs/plugin-http` (that is an HTTP *client*).
 
@@ -241,9 +254,6 @@ Path: `packages/daemon/cordis.yml`.
   name: '@cordisjs/plugin-logger-console'
 - id: timer
   name: '@cordisjs/plugin-timer'
-- id: hmr
-  name: '@cordisjs/plugin-hmr'
-  disabled: true
 - id: store
   name: './src/plugins/store.ts'
 - id: oauth
@@ -266,7 +276,7 @@ Path: `packages/daemon/cordis.yml`.
 
 Every entry has a stable `id`. Loader diffs by `id`; missing ids remount on every YAML edit.
 
-Plugin `Config` is a schemastery schema exported as `Config`. Invalid YAML config fails that fiber (`FAILED`). If a required plugin (`store`, `llm`, `tools`, `chat`, `server`, `api`) fails, `startGuildDaemon` rejects (do not print `listening: true`). Optional plugin failure logs and leaves the rest running only if the failed plugin was optional (`oauth`, `mcp`, `memory`, `hmr`). Required vs optional is the table above.
+v1 plugins do **not** export a `Config` schema. Optional plugins (`oauth`, `mcp`, `memory`) stay out of hard `inject` so YAML `disabled: true` unloads them. Required vs optional is the table above.
 
 ---
 
@@ -424,10 +434,10 @@ Must remain true after the rewrite:
 | Cordis package | Official `cordis@4.0.0-rc.8`, not `@deepseek-ai/cordis` |
 | Composition | Loader + `packages/daemon/cordis.yml` |
 | HTTP | Existing `node:http`, service key `server` |
-| HMR | YAML entry present, `disabled: true` |
+| HMR | **Not shipped.** No YAML entry, no package |
 | Optional MCP when disabled | `GET /mcp/servers` empty 200; `POST /mcp/servers`, import, DELETE → 503 `mcp_disabled`; `GET /mcp/host` stays |
 | Memory when disabled | No harvest; file CRUD stays |
 | Trajectory | Synchronous in the message path, not an event |
-| Handlers | Pass `ctx`; tests boot the real Context; no bypass `createGuildServer` |
+| Handlers | Tests boot the real Context; no bypass `createGuildServer`. Handlers still take `GuildStore` + extras flags |
 | `startGuildDaemon` return | `{ server, ctx }` so CLI can `ctx.fiber.dispose()` |
 | OAuth when disabled | `GET /settings/oauth` empty 200; mutating POSTs 503 `oauth_disabled` |
