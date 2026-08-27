@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Guild — G closing into @">
+  <title>Guild — G closing into @</title>
+  <defs>
+    <linearGradient id="steel" x1="160" y1="40" x2="880" y2="980" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F7F8FA"/>
+      <stop offset="18%" stop-color="#D8DCE3"/>
+      <stop offset="46%" stop-color="#8E949E"/>
+      <stop offset="62%" stop-color="#C4C8D0"/>
+      <stop offset="82%" stop-color="#A8ADB6"/>
+      <stop offset="100%" stop-color="#E8EAEE"/>
+    </linearGradient>
+    <linearGradient id="steel-dim" x1="200" y1="120" x2="820" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#B8BDC6"/>
+      <stop offset="50%" stop-color="#6E747E"/>
+      <stop offset="100%" stop-color="#C9CED6"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="280" y1="240" x2="760" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F4F5F7"/>
+      <stop offset="45%" stop-color="#C5CAD2"/>
+      <stop offset="100%" stop-color="#8B909A"/>
+    </linearGradient>
+    <radialGradient id="enamel" cx="46%" cy="38%" r="62%">
+      <stop offset="0%" stop-color="#161A22"/>
+      <stop offset="55%" stop-color="#0B0E12"/>
+      <stop offset="100%" stop-color="#07090C"/>
+    </radialGradient>
+</defs>
+  
+  <g transform="translate(512.0 512.0) scale(0.93) translate(-512.0 -512.0)">
+    <circle cx="512.0" cy="512.0" r="512" fill="url(#steel)"/>
+    <circle cx="512.0" cy="512.0" r="492" fill="url(#steel-dim)"/>
+    <circle cx="512.0" cy="512.0" r="458" fill="url(#steel)"/>
+    <circle cx="512.0" cy="512.0" r="444" fill="url(#steel-dim)"/>
+    <circle cx="512.0" cy="512.0" r="432" fill="url(#enamel)"/>
+    <circle cx="512.0" cy="512.0" r="432" fill="none" stroke="#C5C9D1" stroke-width="6" opacity=".45"/>
+    <circle cx="512" cy="980" r="11" fill="url(#steel)" stroke="#6E747E" stroke-width="1.6"/>
+    <circle cx="980" cy="512" r="11" fill="url(#steel)" stroke="#6E747E" stroke-width="1.6"/>
+    <circle cx="512" cy="44" r="11" fill="url(#steel)" stroke="#6E747E" stroke-width="1.6"/>
+    <circle cx="44" cy="512" r="11" fill="url(#steel)" stroke="#6E747E" stroke-width="1.6"/>
+    
+    <g fill="none" stroke="url(#mark)" stroke-width="96" stroke-linejoin="round">
+      <!-- inner G -->
+      <path d="M 602.393 587.849 A 118 118 0 1 0 602.393 436.151" stroke-linecap="butt"/>
+      <!-- join (the hook) -->
+      <path d="M 602.393 587.849 L 724.96 690.695" stroke-linecap="butt"/>
+      <!-- @ tail, large clockwise wrap -->
+      <path d="M 724.96 690.695 A 278 278 0 1 1 783.925 569.799" stroke-linecap="round"/>
+    </g>
+    <path fill="url(#mark)" d="
+      M 530 467.84
+      H 670.32
+      V 608.96
+      H 601.2
+      V 556.16
+      H 530
+      Z"/>
+
+</g>
+</svg>

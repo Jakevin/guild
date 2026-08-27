@@ -65,6 +65,11 @@ const PAGES: Record<string, { file: string; type: string }> = {
   "/chat.css": { file: "chat.css", type: "text/css; charset=utf-8" },
   "/md.js": { file: "md.js", type: "text/javascript; charset=utf-8" },
   "/i18n.js": { file: "i18n.js", type: "text/javascript; charset=utf-8" },
+  "/favicon.ico": { file: "favicon.ico", type: "image/x-icon" },
+  "/favicon.svg": { file: "favicon.svg", type: "image/svg+xml" },
+  "/favicon-16.svg": { file: "favicon-16.svg", type: "image/svg+xml" },
+  "/favicon-32.png": { file: "favicon-32.png", type: "image/png" },
+  "/favicon-16.png": { file: "favicon-16.png", type: "image/png" },
   "/settings": { file: "settings.html", type: "text/html; charset=utf-8" },
   "/settings/subs": { file: "settings.html", type: "text/html; charset=utf-8" },
   "/settings/keys": { file: "settings.html", type: "text/html; charset=utf-8" },
@@ -89,12 +94,14 @@ function send(
   status: number,
   type: string,
   body: string | Buffer,
+  extra: Record<string, string> = {},
 ): void {
   res.writeHead(status, {
     "content-type": type,
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
     ...CORS_HEADERS,
+    ...extra,
   });
   res.end(body);
 }
@@ -209,8 +216,11 @@ export async function handleRequest(
     }
 
     if (method === "GET" && page) {
-      const html = readFileSync(`${PUBLIC}${page.file}`);
-      send(res, 200, page.type, html);
+      const body = readFileSync(`${PUBLIC}${page.file}`);
+      const extra = page.type.startsWith("image/")
+        ? { "cache-control": "public, max-age=86400" }
+        : {};
+      send(res, 200, page.type, body, extra);
       return;
     }
 

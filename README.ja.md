@@ -1,3 +1,5 @@
+<p align="left"><img src="docs/logo/B-g-monogram.svg" width="128" height="128" alt="Guild"></p>
+
 # Guild
 
 [English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md)

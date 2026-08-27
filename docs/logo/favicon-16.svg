@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="Guild">
+  <title>Guild</title>
+  <rect width="16" height="16" fill="#0B0E12"/>
+  <circle cx="8" cy="8" r="8" fill="#C5C9D1"/>
+  <circle cx="8" cy="8" r="5.85" fill="#0B0E12"/>
+  <path fill="none" stroke="#D7DBE2" stroke-width="2" stroke-linecap="butt"
+        d="M 10.15 10.05 A 2.85 2.85 0 1 1 10.2 5.95"/>
+  <path fill="#D7DBE2" d="M8.15 7.05 H11.05 V10.15 H9.7 V8.95 H8.15 Z"/>
+</svg>
