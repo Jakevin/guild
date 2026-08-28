@@ -7,6 +7,7 @@ import {
 } from "./compact.ts";
 import { MEMORY_INJECT_CAP } from "./memory.ts";
 import { llmComplete } from "./llm.ts";
+import { policyFromEnv, type Sandbox } from "./harness.ts";
 import { listMcpToolRefs, type McpToolRef } from "./mcp.ts";
 import { StoreError } from "./store.ts";
 import {
@@ -14,6 +15,7 @@ import {
   TOOL_SYSTEM,
   type SkillRef,
   type SubAgentRef,
+  type ToolContext,
   type ToolProgress,
   type ToolTrace,
 } from "./tools.ts";
@@ -248,6 +250,9 @@ export async function chatReply(input: {
   pullSteers?: () => string[];
   signal?: AbortSignal;
   mcpTools?: McpToolRef[];
+  sandbox?: Sandbox;
+  workspace?: string;
+  dispatch?: ToolContext["dispatch"];
 }): Promise<ChatReply> {
   const env = input.env ?? process.env;
   const system = buildChatSystem({
@@ -308,6 +313,9 @@ async function tryChatLlm(
     pullSteers?: () => string[];
     signal?: AbortSignal;
     mcpTools?: McpToolRef[];
+    sandbox?: Sandbox;
+    workspace?: string;
+    dispatch?: ToolContext["dispatch"];
   },
   env: NodeJS.ProcessEnv,
   dataDir: string,
@@ -359,6 +367,10 @@ async function tryChatLlm(
       pullSteers: input.pullSteers,
       signal: input.signal,
       mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
+      ...policyFromEnv(env, dataDir),
+      ...(input.sandbox ? { sandbox: input.sandbox } : {}),
+      ...(input.workspace ? { workspace: input.workspace } : {}),
+      ...(input.dispatch ? { dispatch: input.dispatch } : {}),
     },
   });
   if (!result) return null;

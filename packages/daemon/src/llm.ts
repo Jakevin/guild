@@ -18,20 +18,15 @@ import {
   subscriptionByPicker,
 } from "./oauth.ts";
 import {
-  emitProgress,
-  executeToolTraced,
   LLM_ROUND_TIMEOUT_MS,
-  nextToolRound,
   openaiTools,
   roundSignal,
-  takeSteers,
-  throwIfAborted,
-  TOOL_LOOP_EXHAUSTED,
   TOOL_LOOP_WRAP,
   type SkillRef,
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
+import { runAgentLoop } from "./harness.ts";
 import type { ChatUsage } from "@guild/protocol";
 import {
   addUsage,
@@ -493,89 +488,84 @@ async function completeOpenAiTools(
   const catalog = openaiTools(ctx.skills ?? [], ctx);
   const usage = blankUsage();
   const started = Date.now();
-  const pack = (text: string): DispatchResult => ({
-    text,
+  let lastAssistant: ChatMsg | null = null;
+  const looped = await runAgentLoop({
+    toolCtx: ctx,
     traces,
-    thinking: thinkingChunks.join("\n\n"),
-    usage: withDuration(usage, started),
-  });
-  for (let round = 0; ; round++) {
-    throwIfAborted(ctx);
-    const phase = nextToolRound(round);
-    if (phase === "stop") {
-      return traces.length ? pack(TOOL_LOOP_EXHAUSTED) : null;
-    }
-    if (phase === "wrap") {
-      msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
-    }
-    const pending = takeSteers(ctx);
-    if (pending) msgs.push({ role: "user", content: pending });
-    const response = await fetch(`${target.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${target.apiKey}`,
-        "content-type": "application/json",
-        ...(target.headers ?? {}),
-      },
-      body: JSON.stringify({
-        model: target.model,
-        temperature,
-        messages: msgs,
-        tools: catalog,
-        tool_choice: "auto",
-      }),
-      signal: roundSignal(ctx),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as {
-      choices?: { message?: ChatMsg; finish_reason?: string }[];
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      };
-    };
-    const message = data.choices?.[0]?.message;
-    if (!message) return null;
-    addUsage(usage, fromOpenAiUsage(data.usage));
-    const think = (message.reasoning_content || message.reasoning || "").trim();
-    if (think) thinkingChunks.push(think);
-    const thinking = thinkingChunks.join("\n\n");
-    if (think) emitProgress(ctx, traces, thinking);
-    const calls = message.tool_calls ?? [];
-    if (calls.length === 0) {
-      const late = takeSteers(ctx);
-      if (late) {
-        msgs.push(message);
-        msgs.push({ role: "user", content: late });
-        continue;
-      }
-      const text = message.content?.trim();
-      if (text) return pack(text);
-      return traces.length ? pack("（工具跑完了，但模型沒寫最終回覆）") : null;
-    }
-    msgs.push(message);
-    for (const call of calls) {
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
-      } catch {
-        args = {};
-      }
-      const outcome = await executeToolTraced(
-        call.function.name,
-        args,
-        ctx,
-        traces,
-        thinking,
-      );
-      msgs.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: outcome.text,
+    thinkingChunks,
+    nullIfNoTraces: true,
+    ask: async ({ wrap, steer }) => {
+      if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
+      if (steer) msgs.push({ role: "user", content: steer });
+      const response = await fetch(`${target.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${target.apiKey}`,
+          "content-type": "application/json",
+          ...(target.headers ?? {}),
+        },
+        body: JSON.stringify({
+          model: target.model,
+          temperature,
+          messages: msgs,
+          tools: catalog,
+          tool_choice: "auto",
+        }),
+        signal: roundSignal(ctx),
       });
-    }
-  }
+      if (!response.ok) return null;
+      const data = (await response.json()) as {
+        choices?: { message?: ChatMsg; finish_reason?: string }[];
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+        };
+      };
+      const message = data.choices?.[0]?.message;
+      if (!message) return null;
+      addUsage(usage, fromOpenAiUsage(data.usage));
+      lastAssistant = message;
+      const calls = (message.tool_calls ?? []).map((call) => {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}") as Record<
+            string,
+            unknown
+          >;
+        } catch {
+          args = {};
+        }
+        return { id: call.id, name: call.function.name, args };
+      });
+      return {
+        calls,
+        text: message.content?.trim() ?? "",
+        thinking: (message.reasoning_content || message.reasoning || "").trim(),
+      };
+    },
+    onRetry: (late) => {
+      if (lastAssistant) msgs.push(lastAssistant);
+      msgs.push({ role: "user", content: late });
+    },
+    onTools: (calls, outcomes) => {
+      if (lastAssistant) msgs.push(lastAssistant);
+      for (let i = 0; i < calls.length; i++) {
+        msgs.push({
+          role: "tool",
+          tool_call_id: calls[i].id,
+          content: outcomes[i]?.text ?? "",
+        });
+      }
+    },
+  });
+  if (!looped) return null;
+  return {
+    text: looped.text,
+    traces: looped.traces,
+    thinking: looped.thinking,
+    usage: withDuration(usage, started),
+  };
 }
 
 async function completeAnthropicTools(
@@ -602,75 +592,81 @@ async function completeAnthropicTools(
   const traces: ToolTrace[] = [];
   const usage = blankUsage();
   const started = Date.now();
-  const pack = (text: string): DispatchResult => ({
-    text,
+  let lastParts: Part[] = [];
+  const looped = await runAgentLoop({
+    toolCtx: ctx,
     traces,
-    thinking: "",
-    usage: withDuration(usage, started),
-  });
-  for (let round = 0; ; round++) {
-    throwIfAborted(ctx);
-    const phase = nextToolRound(round);
-    if (phase === "stop") {
-      return traces.length ? pack(TOOL_LOOP_EXHAUSTED) : null;
-    }
-    if (phase === "wrap") {
-      msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
-    }
-    const pending = takeSteers(ctx);
-    if (pending) msgs.push({ role: "user", content: pending });
-    const response = await fetch(
-      `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: target.model,
-          max_tokens: 2048,
-          system,
-          messages: msgs,
-          tools,
-        }),
-        signal: roundSignal(ctx),
-      },
-    );
-    if (!response.ok) return null;
-    const data = (await response.json()) as {
-      stop_reason?: string;
-      content?: Part[];
-      usage?: { input_tokens?: number; output_tokens?: number };
-    };
-    const parts = data.content ?? [];
-    addUsage(usage, fromAnthropicUsage(data.usage));
-    const uses = parts.filter(
-      (part): part is Extract<Part, { type: "tool_use" }> => part.type === "tool_use",
-    );
-    if (data.stop_reason !== "tool_use" || uses.length === 0) {
-      const late = takeSteers(ctx);
-      if (late) {
-        if (parts.length) msgs.push({ role: "assistant", content: parts });
-        msgs.push({ role: "user", content: late });
-        continue;
-      }
-      const text = parts.find((part) => part.type === "text");
-      const body = text && text.type === "text" ? text.text.trim() : "";
-      if (body) return pack(body);
-      return traces.length ? pack("（工具跑完了，但模型沒寫最終回覆）") : null;
-    }
-    msgs.push({ role: "assistant", content: parts });
-    const results: Part[] = [];
-    for (const call of uses) {
-      const args = call.input ?? {};
-      const outcome = await executeToolTraced(call.name, args, ctx, traces);
-      results.push({
-        type: "tool_result",
-        tool_use_id: call.id,
-        content: outcome.text,
-        is_error: outcome.isError,
+    nullIfNoTraces: true,
+    ask: async ({ wrap, steer }) => {
+      if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
+      if (steer) msgs.push({ role: "user", content: steer });
+      const response = await fetch(
+        `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: target.model,
+            max_tokens: 2048,
+            system,
+            messages: msgs,
+            tools,
+          }),
+          signal: roundSignal(ctx),
+        },
+      );
+      if (!response.ok) return null;
+      const data = (await response.json()) as {
+        stop_reason?: string;
+        content?: Part[];
+        usage?: { input_tokens?: number; output_tokens?: number };
+      };
+      const parts = data.content ?? [];
+      lastParts = parts;
+      addUsage(usage, fromAnthropicUsage(data.usage));
+      const uses =
+        data.stop_reason === "tool_use"
+          ? parts.filter(
+              (part): part is Extract<Part, { type: "tool_use" }> =>
+                part.type === "tool_use",
+            )
+          : [];
+      const textPart = parts.find((part) => part.type === "text");
+      const body =
+        textPart && textPart.type === "text" ? textPart.text.trim() : "";
+      return {
+        calls: uses.map((call) => ({
+          id: call.id,
+          name: call.name,
+          args: call.input ?? {},
+        })),
+        text: body,
+      };
+    },
+    onRetry: (late) => {
+      if (lastParts.length) msgs.push({ role: "assistant", content: lastParts });
+      msgs.push({ role: "user", content: late });
+    },
+    onTools: (calls, outcomes) => {
+      if (lastParts.length) msgs.push({ role: "assistant", content: lastParts });
+      msgs.push({
+        role: "user",
+        content: calls.map((call, i) => ({
+          type: "tool_result" as const,
+          tool_use_id: call.id,
+          content: outcomes[i]?.text ?? "",
+          is_error: outcomes[i]?.isError,
+        })),
       });
-    }
-    msgs.push({ role: "user", content: results });
-  }
+    },
+  });
+  if (!looped) return null;
+  return {
+    text: looped.text,
+    traces: looped.traces,
+    thinking: looped.thinking,
+    usage: withDuration(usage, started),
+  };
 }
 
 function anthropicHeaders(target: LlmTarget): Record<string, string> {

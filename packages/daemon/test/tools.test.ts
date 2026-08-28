@@ -292,10 +292,12 @@ test("tool loop follows Codex: no 8-round budget, fuse is last-resort", () => {
   assert.match(TOOL_LOOP_EXHAUSTED, /再送一次/);
   const oauth = readFileSync(new URL("../src/oauth.ts", import.meta.url), "utf8");
   const llm = readFileSync(new URL("../src/llm.ts", import.meta.url), "utf8");
+  const loop = readFileSync(new URL("../src/harness.ts", import.meta.url), "utf8");
   assert.doesNotMatch(oauth, /too many tool rounds/);
   assert.doesNotMatch(oauth, /round < 8/);
   assert.doesNotMatch(llm, /round < 8/);
   assert.doesNotMatch(llm, /工具回合用完了/);
-  assert.match(oauth, /nextToolRound/);
-  assert.match(llm, /nextToolRound/);
+  assert.match(oauth, /runAgentLoop/);
+  assert.match(llm, /runAgentLoop/);
+  assert.match(loop, /nextToolRound/);
 });

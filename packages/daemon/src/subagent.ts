@@ -140,6 +140,9 @@ export async function spawnSubagent(input: {
       env: input.ctx.env,
       spawnDepth: 1,
       allowWrite: !agent.readOnly,
+      sandbox: input.ctx.sandbox,
+      workspace: input.ctx.workspace,
+      dispatch: input.ctx.dispatch,
     },
   });
   if (!result) {

@@ -19,7 +19,7 @@ export type ListeningInfo = {
 };
 
 export class ServerService extends Service {
-  static inject = ["store"];
+  static inject = ["store", "chat"];
   readonly node: http.Server;
   host = "";
   port = 0;
@@ -48,6 +48,7 @@ export class ServerService extends Service {
         onTurnComplete: (turn) => {
           ctx.emit("guild/turn-complete", turn);
         },
+        turn: (input) => ctx.chat.reply(input),
       });
     });
     ctx.effect(() => {

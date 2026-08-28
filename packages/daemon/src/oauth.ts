@@ -21,19 +21,15 @@ import {
   type OAuthCredential,
 } from "@earendil-works/pi-ai";
 import {
-  emitProgress,
-  executeToolTraced,
   guildTools,
   LLM_ROUND_TIMEOUT_MS,
-  nextToolRound,
-  takeSteers,
-  throwIfAborted,
   TOOL_LOOP_EXHAUSTED,
   TOOL_LOOP_WRAP,
   type SkillRef,
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
+import { runAgentLoop } from "./harness.ts";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { defaultDataDir, StoreError } from "./store.ts";
 import {
@@ -827,94 +823,96 @@ export async function completeOAuth(input: {
     allowWrite: true,
   };
   const tools = guildTools(input.skills ?? [], toolCtx);
-  for (let round = 0; ; round++) {
-    throwIfAborted(toolCtx);
-    const phase = nextToolRound(round);
-    if (phase === "stop") {
-      return finish(TOOL_LOOP_EXHAUSTED);
-    }
-    if (phase === "wrap") {
-      transcript.push({
-        role: "user",
-        content: TOOL_LOOP_WRAP,
-        timestamp: Date.now(),
-      });
-    }
-    const pending = takeSteers(toolCtx);
-    if (pending) {
-      transcript.push({
-        role: "user",
-        content: pending,
-        timestamp: Date.now(),
-      });
-    }
-    const result = await models.completeSimple(
-      model,
-      {
-        systemPrompt: input.system,
-        messages: transcript,
-        ...(useTools ? { tools } : {}),
-      },
-      options,
-    );
-    if (result.stopReason === "error" || result.stopReason === "aborted") {
-      throw new Error(
-        formatOAuthError(sub.id, result.errorMessage) ||
-          `${sub.id} request failed`,
-      );
-    }
-    addUsage(usage, fromPiUsage(result.usage));
-    const think = result.content
-      .filter(
-        (part): part is Extract<typeof part, { type: "thinking" }> =>
-          part.type === "thinking",
-      )
-      .map((part) => part.thinking)
-      .join("\n")
-      .trim();
-    if (think) thinkingChunks.push(think);
-    const thinking = thinkingChunks.join("\n\n");
-    if (think) emitProgress(toolCtx, traces, thinking);
-    const calls = result.content.filter(
-      (part): part is Extract<typeof part, { type: "toolCall" }> =>
-        part.type === "toolCall",
-    );
-    if (result.stopReason !== "toolUse" || calls.length === 0) {
-      const late = takeSteers(toolCtx);
-      if (late) {
-        transcript.push(result);
+  let lastResult: AssistantMessage | null = null;
+  const looped = await runAgentLoop({
+    toolCtx,
+    traces,
+    thinkingChunks,
+    ask: async ({ wrap, steer }) => {
+      if (wrap) {
         transcript.push({
           role: "user",
-          content: late,
+          content: TOOL_LOOP_WRAP,
           timestamp: Date.now(),
         });
-        continue;
       }
-      const text = contentText(result.content).trim();
-      if (text) return finish(text);
-      if (round > 0) return finish("（工具跑完了，但模型沒寫最終回覆）");
-      throw new Error(`${sub.id} returned an empty reply`);
-    }
-    transcript.push(result);
-    for (const call of calls) {
-      const args = (call.arguments ?? {}) as Record<string, unknown>;
-      const outcome = await executeToolTraced(
-        call.name,
-        args,
-        toolCtx,
-        traces,
-        thinking,
+      if (steer) {
+        transcript.push({
+          role: "user",
+          content: steer,
+          timestamp: Date.now(),
+        });
+      }
+      const result = await models.completeSimple(
+        model,
+        {
+          systemPrompt: input.system,
+          messages: transcript,
+          ...(useTools ? { tools } : {}),
+        },
+        options,
       );
+      if (result.stopReason === "error" || result.stopReason === "aborted") {
+        throw new Error(
+          formatOAuthError(sub.id, result.errorMessage) ||
+            `${sub.id} request failed`,
+        );
+      }
+      addUsage(usage, fromPiUsage(result.usage));
+      lastResult = result;
+      const think = result.content
+        .filter(
+          (part): part is Extract<typeof part, { type: "thinking" }> =>
+            part.type === "thinking",
+        )
+        .map((part) => part.thinking)
+        .join("\n")
+        .trim();
+      const calls =
+        result.stopReason === "toolUse"
+          ? result.content.filter(
+              (part): part is Extract<typeof part, { type: "toolCall" }> =>
+                part.type === "toolCall",
+            )
+          : [];
+      const text = contentText(result.content).trim();
+      if (!calls.length && !text && traces.length === 0) {
+        throw new Error(`${sub.id} returned an empty reply`);
+      }
+      return {
+        calls: calls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          args: (call.arguments ?? {}) as Record<string, unknown>,
+        })),
+        text,
+        thinking: think,
+      };
+    },
+    onRetry: (late) => {
+      if (lastResult) transcript.push(lastResult);
       transcript.push({
-        role: "toolResult",
-        toolCallId: call.id,
-        toolName: call.name,
-        content: [{ type: "text", text: outcome.text }],
-        isError: outcome.isError,
+        role: "user",
+        content: late,
         timestamp: Date.now(),
       });
-    }
-  }
+    },
+    onTools: (calls, outcomes) => {
+      if (lastResult) transcript.push(lastResult);
+      for (let i = 0; i < calls.length; i++) {
+        transcript.push({
+          role: "toolResult",
+          toolCallId: calls[i].id,
+          toolName: calls[i].name,
+          content: [{ type: "text", text: outcomes[i]?.text ?? "" }],
+          isError: outcomes[i]?.isError,
+          timestamp: Date.now(),
+        });
+      }
+    },
+  });
+  if (!looped) return finish(TOOL_LOOP_EXHAUSTED);
+  return finish(looped.text);
 }
 
 function stubAssistant(

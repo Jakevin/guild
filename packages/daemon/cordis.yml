@@ -4,6 +4,8 @@
   name: '@cordisjs/plugin-timer'
 - id: store
   name: './src/plugins/store.ts'
+- id: harness
+  name: './src/plugins/harness.ts'
 - id: oauth
   name: './src/plugins/oauth.ts'
 - id: llm

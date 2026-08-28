@@ -8,14 +8,14 @@ import {
 } from "../generate.ts";
 
 export class ChatService extends Service {
-  static inject = ["store", "llm", "tools"];
+  static inject = ["store", "llm", "harness"];
 
   constructor(ctx: Context) {
     super(ctx, "chat");
   }
 
   reply(input: Parameters<typeof chatReply>[0]): Promise<ChatReply> {
-    return chatReply(input);
+    return this.ctx.harness.turn(input);
   }
 
   generate(kind: GenerateKind, prompt: string): Promise<GeneratedMarkdown> {

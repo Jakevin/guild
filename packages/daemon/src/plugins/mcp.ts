@@ -11,10 +11,15 @@ import {
 } from "../mcp.ts";
 
 export class McpService extends Service {
-  static inject = ["store"];
+  static inject = ["store", "tools"];
 
   constructor(ctx: Context) {
     super(ctx, "mcp");
+    ctx.tools.registerPrefix("mcp__", (name, args, toolCtx) => {
+      const dataDir = toolCtx.dataDir ?? this.dataDir;
+      if (!dataDir) return { text: "mcp needs a dataDir", isError: true };
+      return callMcpTool(dataDir, name, args, toolCtx.mcpTools ?? []);
+    });
   }
 
   get dataDir(): string {

@@ -48,6 +48,7 @@ export type HandlerExtras = {
   harvest?: boolean;
   mcpTools?: McpToolRef[];
   onTurnComplete?: (turn: TurnComplete) => void;
+  turn?: (input: Parameters<typeof chatReply>[0]) => Promise<ChatReply>;
 };
 
 export function healthPayload(): HealthResponse {
@@ -687,7 +688,7 @@ async function generateReplies(
     store.setLiveTurn(roomId, { botId, thinking: "", steps: [], startedAt });
     let generated;
     try {
-      generated = await chatReply({
+      generated = await (extras.turn ?? chatReply)({
         ...chatTurnForBot(store, roomId, botId, history, asked),
         env,
         signal,
@@ -958,7 +959,7 @@ export async function retryMessage(
   });
   let generated;
   try {
-    generated = await chatReply({
+    generated = await (extras.turn ?? chatReply)({
       ...chatTurnForBot(
         store,
         roomId,

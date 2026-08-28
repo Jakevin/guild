@@ -1,4 +1,5 @@
 import type { StoreService } from "./plugins/store.ts";
+import type { HarnessService } from "./plugins/harness.ts";
 import type { OAuthService } from "./plugins/oauth.ts";
 import type { LlmService } from "./plugins/llm.ts";
 import type { ToolsService } from "./plugins/tools.ts";
@@ -11,6 +12,7 @@ declare module "cordis" {
   interface Context {
     guildEnv: NodeJS.ProcessEnv;
     store: StoreService;
+    harness: HarnessService;
     oauth: OAuthService;
     llm: LlmService;
     tools: ToolsService;

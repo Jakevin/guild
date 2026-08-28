@@ -6,6 +6,12 @@ import { promisify } from "node:util";
 import { Type, type Tool } from "@earendil-works/pi-ai";
 import { listHostSkills } from "./host-skills.ts";
 import type { McpToolRef } from "./mcp.ts";
+import {
+  gateTool,
+  parseSandbox,
+  resolveToolPath,
+  type Sandbox,
+} from "./harness.ts";
 
 const execFileAsync = promisify(execFile);
 const HOME = homedir();
@@ -44,6 +50,8 @@ export type ToolProgress = {
   traces: ToolTrace[];
 };
 
+export type ToolOutcome = { text: string; isError: boolean };
+
 export type ToolContext = {
   skills?: SkillRef[];
   subagents?: SubAgentRef[];
@@ -57,6 +65,16 @@ export type ToolContext = {
   pullSteers?: () => string[];
   signal?: AbortSignal;
   mcpTools?: McpToolRef[];
+  /** Codex-shaped. Default full_access. */
+  sandbox?: Sandbox;
+  /** Root for workspace_write. Relative tool paths resolve here. */
+  workspace?: string;
+  /** DSH-style: live daemon routes through ctx.tools.execute. */
+  dispatch?: (
+    name: string,
+    args: Record<string, unknown>,
+    ctx: ToolContext,
+  ) => Promise<ToolOutcome>;
 };
 
 const BASE_TOOLS: Tool[] = [
@@ -125,9 +143,17 @@ export function guildTools(
   const names = skills.map((item) => item.name).filter(Boolean);
   const available = names.length ? ` Available: ${names.join(", ")}.` : "";
   const allowWrite = ctx.allowWrite !== false;
-  const tools: Tool[] = allowWrite
+  const sandbox = parseSandbox(ctx.sandbox);
+  let tools: Tool[] = allowWrite
     ? [...BASE_TOOLS]
     : BASE_TOOLS.filter((tool) => tool.name !== "write");
+  if (sandbox === "read_only") {
+    tools = tools.filter(
+      (tool) => tool.name === "read" || tool.name === "list",
+    );
+  } else if (sandbox === "workspace_write") {
+    tools = tools.filter((tool) => tool.name !== "image_gen");
+  }
   tools.push({
     name: "skill",
     description: `Load a staffed skill's full instructions by name.${available}`,
@@ -135,7 +161,7 @@ export function guildTools(
       name: Type.String({ description: "Skill name or slug" }),
     }),
   });
-  if ((ctx.spawnDepth ?? 0) < 1) {
+  if ((ctx.spawnDepth ?? 0) < 1 && sandbox !== "read_only") {
     const agents = ctx.subagents ?? [];
     const listed = agents
       .slice(0, 40)
@@ -165,7 +191,7 @@ export function guildTools(
       }),
     });
   }
-  for (const mcp of ctx.mcpTools ?? []) {
+  for (const mcp of sandbox === "full_access" ? ctx.mcpTools ?? [] : []) {
     tools.push({
       name: mcp.callName,
       description: mcp.description,
@@ -262,7 +288,15 @@ export function openaiTools(skills: SkillRef[] = [], ctx: ToolContext = {}) {
 
 export const OPENAI_TOOLS = openaiTools();
 
-export type ToolOutcome = { text: string; isError: boolean };
+export const BUILTIN_TOOL_NAMES = [
+  "run",
+  "read",
+  "write",
+  "list",
+  "skill",
+  "spawn",
+  "image_gen",
+] as const;
 
 export async function executeTool(
   name: string,
@@ -270,20 +304,50 @@ export async function executeTool(
   ctx: ToolContext = {},
 ): Promise<ToolOutcome> {
   try {
+    const refused = gateTool(name, args, ctx);
+    if (refused) return refused;
+    if (ctx.dispatch) {
+      const { dispatch, ...rest } = ctx;
+      return await dispatch(name, args, rest);
+    }
+    return await builtinExecute(name, args, ctx);
+  } catch (error) {
+    return {
+      text: error instanceof Error ? error.message : String(error),
+      isError: true,
+    };
+  }
+}
+
+export async function builtinExecute(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext = {},
+): Promise<ToolOutcome> {
+  try {
+    const pathBase =
+      parseSandbox(ctx.sandbox) === "workspace_write" && ctx.workspace
+        ? resolveToolPath(ctx.workspace)
+        : HOME;
     if (name === "run") {
       return await runCommand(
         asString(args.command),
         typeof args.workdir === "string" ? args.workdir : "",
+        pathBase,
       );
     }
-    if (name === "read") return readFile(asString(args.path));
+    if (name === "read") return readFile(asString(args.path), pathBase);
     if (name === "write") {
       if (ctx.allowWrite === false) {
         return { text: "this subagent is read-only; write is disabled", isError: true };
       }
-      return writeFile(asString(args.path), asString(args.content, true));
+      return writeFile(
+        asString(args.path),
+        asString(args.content, true),
+        pathBase,
+      );
     }
-    if (name === "list") return listDir(asString(args.path));
+    if (name === "list") return listDir(asString(args.path), pathBase);
     if (name === "skill") return loadSkill(asString(args.name), ctx.skills ?? []);
     if (name === "spawn") {
       const { spawnSubagent } = await import("./subagent.ts");
@@ -389,12 +453,8 @@ function asString(value: unknown, allowEmpty = false): string {
   return value;
 }
 
-function resolveUserPath(input: string): string {
-  const trimmed = input.trim();
-  if (trimmed === "~") return HOME;
-  if (trimmed.startsWith("~/")) return resolve(HOME, trimmed.slice(2));
-  if (trimmed.startsWith("/")) return resolve(trimmed);
-  return resolve(HOME, trimmed);
+function resolveUserPath(input: string, base = HOME): string {
+  return resolveToolPath(input, base);
 }
 
 function clip(text: string): string {
@@ -416,13 +476,17 @@ function formatRunOutput(input: {
   return clip([body, ...extra].join("\n"));
 }
 
-async function runCommand(command: string, workdir = ""): Promise<ToolOutcome> {
+async function runCommand(
+  command: string,
+  workdir = "",
+  defaultCwd = HOME,
+): Promise<ToolOutcome> {
   const cmd = command.trim();
   if (!cmd) return { text: "empty command", isError: true };
   if (/rm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+\/(\s|$)/.test(cmd) || /^mkfs\b/.test(cmd)) {
     return { text: "refused destructive command", isError: true };
   }
-  const cwd = workdir.trim() ? resolveUserPath(workdir) : HOME;
+  const cwd = workdir.trim() ? resolveUserPath(workdir, defaultCwd) : defaultCwd;
   const shell = process.env.SHELL || "/bin/zsh";
   try {
     const { stdout, stderr } = await execFileAsync(shell, ["-lc", cmd], {
@@ -470,8 +534,8 @@ async function runCommand(command: string, workdir = ""): Promise<ToolOutcome> {
   }
 }
 
-function readFile(path: string): ToolOutcome {
-  const target = resolveUserPath(path);
+function readFile(path: string, base = HOME): ToolOutcome {
+  const target = resolveUserPath(path, base);
   const raw = readFileSync(target);
   if (raw.includes(0)) {
     return { text: "binary file", isError: true };
@@ -479,15 +543,15 @@ function readFile(path: string): ToolOutcome {
   return { text: clip(raw.toString("utf8")), isError: false };
 }
 
-function writeFile(path: string, content: string): ToolOutcome {
-  const target = resolveUserPath(path);
+function writeFile(path: string, content: string, base = HOME): ToolOutcome {
+  const target = resolveUserPath(path, base);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, content);
   return { text: `wrote ${target} (${content.length} bytes)`, isError: false };
 }
 
-function listDir(path: string): ToolOutcome {
-  const target = resolveUserPath(path);
+function listDir(path: string, base = HOME): ToolOutcome {
+  const target = resolveUserPath(path, base);
   const entries = readdirSync(target, { withFileTypes: true }).slice(0, 200);
   const lines = entries.map((entry) => {
     const kind = entry.isDirectory() ? "dir" : entry.isSymbolicLink() ? "link" : "file";

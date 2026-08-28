@@ -82,6 +82,26 @@ test("disposing the Cordis root fiber closes the listen port", async () => {
   });
 });
 
+test("ctx.tools registers builtins and undoes a custom tool", async () => {
+  const app = await listen(tempHome());
+  try {
+    assert.equal(app.ctx.tools.has("run"), true);
+    assert.equal(app.ctx.tools.has("write"), true);
+    const undo = app.ctx.tools.register("ping", async () => ({
+      text: "pong",
+      isError: false,
+    }));
+    const ping = await app.ctx.tools.execute("ping", {});
+    assert.equal(ping.text, "pong");
+    undo();
+    const gone = await app.ctx.tools.execute("ping", {});
+    assert.match(gone.text, /unknown tool: ping/);
+    assert.equal(app.ctx.tools.has("mcp__echo__x"), true);
+  } finally {
+    await closeApp(app);
+  }
+});
+
 test("composition without store does not listen", async () => {
   const dir = mkdtempSync(join(tmpdir(), "guild-cordis-"));
   const configPath = join(dir, "empty.yml");
