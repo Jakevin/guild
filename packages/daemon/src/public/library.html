@@ -28,7 +28,7 @@
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">大廳</a>
-        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/studio" data-i18n="nav.studio">編制</a>
         <a class="on" href="/library" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
       </nav>
@@ -62,7 +62,7 @@
         <section data-lib-panel="skills">
           <p class="lede" data-i18n-html="library.lede">
             Guild 自己的技能，加上本機 Claude、Codex、Pi、Grok、Cursor 留下的 SKILL.md。
-            安裝走 <a href="/skills/add">追加技能</a>；酒吧可以直接勾本機 CLI 技能。
+            安裝走 <a href="/skills/add">追加技能</a>；編制可以直接勾本機 CLI 技能。
           </p>
           <div class="toolbar">
             <div class="search">
@@ -97,7 +97,7 @@
 
         <section data-lib-panel="mcp">
           <p class="lede" data-i18n-html="mcp.lede">
-            連接器，不是技能。Skill 是說明書；MCP 是工具伺服器。連上之後，隊員可以直接 call 這些 tools。
+            連接器，不是技能。Skill 是說明書；MCP 是工具伺服器。本機 Codex / Claude / Cursor 的 MCP 會直接進對話，不必匯入。
           </p>
           <div class="toolbar">
             <div class="search">
@@ -538,12 +538,8 @@
               escapeHtml(cmd) +
               "</pre>" +
               (server.source === "host"
-                ? '<p><button type="button" class="btn" data-import="' +
-                  escapeHtml(server.id) +
-                  '">' +
-                  t("mcp.import") +
-                  "</button></p>"
-                : '<p><button type="button" class="btn danger" data-del="' +
+                ? ""
+                : '<p class="lib-act"><button type="button" class="secondary danger" data-del="' +
                   escapeHtml(server.name) +
                   '">' +
                   t("mcp.delete") +
@@ -630,23 +626,6 @@
             render();
             return;
           }
-          const imp = event.target.closest("[data-import]");
-          if (imp) {
-            event.stopPropagation();
-            const res = await fetch("/mcp/import", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ id: imp.getAttribute("data-import") }),
-            });
-            const body = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              flash.className = "error";
-              flash.textContent = body.error || t("saveFailed");
-              return;
-            }
-            location.reload();
-            return;
-          }
           const del = event.target.closest("[data-del]");
           if (del) {
             event.stopPropagation();
@@ -675,9 +654,14 @@
           fetch("/mcp/host").then((r) => r.json()).catch(() => []),
         ])
           .then(([guild, host]) => {
-            allServers = (Array.isArray(guild) ? guild : []).concat(
-              Array.isArray(host) ? host : [],
+            const guildRows = Array.isArray(guild) ? guild : [];
+            const taken = new Set(
+              guildRows.map((row) => String(row.name || "").toLowerCase()),
             );
+            const hostRows = (Array.isArray(host) ? host : []).filter(
+              (row) => !taken.has(String(row.name || "").toLowerCase()),
+            );
+            allServers = guildRows.concat(hostRows);
             render();
           })
           .catch(fail);

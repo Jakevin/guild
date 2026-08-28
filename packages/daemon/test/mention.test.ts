@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
+import { postUserMessage } from "../src/handlers.ts";
+import { GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 import {
   summonedHandles,
@@ -64,6 +66,7 @@ test("prose @handles are references; only the leading group or the first @handle
   assert.equal(isBroadcastMention("@here 全員"), true);
   assert.equal(isBroadcastMention("@channel 全員"), true);
   assert.equal(isBroadcastMention("@quest 全員"), true);
+  assert.equal(isBroadcastMention("@all 全員"), true);
   assert.equal(isBroadcastMention("照 @marketing 的方案"), false);
   assert.deepEqual(
     mentionedHandles(
@@ -72,6 +75,42 @@ test("prose @handles are references; only the leading group or the first @handle
     ),
     ["pm", "marketing", "rd"],
   );
+});
+
+test("@all starts every channel member at once", async () => {
+  const store = new GuildStore(tempHome());
+  const general = store.listChannels().find((room) => room.id === "channel-general");
+  assert.ok(general);
+  assert.ok(general.memberIds.length >= 2);
+  const starts: number[] = [];
+  const posted = await postUserMessage(
+    store,
+    "channel-general",
+    "@all 照上面分配的任務工作",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => {
+        starts.push(Date.now());
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return {
+          body: "收到",
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  assert.equal(posted.replies.length, general.memberIds.length);
+  const authors = posted.replies.map((row) => row.author).sort();
+  assert.deepEqual(authors, [...general.memberIds].sort());
+  assert.equal(starts.length, general.memberIds.length);
+  assert.ok(Math.max(...starts) - Math.min(...starts) < 80);
 });
 
 test("@handle of a bot outside the channel adds them and they reply", async () => {
@@ -199,6 +238,8 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /mentionChoices/);
   assert.match(html, /mentionScanText/);
   assert.match(html, /assignCandidates/);
+  assert.match(html, /function lastBotAuthor/);
+  assert.match(html, /if \(ids\.length\) \{/);
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
   assert.match(html, /assigneeId/);
@@ -258,7 +299,39 @@ test("replyTo a bot message in a channel asks that bot without @", async () => {
       body: JSON.stringify({ body: "沒有指定誰" }),
     });
     assert.equal(silent.status, 201);
-    assert.equal((silent.body.replies as unknown[]).length, 0);
+    const silentReplies = silent.body.replies as { author: string }[];
+    assert.equal(silentReplies.length, 1);
+    assert.equal(silentReplies[0].author, pm.id);
+
+    const thenRd = await json(origin, `/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "@rd 換你" }),
+    });
+    assert.equal(thenRd.status, 201);
+    const rdReplies = thenRd.body.replies as { author: string }[];
+    assert.equal(rdReplies.length, 1);
+    assert.equal(rdReplies[0].author, rd.id);
+
+    const afterRd = await json(origin, `/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "接著說" }),
+    });
+    assert.equal(afterRd.status, 201);
+    const afterRdReplies = afterRd.body.replies as { author: string }[];
+    assert.equal(afterRdReplies.length, 1);
+    assert.equal(afterRdReplies[0].author, rd.id);
+
+    const namedPm = await json(origin, `/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "@pm 你還在執行什麼？" }),
+    });
+    assert.equal(namedPm.status, 201);
+    const namedReplies = namedPm.body.replies as { author: string }[];
+    assert.equal(namedReplies.length, 1);
+    assert.equal(namedReplies[0].author, pm.id);
 
     const replied = await json(origin, `/channels/${channelId}/messages`, {
       method: "POST",

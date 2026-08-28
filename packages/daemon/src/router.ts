@@ -8,6 +8,7 @@ import {
   createChannel,
   deleteBot,
   deleteChannel,
+  renameChannel,
   createLibraryItem,
   getChannelMd,
   setChannelMd,
@@ -322,6 +323,19 @@ export async function handleRequest(
     const channelOne = path.match(/^\/channels\/([^/]+)$/);
     if (channelOne && method === "DELETE") {
       json(res, 200, deleteChannel(store, decodeURIComponent(channelOne[1])));
+      return;
+    }
+    if (channelOne && method === "PATCH") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        renameChannel(
+          store,
+          decodeURIComponent(channelOne[1]),
+          str(body, "name"),
+        ),
+      );
       return;
     }
 

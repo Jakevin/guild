@@ -193,4 +193,78 @@ test("chat page has a Channel.md editor for channels", () => {
   assert.match(html, /openChannelMd/);
   assert.match(html, /Channel\.md/);
   assert.match(html, /\/channel\.md/);
+  assert.match(html, /id="channel-md-name"/);
+});
+
+test("PATCH /channels/:id renames a channel and leaves the id", async () => {
+  const { server, origin } = await listen(tempHome());
+  try {
+    const created = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "ops" }),
+    });
+    assert.equal(created.status, 201);
+    const channelId = created.body.id as string;
+    assert.equal(created.body.name, "ops");
+
+    const renamed = await json(origin, `/channels/${channelId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Honda 雨刷" }),
+    });
+    assert.equal(renamed.status, 200);
+    assert.equal(renamed.body.id, channelId);
+    assert.equal(renamed.body.name, "Honda 雨刷");
+
+    const space = await json(origin, "/workspace");
+    const channels = space.body.channels as { id: string; name: string }[];
+    const found = channels.find((ch) => ch.id === channelId);
+    assert.ok(found);
+    assert.equal(found.name, "Honda 雨刷");
+
+    const same = await json(origin, `/channels/${channelId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "  Honda 雨刷  " }),
+    });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.name, "Honda 雨刷");
+
+    const empty = await json(origin, `/channels/${channelId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "   " }),
+    });
+    assert.equal(empty.status, 400);
+
+    const keep = await json(origin, "/channels/channel-general", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "lobby" }),
+    });
+    assert.equal(keep.status, 400);
+
+    const steal = await json(origin, `/channels/${channelId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "general" }),
+    });
+    assert.equal(steal.status, 400);
+
+    const other = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "notes" }),
+    });
+    assert.equal(other.status, 201);
+    const clash = await json(origin, `/channels/${other.body.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Honda 雨刷" }),
+    });
+    assert.equal(clash.status, 409);
+  } finally {
+    await closeServer(server);
+  }
 });

@@ -29,7 +29,7 @@
       <div class="section-h" data-i18n="dms">密談</div>
       <ul class="navlist" id="dms"></ul>
       <div class="side-foot">
-        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/studio" data-i18n="nav.studio">編制</a>
         <a href="/library" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
       </div>
@@ -45,14 +45,14 @@
         <div class="head-actions">
           <button type="button" class="traj-btn" id="traj-btn" title="Trajectory" data-i18n="trace" data-i18n-title="trace">Trajectory</button>
         <div class="members-wrap" id="members-wrap" hidden>
-          <button type="button" class="members-btn" id="members-btn" title="小隊" data-i18n-title="members">
+          <button type="button" class="members-btn" id="members-btn" title="編制" data-i18n-title="members">
             <span class="members-stack" id="members-stack"></span>
             <span class="members-count" id="members-count"></span>
           </button>
           <div class="members-pop" id="members-pop" hidden>
-            <div class="members-sec" data-i18n="members.in">在這張委託裡</div>
+            <div class="members-sec" data-i18n="members.in">在這個據點</div>
             <div id="members-in"></div>
-            <div class="members-sec" data-i18n="members.out">不在這張委託</div>
+            <div class="members-sec" data-i18n="members.out">不在這個據點</div>
             <div id="members-out"></div>
           </div>
         </div>
@@ -151,7 +151,7 @@
                       <div id="model-speed-list"></div>
                     </div>
                     <div class="model-pane" id="model-sheet-advanced" hidden>
-                      <a class="model-choice" href="/settings" data-i18n="model.settings">模型設定</a>
+                      <a class="model-choice" href="/settings" data-i18n="model.settings">狀態欄</a>
                     </div>
                   </div>
                   <select id="model-reasoning" hidden>
@@ -188,6 +188,7 @@
         </div>
       </div>
     </section>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="html-zoom" id="html-zoom" hidden>
       <div class="html-zoom-bar">
         <strong data-i18n="html.zoom">HTML 預覽</strong>
@@ -202,13 +203,15 @@
       <p class="bot-card-bio" id="bot-card-bio"></p>
       <div class="bot-card-actions">
         <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">密談</a>
-        <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">設定</a>
+        <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">狀態欄</a>
         <button type="button" class="bot-card-btn" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
       </div>
     </div>
     <dialog id="channel-md">
+      <label for="channel-md-name" data-i18n="newChannelName">委託名稱</label>
+      <input id="channel-md-name" placeholder="委託名稱" data-i18n-placeholder="newChannelName" autocomplete="off" />
       <h2 data-i18n="channel.md">委託書</h2>
-      <p data-i18n="channel.mdHelp">這張委託的任務說明。用 @handle 叫隊員時會讀到。密談沒有委託書。</p>
+      <p data-i18n="channel.mdHelp">這張委託的任務說明。用 @handle 叫冒險者時會讀到。密談沒有委託書。</p>
       <textarea id="channel-md-body" rows="8" placeholder="# Channel.md"></textarea>
       <h2 data-i18n="memory.channel">委託 MEMORY.md</h2>
       <p data-i18n="memory.channelHelp">這張委託共享的站立筆記。有用的回合後會自動更新。人寫的委託書優先。</p>
@@ -221,7 +224,7 @@
     </dialog>
     <dialog id="bot-memory">
       <h2 data-i18n="memory.bot">MEMORY.md</h2>
-      <p data-i18n="memory.botHelp">這名隊員學會的站立筆記。有用的回合後會自動更新。</p>
+      <p data-i18n="memory.botHelp">這名冒險者學會的站立筆記。有用的回合後會自動更新。</p>
       <textarea id="bot-memory-body" rows="12" placeholder="# MEMORY.md"></textarea>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="bot-memory-cancel" data-i18n="cancel">取消</button>
@@ -237,7 +240,7 @@
       </div>
     </dialog>
     <dialog id="invite">
-      <h2 data-i18n="invite.title">拉隊員進委託</h2>
+      <h2 data-i18n="invite.title">拉冒險者進據點</h2>
       <p data-i18n="invite.body">勾選要接這張委託的人。委託裡用 @handle 叫他們。</p>
       <div class="pick" id="pick"></div>
       <div class="dialog-actions">
@@ -259,6 +262,7 @@
         abort: null,
         busySince: 0,
         live: { botId: "", thinking: "", steps: [] },
+        lives: [],
         liveTimer: null,
         liveGen: 0,
         mention: null,
@@ -884,6 +888,15 @@
         hint.hidden = false;
         hint.textContent = t("steer.hint", { mod: steerModLabel() });
       }
+      let toastTimer = 0;
+      function showToast(text) {
+        const el = document.getElementById("toast");
+        if (!el || !text) return;
+        el.textContent = text;
+        el.classList.add("on");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("on"), 1600);
+      }
       let steerAckTimer = 0;
       function flashSteerAck() {
         const hint = document.getElementById("composer-steer");
@@ -929,6 +942,14 @@
         }
         return out;
       }
+      function lastBotAuthor() {
+        const msgs = state.messages || [];
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const author = msgs[i].author;
+          if (author && author !== "you" && botById(author)) return author;
+        }
+        return "";
+      }
       function botsFromSend(text) {
         if (state.kind === "dm") return [state.id];
         const scan = mentionScanText(text);
@@ -945,18 +966,23 @@
         ) {
           return [state.replyTo.author];
         }
-        return [];
+        const last = lastBotAuthor();
+        return last ? [last] : [];
       }
       function assignCandidates(text) {
         if (state.kind === "dm") return [];
         const scan = mentionScanText(text);
         if (/(^|\s)@(channel|quest|here|all)\b/i.test(scan)) return [];
         const ids = mentionedBotIds(text).slice();
+        if (ids.length) {
+          return ids
+            .map((id) => (state.bots || []).find((bot) => bot.id === id))
+            .filter(Boolean);
+        }
         if (
           state.replyTo &&
           state.replyTo.author &&
-          state.replyTo.author !== "you" &&
-          !ids.includes(state.replyTo.author)
+          state.replyTo.author !== "you"
         ) {
           ids.push(state.replyTo.author);
         }
@@ -1069,13 +1095,28 @@
         }
         return when.getFullYear() + "/" + (when.getMonth() + 1) + "/" + when.getDate();
       }
+      function botModelRef(bot) {
+        if (bot && bot.model && bot.model.provider) return bot.model;
+        return (modelCfg && modelCfg.default) || null;
+      }
       function botModelLabel(bot) {
-        const ref =
-          bot && bot.model && bot.model.provider
-            ? bot.model
-            : modelCfg && modelCfg.default;
+        const ref = botModelRef(bot);
         if (!ref || !ref.model) return "";
         return displayName(ref);
+      }
+      function botProviderLabel(bot) {
+        const ref = botModelRef(bot);
+        if (!ref) return "";
+        const hit = allModels().find(
+          (row) => row.provider === ref.provider && row.model === ref.model,
+        );
+        return (hit && hit.group) || ref.provider || "";
+      }
+      function botModelMeta(bot) {
+        const model = botModelLabel(bot) || "—";
+        const reason = reasonLabel((modelCfg && modelCfg.reasoning) || "medium");
+        const provider = botProviderLabel(bot) || "—";
+        return model + " · " + reason + " · " + provider;
       }
       function lastPreview(item, kind) {
         const last = item && item.lastMessage;
@@ -1107,6 +1148,9 @@
         const av = opts.av
           ? '<span class="nav-av">' + opts.av + flash + "</span>"
           : flash;
+        const foot = opts.party
+          ? opts.party
+          : "<em>" + escapeHtml(opts.preview || "") + "</em>";
         return (
           '<li><a class="nav-row' +
           (opts.on ? " on" : "") +
@@ -1121,9 +1165,29 @@
           "</strong>" +
           chip +
           right +
-          "</span><em>" +
-          escapeHtml(opts.preview) +
-          "</em></span></a></li>"
+          "</span>" +
+          foot +
+          "</span></a></li>"
+        );
+      }
+      function partyStackHtml(members) {
+        const bots = Array.isArray(members) ? members : [];
+        const stack = bots
+          .map(
+            (bot) =>
+              '<span class="avatar" style="background:' +
+              hue(bot.handle) +
+              '">' +
+              escapeHtml(initials(bot.name)) +
+              "</span>",
+          )
+          .join("");
+        return (
+          '<span class="notice-party"><span class="members-stack">' +
+          stack +
+          '</span><span class="members-count">' +
+          String(bots.length) +
+          "</span></span>"
         );
       }
       function touchNavTime(kind, id, iso, lastMessage) {
@@ -1165,7 +1229,7 @@
       function renderNav() {
         const q = document.getElementById("filter").value.toLowerCase();
         const channels = state.channels
-          .filter((ch) => !q || ch.name.includes(q))
+          .filter((ch) => !q || ch.name.toLowerCase().includes(q))
           .slice()
           .sort(byUpdatedAtDesc);
         document.getElementById("channels").innerHTML = channels
@@ -1185,7 +1249,7 @@
               notice: true,
               name: ch.name,
               updatedAt: ch.updatedAt,
-              preview: lastPreview(ch, "channel"),
+              party: partyStackHtml(ch.members),
               busy: busy,
               unread: unread,
             });
@@ -1215,9 +1279,8 @@
                 escapeHtml(initials(bot.name)) +
                 "</span>",
               name: bot.name,
-              chip: botModelLabel(bot),
               updatedAt: bot.updatedAt,
-              preview: lastPreview(bot, "dm"),
+              preview: botModelMeta(bot),
               busy: busy,
               unread: unread,
             });
@@ -1359,9 +1422,43 @@
           "</ul>"
         );
       }
+      function liveTurns() {
+        if (Array.isArray(state.lives) && state.lives.length) return state.lives;
+        if (state.live && state.live.botId) return [state.live];
+        return Object.keys(state.busyBots || {}).map((id) => ({
+          botId: id,
+          thinking: "",
+          steps: [],
+          startedAt: "",
+        }));
+      }
+      function liveTurnsFrom(body) {
+        const rows =
+          Array.isArray(body && body.bots) && body.bots.length
+            ? body.bots
+            : body && body.botId
+              ? [body]
+              : [];
+        return rows
+          .filter((row) => row && row.botId)
+          .map((row) => ({
+            botId: row.botId,
+            thinking: row.thinking || "",
+            steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
+            startedAt: row.startedAt || "",
+          }));
+      }
+      function applyLiveTurns(lives) {
+        state.lives = lives || [];
+        state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
+        state.lives.forEach((row) => {
+          if (row.botId) state.busyBots[row.botId] = true;
+        });
+      }
       function liveBot() {
         const id =
           (state.live && state.live.botId) ||
+          (state.lives && state.lives[0] && state.lives[0].botId) ||
           Object.keys(state.busyBots || {})[0] ||
           (state.kind === "dm" ? state.id : "");
         return id ? botById(id) : null;
@@ -1392,8 +1489,11 @@
             "</div>",
         };
       }
-      function turnStatusInnerHtml() {
-        const elapsed = Date.now() - (state.busySince || Date.now());
+      function turnStatusInnerHtml(live) {
+        const started = live && live.startedAt ? Date.parse(live.startedAt) : NaN;
+        const elapsed = Number.isFinite(started)
+          ? Date.now() - started
+          : Date.now() - (state.busySince || Date.now());
         const clock =
           elapsed >= 15000
             ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
@@ -1404,26 +1504,32 @@
           t("deepDiving") +
           clock +
           "</div>" +
-          liveStepsHtml(state.live && state.live.steps) +
+          liveStepsHtml(live && live.steps) +
           "</div>"
         );
       }
       function turnStatusHtml() {
         if (!currentRoomBusy()) return "";
-        const bot = liveBot();
-        const inner = turnStatusInnerHtml();
-        if (!bot) return inner;
-        const actor = liveActorHtml(bot);
-        return (
-          '<article class="msg bot live" data-bot-id="' +
-          escapeHtml(bot.id) +
-          '" role="status">' +
-          actor.av +
-          '<div class="msg-main">' +
-          actor.head +
-          inner +
-          "</div></article>"
-        );
+        const lives = liveTurns();
+        if (!lives.length) return turnStatusInnerHtml(state.live);
+        return lives
+          .map((live) => {
+            const bot = botById(live.botId);
+            const inner = turnStatusInnerHtml(live);
+            if (!bot) return inner;
+            const actor = liveActorHtml(bot);
+            return (
+              '<article class="msg bot live" data-bot-id="' +
+              escapeHtml(bot.id) +
+              '" role="status">' +
+              actor.av +
+              '<div class="msg-main">' +
+              actor.head +
+              inner +
+              "</div></article>"
+            );
+          })
+          .join("");
       }
       function liveUrl(room) {
         const r = room || state.busyRoom;
@@ -1432,36 +1538,44 @@
           ? "/dms/" + encodeURIComponent(r.id) + "/live"
           : "/channels/" + encodeURIComponent(r.id) + "/live";
       }
-      function paintLiveActor() {
-        const bot = liveBot();
-        const article = document.querySelector("article.msg.live");
-        if (!bot) return false;
-        if (!article) {
-          renderThread();
-          return true;
-        }
-        if (article.getAttribute("data-bot-id") === bot.id) return false;
-        const actor = liveActorHtml(bot);
-        article.setAttribute("data-bot-id", bot.id);
-        const av = article.querySelector(".avatar");
-        if (av) av.outerHTML = actor.av;
-        const head = article.querySelector(".msg-head");
-        if (head) head.outerHTML = actor.head;
-        return false;
-      }
       function paintLiveSteps() {
         if (!currentRoomBusy()) return;
-        if (paintLiveActor()) return;
-        const block = document.querySelector(".turn-live");
-        if (!block) return;
-        const html = liveStepsHtml(state.live && state.live.steps);
-        const existing = block.querySelector(".live-steps");
-        if (!html) {
-          if (existing) existing.remove();
+        const lives = liveTurns();
+        const articles = [...document.querySelectorAll("article.msg.live")];
+        const ids = lives.map((row) => row.botId).join(",");
+        const shown = articles.map((el) => el.getAttribute("data-bot-id")).join(",");
+        if (ids !== shown) {
+          renderThread();
           return;
         }
-        if (existing) existing.outerHTML = html;
-        else block.insertAdjacentHTML("beforeend", html);
+        lives.forEach((live) => {
+          const article = document.querySelector(
+            'article.msg.live[data-bot-id="' + CSS.escape(live.botId) + '"]',
+          );
+          if (!article) return;
+          const block = article.querySelector(".turn-live");
+          if (!block) return;
+          const status = block.querySelector(".turn-status");
+          if (status) {
+            const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
+            const elapsed = Number.isFinite(started)
+              ? Date.now() - started
+              : Date.now() - (state.busySince || Date.now());
+            const clock =
+              elapsed >= 15000
+                ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
+                : "";
+            status.innerHTML = t("deepDiving") + clock;
+          }
+          const html = liveStepsHtml(live.steps);
+          const existing = block.querySelector(".live-steps");
+          if (!html) {
+            if (existing) existing.remove();
+            return;
+          }
+          if (existing) existing.outerHTML = html;
+          else block.insertAdjacentHTML("beforeend", html);
+        });
         const thread = document.getElementById("thread");
         if (!thread) return;
         const nearBottom =
@@ -1475,26 +1589,23 @@
           const res = await fetch(url);
           const body = await res.json().catch(() => ({}));
           if (!res.ok || state.liveGen !== gen) return;
-          if (!body.botId) {
+          const lives = liveTurnsFrom(body);
+          if (!lives.length) {
             if (state.posting) return;
+            mergeLiveTraj(body);
             if (currentRoomBusy()) {
               setBusy(false);
               await loadMessages({ resume: false }).catch(() => {});
             }
             return;
           }
-          state.live = {
-            botId: body.botId || "",
-            thinking: body.thinking || "",
-            steps: Array.isArray(body.steps) ? body.steps.slice(-5) : [],
-            startedAt: body.startedAt || "",
-          };
-          if (body.startedAt) {
-            const at = Date.parse(body.startedAt);
-            if (Number.isFinite(at)) state.busySince = at;
-          }
-          if (body.botId) state.busyBots[body.botId] = true;
+          applyLiveTurns(lives);
+          const firstStart = lives
+            .map((row) => Date.parse(row.startedAt || ""))
+            .find((at) => Number.isFinite(at));
+          if (Number.isFinite(firstStart)) state.busySince = firstStart;
           paintLiveSteps();
+          mergeLiveTraj(body);
         } catch {
           /* poll is best-effort while the POST is in flight */
         }
@@ -1812,16 +1923,12 @@
         if (!url) return;
         const res = await fetch(url);
         const body = await res.json().catch(() => ({}));
-        if (!res.ok || !body.botId) {
+        const lives = liveTurnsFrom(body);
+        if (!res.ok || !lives.length) {
           if (currentRoomBusy() && !state.posting) setBusy(false);
           return;
         }
-        state.live = {
-          botId: body.botId,
-          thinking: body.thinking || "",
-          steps: Array.isArray(body.steps) ? body.steps.slice(-5) : [],
-          startedAt: body.startedAt || "",
-        };
+        applyLiveTurns(lives);
         state.abort = {
           abort: function () {
             fetch(abortUrl({ kind: state.kind, id: state.id }), {
@@ -1829,9 +1936,9 @@
             }).catch(function () {});
           },
         };
-        setBusy(true, [body.botId], {
+        setBusy(true, lives.map((row) => row.botId), {
           keepLive: true,
-          startedAt: body.startedAt,
+          startedAt: lives[0] && lives[0].startedAt,
         });
       }
       async function retryMessage(id, body) {
@@ -1882,7 +1989,10 @@
           if (fenceCopy) {
             event.preventDefault();
             const text = fenceText(fenceCopy);
-            if (text) await navigator.clipboard.writeText(text);
+            if (text) {
+              await navigator.clipboard.writeText(text);
+              showToast(t("copied"));
+            }
             fenceCopy.classList.add("copied");
             fenceCopy.title = t("copied");
             setTimeout(() => {
@@ -1949,7 +2059,10 @@
           }
           if (copy) {
             const msg = state.messages.find((item) => item.id === copy.getAttribute("data-copy"));
-            if (msg) await navigator.clipboard.writeText(msg.body);
+            if (msg) {
+              await navigator.clipboard.writeText(msg.body);
+              showToast(t("copied"));
+            }
             return;
           }
           if (edit) {
@@ -2082,6 +2195,9 @@
         const locked = Boolean(
           ch && (ch.id === "channel-general" || ch.name === "general"),
         );
+        const nameEl = document.getElementById("channel-md-name");
+        nameEl.value = ch ? ch.name : "";
+        nameEl.disabled = locked;
         document.getElementById("channel-md-del").hidden = locked;
         channelMdDialog.showModal();
       }
@@ -2177,6 +2293,27 @@
         channelMdDialog.close();
       });
       document.getElementById("channel-md-save").addEventListener("click", async () => {
+        const ch = currentChannel();
+        const locked = Boolean(
+          ch && (ch.id === "channel-general" || ch.name === "general"),
+        );
+        const name = document.getElementById("channel-md-name").value.trim();
+        if (!locked) {
+          if (!name) {
+            alert(t("channel.nameRequired"));
+            return;
+          }
+          const renamed = await fetch("/channels/" + encodeURIComponent(state.id), {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          if (!renamed.ok) {
+            const payload = await renamed.json().catch(() => ({}));
+            alert(payload.error || t("saveFailed"));
+            return;
+          }
+        }
         const notes = document.getElementById("channel-md-body").value;
         const memory = document.getElementById("channel-memory-body").value;
         const [notesRes, memoryRes] = await Promise.all([
@@ -2202,6 +2339,7 @@
           return;
         }
         channelMdDialog.close();
+        await loadWorkspace();
       });
       document.getElementById("bot-memory-cancel").addEventListener("click", () => {
         botMemoryDialog.close();
@@ -2956,7 +3094,7 @@
         }
         if (id === "here") {
           hideAttach();
-          insertDraft("@channel ");
+          insertDraft("@all ");
           return;
         }
         if (id === "library") {
@@ -2989,6 +3127,12 @@
         const gen = state.liveGen;
         if (!opts || !opts.keepLive) {
           state.live = { botId: "", thinking: "", steps: [] };
+          state.lives = (on ? botIds || [] : []).map((id) => ({
+            botId: id,
+            thinking: "",
+            steps: [],
+            startedAt: "",
+          }));
         }
         if (on) {
           const started = opts && opts.startedAt ? Date.parse(opts.startedAt) : NaN;
@@ -2998,9 +3142,18 @@
           (botIds || []).forEach((id) => {
             state.busyBots[id] = true;
           });
+          if (!state.lives.length) {
+            state.lives = (botIds || []).map((id) => ({
+              botId: id,
+              thinking: "",
+              steps: [],
+              startedAt: "",
+            }));
+          }
         } else {
           state.busyBots = {};
           state.busyRoom = null;
+          state.lives = [];
         }
         if (state.clockTimer) {
           clearInterval(state.clockTimer);
@@ -3030,6 +3183,11 @@
             }
             clock.textContent = Math.floor(elapsed / 1000) + "s";
           }, 1000);
+        } else {
+          const trajOpen = document.getElementById("traj");
+          if (trajOpen && !trajOpen.hidden) {
+            refreshTraj({ silent: true }).catch(function () {});
+          }
         }
       }
       async function postChat(path, payload, sent, botIds) {
@@ -3333,16 +3491,9 @@
         const specials = [
           {
             kind: "all",
-            insert: "@channel",
+            insert: "@all",
             name: t("mention.channel"),
             hint: t("mention.channelHint"),
-            glyph: "#",
-          },
-          {
-            kind: "all",
-            insert: "@here",
-            name: t("mention.here"),
-            hint: t("mention.hereHint"),
             glyph: "#",
           },
         ].filter((row) => {
@@ -3851,6 +4002,9 @@
       const trajEl = document.getElementById("traj");
       let trajEvents = [];
       let trajSel = 0;
+      let trajFollow = true;
+      let trajLive = false;
+      let trajFetch = 0;
       function trajUrl() {
         return state.kind === "dm"
           ? "/dms/" + encodeURIComponent(state.id) + "/trajectory"
@@ -3934,7 +4088,9 @@
           renderTrajDetail(null);
           return;
         }
+        if (trajFollow) trajSel = rows.length - 1;
         if (!rows[trajSel]) trajSel = 0;
+        const keepTop = list.scrollTop;
         list.innerHTML = rows
           .map((event, i) => {
             const bot = event.botId ? botById(event.botId) : null;
@@ -3955,6 +4111,7 @@
               '<button type="button" class="traj-row' +
               (i === trajSel ? " on" : "") +
               (event.isError ? " err" : "") +
+              (event.live ? " live" : "") +
               '" data-i="' +
               i +
               '">' +
@@ -3972,29 +4129,71 @@
           })
           .join("");
         renderTrajDetail(rows[trajSel]);
+        if (trajFollow) {
+          const on = list.querySelector(".traj-row.on");
+          if (on) on.scrollIntoView({ block: "nearest" });
+        } else {
+          list.scrollTop = keepTop;
+        }
         list.querySelectorAll("[data-i]").forEach((btn) => {
           btn.addEventListener("click", () => {
             trajSel = Number(btn.getAttribute("data-i"));
+            trajFollow = trajSel === rows.length - 1;
             renderTrajList();
           });
         });
       }
-      async function openTraj() {
-        trajEl.hidden = false;
-        document.getElementById("traj-src").textContent = t("trace.loading");
+      function trajSourceLabel(source) {
+        if (source === "log") return t("trace.log");
+        if (source === "derived") return t("trace.derived");
+        return t("trace.live");
+      }
+      function mergeLiveTraj(body) {
+        if (trajEl.hidden) return;
+        const liveRows = Array.isArray(body && body.traj) ? body.traj : [];
+        const persisted = trajEvents.filter((event) => !event.live);
+        trajEvents = persisted.concat(liveRows);
+        trajLive = liveRows.length > 0;
+        if (trajFollow) trajSel = Math.max(0, trajEvents.length - 1);
+        else if (!trajEvents[trajSel]) trajSel = Math.max(0, trajEvents.length - 1);
+        const src = document.getElementById("traj-src");
+        const base = src.dataset.base || t("trace.log");
+        src.textContent = trajLive ? t("trace.live") + " · " + base : base;
+        src.classList.toggle("live", trajLive);
+        renderTrajList();
+      }
+      async function refreshTraj(opts) {
+        const silent = opts && opts.silent;
+        const gen = ++trajFetch;
+        const src = document.getElementById("traj-src");
+        if (!silent) src.textContent = t("trace.loading");
         try {
           const res = await fetch(trajUrl());
           const body = await res.json();
+          if (gen !== trajFetch || trajEl.hidden) return;
           trajEvents = Array.isArray(body.events) ? body.events : [];
-          trajSel = Math.max(0, trajEvents.length - 1);
-          document.getElementById("traj-src").textContent =
-            body.source === "log" ? t("trace.log") : t("trace.derived");
+          trajLive = Boolean(body.live);
+          if (trajFollow) trajSel = Math.max(0, trajEvents.length - 1);
+          else if (!trajEvents[trajSel]) trajSel = Math.max(0, trajEvents.length - 1);
+          src.dataset.base = trajSourceLabel(body.source);
+          src.textContent = trajLive
+            ? t("trace.live") + " · " + src.dataset.base
+            : src.dataset.base;
+          src.classList.toggle("live", trajLive);
           renderTrajList();
         } catch (err) {
-          document.getElementById("traj-src").textContent = "";
+          if (gen !== trajFetch || trajEl.hidden) return;
+          if (silent) return;
+          src.textContent = "";
+          src.classList.remove("live");
           document.getElementById("traj-list").innerHTML =
             '<p class="traj-empty">' + escapeHtml(err.message) + "</p>";
         }
+      }
+      async function openTraj() {
+        trajEl.hidden = false;
+        trajFollow = true;
+        await refreshTraj();
       }
       document.getElementById("traj-btn").addEventListener("click", (event) => {
         event.stopPropagation();
@@ -4005,6 +4204,7 @@
         trajEl.hidden = true;
       });
       document.getElementById("traj-q").addEventListener("input", () => {
+        trajFollow = false;
         trajSel = 0;
         renderTrajList();
       });

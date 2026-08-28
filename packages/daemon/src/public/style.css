@@ -590,6 +590,62 @@ a.btn:hover { text-decoration: none; opacity: 0.92; }
   min-width: 0;
   overflow: hidden;
 }
+.lib-card .lib-act {
+  grid-column: 1 / -1;
+  margin: 0.15rem 0 0;
+}
+.lib-card .lib-act button { margin: 0; }
+.host-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 0.2rem;
+}
+.host-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem 1rem;
+  align-items: center;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.host-row:first-child {
+  border-top: 0;
+  padding-top: 0.2rem;
+}
+.host-copy { min-width: 0; }
+.host-copy strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.host-copy .sub {
+  margin: 0.2rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+.host-act {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.host-act button {
+  margin: 0;
+  white-space: nowrap;
+  min-width: 5.6rem;
+  padding: 0.45rem 1.05rem;
+}
+@media (max-width: 640px) {
+  .host-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0.5rem;
+  }
+}
 .lib-card:hover { background: var(--card-hover); }
 .lib-card.open { border-color: var(--line); }
 .lib-card.skill-card {
@@ -875,6 +931,10 @@ dialog.pick.add-provider { width: min(32rem, 92vw); }
   padding: 0.9rem 1rem;
   margin-top: 0.75rem;
   background: var(--lift);
+}
+.provider-card [data-f="apiKey"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
 }
 .card-head {
   display: flex;

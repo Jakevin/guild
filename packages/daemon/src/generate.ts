@@ -7,7 +7,7 @@ import {
 } from "./compact.ts";
 import { MEMORY_INJECT_CAP } from "./memory.ts";
 import { llmComplete } from "./llm.ts";
-import { policyFromEnv, type Sandbox } from "./harness.ts";
+import { policyFor, type Sandbox } from "./harness.ts";
 import { listMcpToolRefs, type McpToolRef } from "./mcp.ts";
 import { StoreError } from "./store.ts";
 import {
@@ -97,7 +97,7 @@ export function localGenerate(
   return {
     name,
     source: "local",
-    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Hand off with a written summary and artifacts.\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\n- Stay inside the sandbox for this position.\n`,
+    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Hand off with a written summary and artifacts.\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\nsandbox: workspace_write\n`,
   };
 }
 
@@ -367,9 +367,11 @@ async function tryChatLlm(
       pullSteers: input.pullSteers,
       signal: input.signal,
       mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
-      ...policyFromEnv(env, dataDir),
-      ...(input.sandbox ? { sandbox: input.sandbox } : {}),
-      ...(input.workspace ? { workspace: input.workspace } : {}),
+      ...policyFor(env, {
+        sandbox: input.sandbox,
+        workspace: input.workspace,
+        position: input.position,
+      }),
       ...(input.dispatch ? { dispatch: input.dispatch } : {}),
     },
   });

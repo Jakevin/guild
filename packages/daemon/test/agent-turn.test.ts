@@ -108,6 +108,10 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /function liveBot/);
   assert.match(html, /msg bot live/);
   assert.match(html, /function pollLive/);
+  assert.match(html, /function refreshTraj/);
+  assert.match(html, /function mergeLiveTraj/);
+  assert.match(html, /trajFollow/);
+  assert.match(html, /event.live/);
   assert.match(html, /resumeCurrentLive/);
   assert.match(html, /stopTurn/);
   assert.match(html, /slice\(-5\)/);
@@ -147,4 +151,17 @@ test("live turn pins Think and keeps at most 5 rows", () => {
   assert.equal(toolsOnly.steps.length, 5);
   assert.equal(toolsOnly.steps[0].name, "read");
   assert.equal(toolsOnly.steps[0].detail, "f3.ts");
+  assert.equal(live.traces?.length, 8);
+  assert.equal(live.traces?.[7]?.running, true);
+  const many = toLiveTurn("bot-1", {
+    thinking: "",
+    traces: Array.from({ length: 110 }, (_, i) => ({
+      name: "read",
+      args: { path: `f${i}.ts` },
+      text: "",
+      isError: false,
+    })),
+  });
+  assert.ok((many.traces?.length ?? 0) < 110);
+  assert.equal(many.traces?.at(-1)?.args?.path, "f109.ts");
 });

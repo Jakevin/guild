@@ -2,26 +2,37 @@ import { Service, type Context } from "cordis";
 import { chatReply, type ChatReply } from "../generate.ts";
 import { guildEnvOf } from "../start.ts";
 import {
-  policyFromEnv,
+  policyFor,
   runAgentLoop,
   type HarnessPolicy,
   type Sandbox,
 } from "../harness.ts";
 import type { ToolContext, ToolOutcome } from "../tools.ts";
 
+export type HarnessConfig = {
+  sandbox?: Sandbox;
+  workspace?: string;
+};
+
 export class HarnessService extends Service {
   static inject = ["store", "tools"];
+  private readonly config: HarnessConfig;
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: HarnessConfig = {}) {
     super(ctx, "harness");
+    this.config = config;
   }
 
-  policy(): HarnessPolicy {
-    return policyFromEnv(guildEnvOf(this.ctx), this.ctx.store.dataDir);
+  policy(position?: string): HarnessPolicy {
+    return policyFor(guildEnvOf(this.ctx), {
+      sandbox: this.config.sandbox,
+      workspace: this.config.workspace,
+      position,
+    });
   }
 
-  sandbox(): Sandbox {
-    return this.policy().sandbox;
+  sandbox(position?: string): Sandbox {
+    return this.policy(position).sandbox;
   }
 
   workspace(): string {
@@ -41,7 +52,11 @@ export class HarnessService extends Service {
   async turn(
     input: Parameters<typeof chatReply>[0],
   ): Promise<ChatReply> {
-    const policy = this.policy();
+    const policy = policyFor(guildEnvOf(this.ctx), {
+      sandbox: input.sandbox ?? this.config.sandbox,
+      workspace: input.workspace ?? this.config.workspace,
+      position: input.position,
+    });
     const mcp = this.ctx.get("mcp");
     const mcpTools =
       input.mcpTools !== undefined
@@ -51,8 +66,8 @@ export class HarnessService extends Service {
           : [];
     return chatReply({
       ...input,
-      sandbox: input.sandbox ?? policy.sandbox,
-      workspace: input.workspace ?? policy.workspace,
+      sandbox: policy.sandbox,
+      workspace: policy.workspace,
       mcpTools,
       dispatch: (name, args, toolCtx) => this.dispatch(name, args, toolCtx),
     });

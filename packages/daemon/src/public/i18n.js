@@ -131,6 +131,7 @@ var I18N_ROWS = [
   ["trace.empty", "沒有事件。送一則訊息後會開始記錄。", "No events yet. Send a message to start the log."],
   ["trace.log", "append-only log", "append-only log"],
   ["trace.derived", "由訊息還原", "rebuilt from messages"],
+  ["trace.live", "進行中", "in progress"],
   ["trace.loading", "讀取中…", "Loading…"],
   ["html.preview", "預覽", "Preview"],
   ["html.code", "原始碼", "Code"],

@@ -37,7 +37,7 @@ export const CATALOG_SKILLS: CatalogSkill[] = [
     name: "Browser Automation",
     description: "導覽網頁、填表、截圖、擷取資料。",
     tags: ["browser", "testing"],
-    body: "Use the browser for navigation, form fill, screenshots, and extraction. Prefer accessibility snapshots over raw HTML.",
+    body: "Use the browser tool (action=open/snapshot/click/type). Prefer snapshot refs (@e1) over raw HTML. Default profile has no logins; the user enables GUILD_BROWSER_REAL_PROFILE=1 to snapshot last_used Chrome cookies into ~/.guild/browser-profile/chrome (never the live profile).",
   },
   {
     slug: "web-research",

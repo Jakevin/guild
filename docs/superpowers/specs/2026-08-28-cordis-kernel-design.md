@@ -422,7 +422,7 @@ Must remain true after the rewrite:
 - Default five bots still seeded.
 - Static routes in the current `PAGES` map still 200.
 - `@mention` / `@channel` / reply-to / steer / abort live turn unchanged.
-- Default `run` / `write` still unsandboxed (`GUILD_SANDBOX` unset = `full_access`). Optional tool gate is not a kernel sandbox. SECURITY.md still accurate.
+- Default `run` / `write` still unsandboxed (`GUILD_SANDBOX` unset = `full_access`) unless POSITION.md has `sandbox:`. Optional tool gate is not a kernel sandbox. SECURITY.md still accurate.
 - `service: "guildd"` in health and the stdout listen line.
 
 ---

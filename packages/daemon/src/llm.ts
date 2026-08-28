@@ -9,6 +9,7 @@ import type {
   ProviderEntry,
 } from "@guild/protocol";
 import { StoreError } from "./store.ts";
+import { estimateSendTokens, trimSendMessages } from "./send-budget.ts";
 import {
   completeOAuth,
   formatOAuthError,
@@ -153,7 +154,12 @@ export function mergeModelsFile(
   const providersIn: ModelsFile["providers"] = {};
   for (const [id, provider] of Object.entries(incoming.providers)) {
     const prev = existing.providers[id];
-    const apiKey = provider.apiKey || prev?.apiKey;
+    const incomingKey = String(provider.apiKey ?? "").trim();
+    const prevKey = prev?.apiKey ?? "";
+    const apiKey =
+      !incomingKey || (prevKey && incomingKey === maskApiKey(prevKey))
+        ? prevKey || incomingKey
+        : incomingKey;
     providersIn[id] = { ...provider, apiKey };
   }
   next.providers = providersIn;
@@ -173,7 +179,14 @@ function pushRecent(list: ModelRef[] | undefined, ref: ModelRef): ModelRef[] {
 export type PublicProvider = ProviderEntry & {
   id: string;
   stored: "empty" | "env" | "literal";
+  apiKeyPreview: string;
 };
+
+export function maskApiKey(value: string): string {
+  const key = String(value || "");
+  if (key.length <= 10) return key;
+  return key.slice(0, 5) + "…" + key.slice(-5);
+}
 
 export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.env) {
   const file = readModelsFile(dataDir);
@@ -185,6 +198,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
         id,
         ...provider,
         apiKey: stored === "literal" ? "" : key,
+        apiKeyPreview: key ? maskApiKey(key) : "",
         stored,
       };
     },
@@ -497,6 +511,14 @@ async function completeOpenAiTools(
     ask: async ({ wrap, steer }) => {
       if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
       if (steer) msgs.push({ role: "user", content: steer });
+      const extra =
+        estimateSendTokens(system) +
+        estimateSendTokens(JSON.stringify(catalog)) +
+        2048;
+      const fitted = trimSendMessages(msgs, extra);
+      if (fitted.length < msgs.length) {
+        msgs.splice(0, msgs.length, ...fitted);
+      }
       const response = await fetch(`${target.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -600,6 +622,14 @@ async function completeAnthropicTools(
     ask: async ({ wrap, steer }) => {
       if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
       if (steer) msgs.push({ role: "user", content: steer });
+      const extra =
+        estimateSendTokens(system) +
+        estimateSendTokens(JSON.stringify(tools)) +
+        2048;
+      const fitted = trimSendMessages(msgs, extra);
+      if (fitted.length < msgs.length) {
+        msgs.splice(0, msgs.length, ...fitted);
+      }
       const response = await fetch(
         `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
         {

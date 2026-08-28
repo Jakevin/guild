@@ -1,4 +1,5 @@
 import { Service, type Context } from "cordis";
+import { closeBrowser } from "../browser.ts";
 import { gateTool } from "../harness.ts";
 import {
   builtinExecute,
@@ -28,6 +29,9 @@ export class ToolsService extends Service {
     for (const name of BUILTIN_TOOL_NAMES) {
       this.register(name, (args, toolCtx) => builtinExecute(name, args, toolCtx));
     }
+    ctx.effect(() => () => {
+      void closeBrowser();
+    });
   }
 
   has(name: string): boolean {

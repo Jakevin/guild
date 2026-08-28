@@ -483,19 +483,28 @@ test("create bot from markdown drafts and catalog skills", async () => {
   }
 });
 
-test("home is chat and studio is the bar", () => {
+test("home is chat and studio is the roster", () => {
   assert.equal(DEFAULT_GUILD_HOST, "127.0.0.1");
   assert.equal(DEFAULT_GUILD_PORT, 7420);
   const home = readFileSync(CHAT_HTML, "utf8");
   assert.match(home, /密談/);
   assert.match(home, /href="\/studio"/);
-  assert.match(home, /酒吧/);
+  assert.match(home, /編制/);
   assert.match(home, /href="\/settings"/);
   assert.match(home, /模型/);
+  assert.match(home, /data-i18n="bot\.settings">狀態欄/);
+  assert.match(home, /data-i18n="model\.settings">狀態欄/);
+  assert.doesNotMatch(home, /模型設定/);
   assert.match(home, /composer-card/);
   assert.match(home, /Ask anything/);
   assert.match(home, /\/i18n\.js/);
   assert.match(home, /sidebar-resizer/);
+  assert.match(home, /function partyStackHtml/);
+  assert.match(home, /id="toast"/);
+  assert.match(home, /function showToast/);
+  assert.match(home, /function liveTurnsFrom/);
+  assert.match(home, /body.bots/);
+  assert.match(home, /showToast\(t\("copied"\)\)/);
   const chatCss = readFileSync(
     fileURLToPath(new URL("../src/public/chat.css", import.meta.url)),
     "utf8",
@@ -556,6 +565,9 @@ test("home is chat and studio is the bar", () => {
   assert.match(home, /function liveBot/);
   assert.match(home, /msg bot live/);
   assert.match(home, /function pollLive/);
+  assert.match(home, /function refreshTraj/);
+  assert.match(home, /function mergeLiveTraj/);
+  assert.match(home, /trajFollow/);
   assert.match(home, /resumeCurrentLive/);
   assert.match(home, /function stopTurn/);
   assert.match(home, /\/abort/);
@@ -597,9 +609,17 @@ test("home is chat and studio is the bar", () => {
   assert.match(style, /--paper:\s*#F3EFE6/);
   assert.match(style, /grid-template-columns:\s*40px minmax\(0,\s*1fr\)/);
   assert.match(style, /-webkit-line-clamp:\s*2/);
+  assert.match(style, /\.host-row/);
+  assert.match(style, /\.host-act button/);
+  const mcpAdd = readFileSync(
+    fileURLToPath(new URL("../src/public/mcp-add.html", import.meta.url)),
+    "utf8",
+  );
+  assert.match(mcpAdd, /class="host-row"/);
+  assert.doesNotMatch(mcpAdd, /class="lib-card"/);
   assert.doesNotMatch(library, /Add Soul/);
   assert.doesNotMatch(library, /Who are you/);
-  assert.match(studio, /酒吧/);
+  assert.match(studio, /編制/);
   assert.match(studio, /招募/);
   assert.match(studio, /請他入座/);
   assert.match(studio, /save-md/);
@@ -631,7 +651,7 @@ test("home is chat and studio is the bar", () => {
   assert.doesNotMatch(studio, /skill-host-label/);
   assert.match(studio, /PATCH/);
   assert.match(studio, /EDIT_ID/);
-  assert.match(studio, /這名隊員的技能（含本機 CLI）/);
+  assert.match(studio, /這名冒險者的技能（含本機 CLI）/);
   assert.match(studio, /不影響其他人/);
   assert.match(studio, /Codex、Grok/);
   assert.match(studio, /tag-row/);
@@ -719,6 +739,7 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /nav-chip/);
     assert.match(html, /class="nav-row/);
     assert.match(html, /botModelLabel/);
+    assert.match(html, /function botModelMeta/);
     assert.match(html, /byUpdatedAtDesc/);
     assert.doesNotMatch(html, /botNavPreview/);
     assert.doesNotMatch(html, /位 bot 在裡面/);
@@ -923,6 +944,8 @@ test("models.json can add a Pi-style provider", async () => {
     assert.doesNotMatch(html, /id="preset"/);
     assert.doesNotMatch(html, /toolbar-actions/);
     assert.match(html, /flushVisibleCard/);
+    assert.match(html, /apiKeyPreview/);
+    assert.match(html, /function maskApiKey/);
 
     const listed = await getJson(origin, "/settings/models");
     assert.equal(listed.status, 200);
@@ -1001,6 +1024,58 @@ test("models.json can add a Pi-style provider", async () => {
     assert.match(chatHtml, /model-nav/);
     assert.match(chatHtml, /model-pane/);
     assert.match(chatHtml, /搜尋全部模型/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("literal API keys show first 5 and last 5, never the full secret", async () => {
+  const home = tempHome();
+  const { server, origin } = await listen(home);
+  try {
+    const secret = "sk-test-literal-key-1234567890";
+    const saved = await putJson(origin, "/settings/models", {
+      providers: {
+        qwen: {
+          name: "Qwen",
+          baseUrl: "https://example.com/v1",
+          api: "openai-completions",
+          apiKey: secret,
+          models: [{ id: "qwen3.8-max" }],
+        },
+      },
+    });
+    assert.equal(saved.status, 200);
+    const listed = (await getJson(origin, "/settings/models")).body as {
+      providers: {
+        id: string;
+        apiKey?: string;
+        apiKeyPreview?: string;
+        stored?: string;
+      }[];
+    };
+    const qwen = listed.providers.find((p) => p.id === "qwen");
+    assert.equal(qwen?.stored, "literal");
+    assert.equal(qwen?.apiKey, "");
+    assert.equal(qwen?.apiKeyPreview, "sk-te…67890");
+    assert.doesNotMatch(JSON.stringify(listed), /sk-test-literal-key/);
+
+    const again = await putJson(origin, "/settings/models", {
+      providers: {
+        qwen: {
+          name: "Qwen",
+          baseUrl: "https://example.com/v1",
+          api: "openai-completions",
+          apiKey: qwen?.apiKeyPreview,
+          models: [{ id: "qwen3.8-max" }],
+        },
+      },
+    });
+    assert.equal(again.status, 200);
+    const file = JSON.parse(readFileSync(join(home, "models.json"), "utf8")) as {
+      providers: { qwen: { apiKey: string } };
+    };
+    assert.equal(file.providers.qwen.apiKey, secret);
   } finally {
     await closeServer(server);
   }
@@ -1085,7 +1160,7 @@ test("edit page serves studio HTML for an existing bot", async () => {
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/html/);
-    assert.match(html, /酒吧/);
+    assert.match(html, /編制/);
     assert.match(html, /EDIT_ID/);
     assert.doesNotMatch(html, /"error":"not_found"/);
   } finally {
@@ -1249,7 +1324,13 @@ test("GET live returns in-memory think/tool steps", async () => {
   try {
     const idle = await getJson(origin, "/channels/channel-general/live");
     assert.equal(idle.status, 200);
-    assert.deepEqual(idle.body, { botId: "", thinking: "", steps: [] });
+    assert.deepEqual(idle.body, {
+      botId: "",
+      thinking: "",
+      steps: [],
+      bots: [],
+      traj: [],
+    });
     const missing = await getJson(origin, "/channels/nope/live");
     assert.equal(missing.status, 404);
     store.setLiveTurn("channel-general", {
@@ -1273,6 +1354,11 @@ test("GET live returns in-memory think/tool steps", async () => {
     assert.equal(body.steps.length, 2);
     assert.equal(body.steps[1].running, true);
     assert.equal((live.body as { startedAt?: string }).startedAt, "2026-08-27T00:00:00.000Z");
+    const liveBots = (live.body as { bots: { botId: string }[] }).bots;
+    assert.equal(liveBots.length, 1);
+    assert.equal(liveBots[0].botId, "bot-x");
+    const liveTraj = (live.body as { traj: { kind: string; live?: boolean }[] }).traj;
+    assert.ok(liveTraj.some((event) => event.kind === "thinking" && event.live));
     const space = (await getJson(origin, "/workspace")).body as {
       live: { id: string; botId: string }[];
     };
@@ -1284,7 +1370,13 @@ test("GET live returns in-memory think/tool steps", async () => {
     const bots = (await getJson(origin, "/bots")).body as { id: string }[];
     const dm = await getJson(origin, `/dms/${bots[0].id}/live`);
     assert.equal(dm.status, 200);
-    assert.deepEqual(dm.body, { botId: "", thinking: "", steps: [] });
+    assert.deepEqual(dm.body, {
+      botId: "",
+      thinking: "",
+      steps: [],
+      bots: [],
+      traj: [],
+    });
   } finally {
     await closeServer(server);
   }

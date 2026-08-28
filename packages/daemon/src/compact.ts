@@ -1,4 +1,4 @@
-import type { ModelRef } from "@guild/protocol";
+import type { ChatPart, ModelRef } from "@guild/protocol";
 import { llmComplete } from "./llm.ts";
 
 /** Cheap char/4 estimate, same ballpark Codex uses before a real tokenizer. */
@@ -6,12 +6,25 @@ export const CHARS_PER_TOKEN = 4;
 /** Default working window minus output/tool reserve. */
 export const DEFAULT_AUTO_COMPACT_TOKENS = 88_000;
 const KEEP_RECENT_MIN = 6;
+const KEEP_RECENT_FLOOR = 2;
+const HISTORY_BODY_CAP = 12_000;
+const PART_OUTPUT_CAP = 2_000;
+const PARTS_BLOCK_CAP = 8_000;
+const MAX_TOOL_PARTS = 8;
+const THINK_CAP = 400;
 const SUMMARY_CAP = 4_000;
+
+export {
+  SEND_TOKEN_BUDGET,
+  estimateSendTokens,
+  trimSendMessages,
+} from "./send-budget.ts";
 
 export type HistoryItem = {
   id?: string;
   author: string;
   body: string;
+  parts?: ChatPart[];
 };
 
 export type CompactCheckpoint = {
@@ -31,16 +44,90 @@ export function estimateTokens(text: string): number {
   return Math.ceil(String(text || "").length / CHARS_PER_TOKEN);
 }
 
+function clipText(text: string, cap: number): string {
+  const value = String(text || "");
+  if (value.length <= cap) return value;
+  return `${value.slice(0, cap)}\n… truncated …`;
+}
+
+export function clipHistoryItem(item: HistoryItem): HistoryItem {
+  const body = clipText(item.body, HISTORY_BODY_CAP);
+  if (!item.parts?.length) {
+    return body === item.body ? item : { ...item, body };
+  }
+  const tools = item.parts.filter(
+    (part) => part.type === "tool" || part.type === "skill",
+  );
+  const thinking = item.parts.find((part) => part.type === "thinking");
+  const textParts = item.parts.filter((part) => part.type === "text");
+  const clippedTools = tools.slice(-MAX_TOOL_PARTS).map((part) => {
+    if (part.type === "skill") {
+      return {
+        ...part,
+        output: part.output ? clipText(part.output, PART_OUTPUT_CAP) : part.output,
+      };
+    }
+    return { ...part, output: clipText(part.output, PART_OUTPUT_CAP) };
+  });
+  const parts: ChatPart[] = [];
+  if (thinking?.text) {
+    parts.push({
+      type: "thinking",
+      text: clipText(thinking.text, THINK_CAP),
+    });
+  }
+  parts.push(...clippedTools, ...textParts);
+  return { ...item, body, parts };
+}
+
+export function formatPartsForModel(parts: ChatPart[] | undefined): string {
+  if (!parts?.length) return "";
+  const lines: string[] = [];
+  for (const part of parts) {
+    if (part.type === "thinking") continue;
+    if (part.type === "text") continue;
+    if (part.type === "skill") {
+      lines.push(`skill ${part.name}`.trim());
+      continue;
+    }
+    const head = `${part.name} ${part.detail || ""}`.trim();
+    const out = String(part.output || "").trim();
+    lines.push(out ? `${head}\n${out}` : head);
+  }
+  const block = lines.join("\n\n");
+  if (block.length <= PARTS_BLOCK_CAP) return block;
+  return `${block.slice(0, PARTS_BLOCK_CAP)}\n… truncated …`;
+}
+
+export function toHistoryItem(message: {
+  id?: string;
+  author: string;
+  body: string;
+  parts?: ChatPart[];
+}): HistoryItem {
+  return {
+    id: message.id,
+    author: message.author,
+    body: message.body,
+    ...(message.parts && message.parts.length ? { parts: message.parts } : {}),
+  };
+}
+
 export function toModelMessage(item: HistoryItem): {
   role: "user" | "assistant";
   content: string;
 } {
+  const tools = formatPartsForModel(item.parts);
   if (item.author === "you") {
-    return { role: "user", content: item.body };
+    return {
+      role: "user",
+      content: tools ? `${item.body}\n\n<tools>\n${tools}\n</tools>` : item.body,
+    };
   }
+  const text = `${item.author}: ${item.body}`;
   return {
     role: "assistant",
-    content: `${item.author}: ${item.body}`,
+    content: tools ? `${text}\n\n<tools>\n${tools}\n</tools>` : text,
   };
 }
 
@@ -56,10 +143,23 @@ export function localCompactSummary(items: HistoryItem[]): string {
     .map((item) => String(item.body || "").replace(/\s+/g, " ").trim().slice(0, 160))
     .filter(Boolean);
   const bots = items.filter((item) => item.author !== "you");
+  const tools = [
+    ...new Set(
+      items.flatMap((item) =>
+        (item.parts || [])
+          .filter(
+            (part): part is Extract<ChatPart, { type: "tool" }> =>
+              part.type === "tool",
+          )
+          .map((part) => `${part.name} ${part.detail || ""}`.trim()),
+      ),
+    ),
+  ].slice(0, 24);
   const lines = [
     `${items.length} earlier messages compacted.`,
     users.length ? `User asked: ${users.slice(0, 10).join(" | ")}` : "",
     bots.length ? `Assistants replied in ${bots.length} turns.` : "",
+    tools.length ? `Tools: ${tools.join("; ")}` : "",
   ].filter(Boolean);
   return lines.join("\n").slice(0, SUMMARY_CAP);
 }
@@ -109,7 +209,10 @@ export function planCompact(input: {
   const user = { role: "user" as const, content: input.userMessage };
   const fullCost =
     estimateTokens(input.system) + messagesTokens([...mapped, user]);
-  if (fullCost <= limit || input.history.length <= KEEP_RECENT_MIN) {
+  if (fullCost <= limit) {
+    return { mode: "full", old: [], recent: input.history };
+  }
+  if (input.history.length <= 1) {
     return { mode: "full", old: [], recent: input.history };
   }
 
@@ -122,12 +225,13 @@ export function planCompact(input: {
   let used = 0;
   for (let i = input.history.length - 1; i >= 0; i -= 1) {
     const cost = estimateTokens(toModelMessage(input.history[i]).content) + 8;
+    if (recentCount >= KEEP_RECENT_FLOOR && used + cost > tailBudget) break;
     if (recentCount >= KEEP_RECENT_MIN && used + cost > tailBudget) break;
     used += cost;
     recentCount += 1;
   }
   recentCount = Math.max(
-    Math.min(KEEP_RECENT_MIN, input.history.length),
+    Math.min(KEEP_RECENT_FLOOR, input.history.length),
     recentCount,
   );
   const split = input.history.length - recentCount;
@@ -151,7 +255,16 @@ async function summarizeOld(input: {
   const transcript = input.old
     .map((item) => {
       const who = item.author === "you" ? "User" : item.author;
-      return `${who}: ${String(item.body || "").slice(0, 1_200)}`;
+      const tools = (item.parts || [])
+        .filter(
+          (part): part is Extract<ChatPart, { type: "tool" }> =>
+            part.type === "tool",
+        )
+        .slice(-MAX_TOOL_PARTS)
+        .map((part) => `${part.name} ${part.detail || ""}`.trim())
+        .join("; ");
+      const line = `${who}: ${String(item.body || "").slice(0, 400)}`;
+      return tools ? `${line} [${tools}]` : line;
     })
     .join("\n")
     .slice(0, 24_000);
@@ -194,9 +307,10 @@ export async function packHistory(input: {
   tokenLimit?: number;
 }): Promise<PackedHistory> {
   const user = { role: "user" as const, content: input.userMessage };
+  const history = input.history.map(clipHistoryItem);
   const plan = planCompact({
     system: input.system,
-    history: input.history,
+    history,
     userMessage: input.userMessage,
     tokenLimit: input.tokenLimit,
   });

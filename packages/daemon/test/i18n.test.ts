@@ -98,5 +98,9 @@ test("every public page loads i18n.js", () => {
   assert.match(mcpAdd, /class="host-row"/);
   assert.doesNotMatch(mcpAdd, /class="lib-card"/);
   assert.doesNotMatch(mcpAdd, /data-import/);
+  assert.doesNotMatch(mcpAdd, /匯入後對話才會用/);
+  assert.match(mcpAdd, /本機已發現/);
+  assert.match(mcpAdd, /本機 CLI，對話可直接用/);
+  setGuildLocale("zh-Hant");
   assert.equal(t("mcp.host"), "本機 CLI，對話可直接用");
 });

@@ -55,15 +55,25 @@ export type LiveStep = {
   running?: boolean;
 };
 
+export type LiveTrace = {
+  name: string;
+  args?: Record<string, unknown>;
+  text?: string;
+  isError?: boolean;
+  running?: boolean;
+};
+
 export type LiveTurn = {
   botId: string;
   thinking: string;
   steps: LiveStep[];
   startedAt?: string;
+  /** Full-ish tool history for Trajectory. Stripped from GET /live. */
+  traces?: LiveTrace[];
 };
 
 export class GuildStore {
-  private readonly liveTurns = new Map<string, LiveTurn>();
+  private readonly liveTurns = new Map<string, Map<string, LiveTurn>>();
   private readonly pendingSteers = new Map<string, string[]>();
   private readonly turnAborts = new Map<string, AbortController>();
   private readonly db: GuildDb;
@@ -258,7 +268,12 @@ export class GuildStore {
   }
 
   setLiveTurn(roomId: string, turn: LiveTurn): void {
-    this.liveTurns.set(roomId, turn);
+    let room = this.liveTurns.get(roomId);
+    if (!room) {
+      room = new Map();
+      this.liveTurns.set(roomId, room);
+    }
+    room.set(turn.botId || "", turn);
   }
 
   clearLiveTurn(roomId: string): void {
@@ -267,14 +282,25 @@ export class GuildStore {
   }
 
   getLiveTurn(roomId: string): LiveTurn | null {
-    return this.liveTurns.get(roomId) ?? null;
+    const room = this.liveTurns.get(roomId);
+    if (!room || room.size === 0) return null;
+    return [...room.values()][room.size - 1] ?? null;
+  }
+
+  getLiveBotTurn(roomId: string, botId: string): LiveTurn | null {
+    return this.liveTurns.get(roomId)?.get(botId) ?? null;
+  }
+
+  listLiveRoomTurns(roomId: string): LiveTurn[] {
+    return [...(this.liveTurns.get(roomId)?.values() ?? [])];
   }
 
   listLiveTurns(): { roomId: string; turn: LiveTurn }[] {
-    return [...this.liveTurns.entries()].map(([roomId, turn]) => ({
-      roomId,
-      turn,
-    }));
+    const out: { roomId: string; turn: LiveTurn }[] = [];
+    for (const [roomId, room] of this.liveTurns) {
+      for (const turn of room.values()) out.push({ roomId, turn });
+    }
+    return out;
   }
 
   beginTurn(roomId: string): AbortSignal {
@@ -616,6 +642,31 @@ export class GuildStore {
     this.writeRoom(room);
     this.writeMessages(room.id, []);
     return room;
+  }
+
+  renameChannel(id: string, name: string): Room {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) throw new StoreError(400, "channel name is required");
+    const room = this.getRoom(id);
+    if (!room) throw new StoreError(404, "channel not found");
+    if (room.kind !== "channel") {
+      throw new StoreError(400, "not a channel");
+    }
+    if (room.id === GENERAL_CHANNEL_ID || room.name === "general") {
+      throw new StoreError(400, "cannot rename #general");
+    }
+    if (trimmed === "general") {
+      throw new StoreError(400, "cannot rename #general");
+    }
+    if (
+      this.listChannels().some((other) => other.id !== room.id && other.name === trimmed)
+    ) {
+      throw new StoreError(409, `channel already exists: ${trimmed}`);
+    }
+    if (room.name === trimmed) return room;
+    const next = { ...room, name: trimmed };
+    this.writeRoom(next);
+    return next;
   }
 
   openDm(botId: string): Room {

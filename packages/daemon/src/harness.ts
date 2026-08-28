@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { ToolContext, ToolOutcome, ToolTrace } from "./tools.ts";
 
 /**
@@ -23,6 +24,13 @@ export type HarnessPolicy = {
 export type SandboxRefusal = { text: string; isError: true };
 
 const HOME = homedir();
+/** `packages/daemon` (this file lives in `src/`). */
+const DAEMON_DIR = fileURLToPath(new URL("..", import.meta.url));
+
+/** Guild checkout (parent of `packages/`). */
+export function defaultWorkspace(): string {
+  return resolve(DAEMON_DIR, "..", "..");
+}
 
 export function parseSandbox(raw: unknown): Sandbox {
   if (raw === "read_only" || raw === "workspace_write" || raw === "full_access") {
@@ -31,8 +39,33 @@ export function parseSandbox(raw: unknown): Sandbox {
   return "full_access";
 }
 
+/** Set `GUILD_SANDBOX` wins. Unset is undefined, not full_access. */
+export function envSandbox(env: NodeJS.ProcessEnv = process.env): Sandbox | undefined {
+  const raw = env.GUILD_SANDBOX;
+  if (raw === "read_only" || raw === "workspace_write" || raw === "full_access") {
+    return raw;
+  }
+  return undefined;
+}
+
 export function sandboxFromEnv(env: NodeJS.ProcessEnv = process.env): Sandbox {
-  return parseSandbox(env.GUILD_SANDBOX);
+  return envSandbox(env) ?? "full_access";
+}
+
+/**
+ * Optional `sandbox: read_only|workspace_write|full_access` line in POSITION.md.
+ * Env still wins over this.
+ */
+export function sandboxFromPosition(body: string): Sandbox | undefined {
+  const match = body.match(
+    /(?:^|\n)\s*(?:[-*]\s*)?sandbox:\s*(read_only|workspace_write|full_access)\b/i,
+  );
+  if (!match) return undefined;
+  const value = match[1].toLowerCase();
+  if (value === "read_only" || value === "workspace_write" || value === "full_access") {
+    return value;
+  }
+  return undefined;
 }
 
 export function resolveToolPath(input: string, base = HOME): string {
@@ -50,17 +83,33 @@ export function workspaceFromEnv(
   const raw = env.GUILD_WORKSPACE?.trim();
   if (raw) return resolveToolPath(raw);
   if (fallback?.trim()) return resolveToolPath(fallback);
-  return HOME;
+  return defaultWorkspace();
+}
+
+export function policyFor(
+  env: NodeJS.ProcessEnv = process.env,
+  input: {
+    sandbox?: Sandbox;
+    workspace?: string;
+    position?: string;
+  } = {},
+): HarnessPolicy {
+  const sandbox =
+    envSandbox(env) ??
+    input.sandbox ??
+    sandboxFromPosition(input.position ?? "") ??
+    "full_access";
+  return {
+    sandbox,
+    workspace: workspaceFromEnv(env, input.workspace),
+  };
 }
 
 export function policyFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   fallbackWorkspace?: string,
 ): HarnessPolicy {
-  return {
-    sandbox: sandboxFromEnv(env),
-    workspace: workspaceFromEnv(env, fallbackWorkspace),
-  };
+  return policyFor(env, { workspace: fallbackWorkspace });
 }
 
 function canonicalize(path: string): string {
@@ -90,6 +139,7 @@ export function mutatingTool(name: string): boolean {
     name === "write" ||
     name === "spawn" ||
     name === "image_gen" ||
+    name === "browser" ||
     name.startsWith("mcp__")
   );
 }

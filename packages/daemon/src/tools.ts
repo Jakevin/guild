@@ -134,6 +134,23 @@ const BASE_TOOLS: Tool[] = [
       ),
     }),
   },
+  {
+    name: "browser",
+    description:
+      "Drive a local Chromium-family browser via CDP. Default is a throwaway profile (logged into nothing). Set GUILD_BROWSER_REAL_PROFILE=1 to snapshot the user's active Chrome profile (Local State last_used; cookies/logins via sqlite backup) into ~/.guild/browser-profile/chrome and drive that copy — never the live profile. Off deletes the snapshot. Actions: open, snapshot, click, type, press, screenshot, close.",
+    parameters: Type.Object({
+      action: Type.String({
+        description: "open | snapshot | click | type | press | screenshot | close",
+      }),
+      url: Type.Optional(Type.String({ description: "URL for action=open" })),
+      ref: Type.Optional(
+        Type.String({ description: "Snapshot ref like @e1 for click/type" }),
+      ),
+      text: Type.Optional(
+        Type.String({ description: "Text to type, or key name for press" }),
+      ),
+    }),
+  },
 ];
 
 export function guildTools(
@@ -263,6 +280,21 @@ function openaiParameters(name: string): {
       required: ["prompt"],
     };
   }
+  if (name === "browser") {
+    return {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          description: "open | snapshot | click | type | press | screenshot | close",
+        },
+        url: { type: "string", description: "URL for open" },
+        ref: { type: "string", description: "Snapshot ref @e1" },
+        text: { type: "string", description: "Typed text or key name" },
+      },
+      required: ["action"],
+    };
+  }
   return {
     type: "object",
     properties: { path: { type: "string" } },
@@ -296,6 +328,7 @@ export const BUILTIN_TOOL_NAMES = [
   "skill",
   "spawn",
   "image_gen",
+  "browser",
 ] as const;
 
 export async function executeTool(
@@ -367,6 +400,10 @@ export async function builtinExecute(
         dataDir: ctx.dataDir,
         env: ctx.env,
       });
+    }
+    if (name === "browser") {
+      const { runBrowser } = await import("./browser.ts");
+      return runBrowser(args, { dataDir: ctx.dataDir, env: ctx.env });
     }
     if (name.startsWith("mcp__")) {
       const { callMcpTool } = await import("./mcp.ts");
@@ -677,11 +714,12 @@ export function nextToolRound(round: number): ToolRoundPhase {
 }
 
 export const TOOL_SYSTEM = `You ARE already running on the user's local computer (Guild, same design as Pi / DeepSeek Harness).
-Tools: run, read, write, list, skill, spawn, image_gen, plus any connected MCP tools (names start with mcp__).
+Tools: run, read, write, list, skill, spawn, image_gen, browser, plus any connected MCP tools (names start with mcp__).
 You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
+To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default profile is empty. The user must set GUILD_BROWSER_REAL_PROFILE=1 for their Chrome logins (Hermes-shaped snapshot of last_used, never the live profile).
 To delegate a bounded slice (explore, review, implement) to a specialist with its own context, call spawn. Pass a self-contained prompt. The subagent returns a summary. Subagents cannot spawn children.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.
 To follow a staffed skill, call skill with its exact name (or slug) before applying it. Relative paths in a skill resolve against that skill's base directory.

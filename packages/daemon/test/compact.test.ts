@@ -8,6 +8,7 @@ import {
   packHistory,
   planCompact,
   toModelMessage,
+  trimSendMessages,
 } from "../src/compact.ts";
 
 function tempDir(): string {
@@ -44,7 +45,7 @@ test("over-budget rooms compact the head and keep a recent tail", () => {
   });
   assert.equal(plan.mode, "compact");
   assert.ok(plan.old.length >= 6);
-  assert.ok(plan.recent.length >= 6);
+  assert.ok(plan.recent.length >= 2);
   assert.equal(plan.old.length + plan.recent.length, 24);
   assert.equal(plan.recent[0].id, history[plan.old.length].id);
 });
@@ -64,6 +65,59 @@ test("packHistory writes a compact prefix then recent turns", async () => {
   assert.equal(packed.messages[packed.messages.length - 1].content, "what next");
   const lastRecent = packed.messages[packed.messages.length - 2];
   assert.equal(lastRecent.content, toModelMessage(history[15]).content);
+});
+
+test("tool parts count toward compact budget and are clipped in the payload", () => {
+  const history = items(8, "ok").map((item, i) =>
+    i % 2
+      ? {
+          ...item,
+          parts: [
+            {
+              type: "tool" as const,
+              name: "read",
+              detail: "i18n.js",
+              output: "x".repeat(40_000),
+            },
+          ],
+        }
+      : item,
+  );
+  const plan = planCompact({
+    system: "sys",
+    history,
+    userMessage: "now",
+    tokenLimit: 4_000,
+  });
+  assert.equal(plan.mode, "compact");
+  const packed = toModelMessage(history[1]);
+  assert.match(packed.content, /read i18n\.js/);
+  assert.ok(packed.content.length < 12_000);
+  assert.match(packed.content, /truncated/i);
+});
+
+test("few huge messages compact instead of sending the lot", () => {
+  const history = items(4, "z".repeat(20_000));
+  const plan = planCompact({
+    system: "sys",
+    history,
+    userMessage: "now",
+    tokenLimit: 8_000,
+  });
+  assert.equal(plan.mode, "compact");
+  assert.ok(plan.recent.length < 4);
+  assert.ok(plan.old.length >= 1);
+});
+
+test("trimSendMessages drops the oldest prefix to fit the budget", () => {
+  const messages = Array.from({ length: 20 }, (_, i) => ({
+    role: i % 2 === 0 ? "user" : "assistant",
+    content: "n".repeat(3_000),
+  }));
+  const trimmed = trimSendMessages(messages, 0, 8_000);
+  assert.ok(trimmed.length < messages.length);
+  assert.ok(trimmed.length >= 2);
+  assert.equal(trimmed[trimmed.length - 1].content, messages[19].content);
 });
 
 test("a matching checkpoint is reused instead of summarizing again", () => {

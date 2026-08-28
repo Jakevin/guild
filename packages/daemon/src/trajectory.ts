@@ -22,6 +22,8 @@ export type TrajectoryEvent = {
   result?: string;
   durationMs?: number;
   isError?: boolean;
+  /** In-progress turn; not persisted. */
+  live?: boolean;
 };
 
 export type TrajectoryDraft = Omit<TrajectoryEvent, "seq">;
@@ -130,7 +132,7 @@ export function turnTrajectoryEvents(input: {
         turnId,
         botId,
         kind: "skill",
-        summary: name,
+        summary: `${name}${trace.running ? " …" : ""}`,
         payload: cap(trace.args),
         result: String(cap(trace.text ?? "")),
         isError: trace.isError,
@@ -146,7 +148,7 @@ export function turnTrajectoryEvents(input: {
       turnId,
       botId,
       kind: "tool",
-      summary: clip(`${trace.name} ${detail}`),
+      summary: clip(`${trace.name} ${detail}${trace.running ? " …" : ""}`),
       payload: cap({ name: trace.name, args: trace.args }),
       result: String(cap(trace.text ?? "")),
       isError: trace.isError,
@@ -161,6 +163,45 @@ export function turnTrajectoryEvents(input: {
     result: String(cap(input.text)),
   });
   return events;
+}
+
+export function liveTrajectoryEvents(input: {
+  botId: string;
+  thinking?: string;
+  traces?: Array<{
+    name: string;
+    args?: Record<string, unknown>;
+    text?: string;
+    isError?: boolean;
+    running?: boolean;
+  }>;
+  startedAt?: string;
+}): TrajectoryDraft[] {
+  const traces: ToolTrace[] = (input.traces ?? []).map((tr) => ({
+    name: tr.name,
+    args: tr.args ?? {},
+    text: tr.text ?? "",
+    isError: Boolean(tr.isError),
+    running: tr.running,
+  }));
+  const events = turnTrajectoryEvents({
+    turnId: `live-${input.botId}`,
+    botId: input.botId,
+    ts: input.startedAt,
+    thinking: input.thinking,
+    traces,
+    text: "",
+  }).filter((event) => event.kind !== "assistant");
+  if (!events.length) {
+    events.push({
+      ts: input.startedAt || new Date().toISOString(),
+      turnId: `live-${input.botId}`,
+      botId: input.botId,
+      kind: "thinking",
+      summary: "…",
+    });
+  }
+  return events.map((event) => ({ ...event, live: true }));
 }
 
 export function synthesizeTrajectory(messages: ChatMessage[]): TrajectoryEvent[] {

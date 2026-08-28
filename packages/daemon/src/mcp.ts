@@ -56,12 +56,19 @@ class McpSession {
     this.child.stderr.on("data", () => {
       /* MCP logs belong on stderr */
     });
+    this.child.on("error", (err) => {
+      for (const wait of this.pending.values()) wait.reject(err);
+      this.pending.clear();
+    });
     this.child.on("exit", () => {
       const err = new Error("mcp server exited");
       for (const wait of this.pending.values()) wait.reject(err);
       this.pending.clear();
     });
-    this.ready = this.handshake();
+    this.ready = new Promise((resolve, reject) => {
+      this.child.once("error", reject);
+      this.handshake().then(resolve, reject);
+    });
   }
 
   private async handshake(): Promise<void> {
@@ -291,7 +298,7 @@ export function listHostMcp(home = homedir()): McpServer[] {
     const key = item.name.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    out.push(item);
+    out.push({ ...item, enabled: true });
   };
   for (const item of readClaudeMcp(join(home, ".claude.json"), "Claude")) {
     push(item);
@@ -305,15 +312,27 @@ export function listHostMcp(home = homedir()): McpServer[] {
   return out;
 }
 
+export function listActiveMcp(dataDir: string, home = homedir()): McpServer[] {
+  const guild = listGuildMcp(dataDir);
+  const taken = new Set(guild.map((server) => server.name.toLowerCase()));
+  const host = listHostMcp(home).filter(
+    (server) => !taken.has(server.name.toLowerCase()),
+  );
+  return guild.concat(host);
+}
+
 export function importHostMcp(dataDir: string, hostId: string): McpServer {
   const hit = listHostMcp().find((item) => item.id === hostId);
   if (!hit) throw new Error("host mcp not found");
   return upsertGuildMcp(dataDir, hit.name, hit.launch);
 }
 
-export async function listMcpToolRefs(dataDir: string): Promise<McpToolRef[]> {
+export async function listMcpToolRefs(
+  dataDir: string,
+  home = homedir(),
+): Promise<McpToolRef[]> {
   const listed = await Promise.all(
-    listGuildMcp(dataDir).map(async (server) => {
+    listActiveMcp(dataDir, home).map(async (server) => {
       if (server.launch.url && !server.launch.command) return [];
       try {
         const session = await sessionFor(server);
@@ -338,11 +357,14 @@ export async function callMcpTool(
   call: string,
   args: Record<string, unknown>,
   catalog: McpToolRef[] = [],
+  home = homedir(),
 ): Promise<{ text: string; isError: boolean }> {
   const ref =
     catalog.find((item) => item.callName === call) || parseCallName(call);
   if (!ref) return { text: `unknown mcp tool: ${call}`, isError: true };
-  const server = listGuildMcp(dataDir).find((item) => item.name === ref.server);
+  const server = listActiveMcp(dataDir, home).find(
+    (item) => item.name === ref.server,
+  );
   if (!server) return { text: `mcp server not connected: ${ref.server}`, isError: true };
   try {
     const session = await sessionFor(server);
@@ -394,6 +416,10 @@ function dropSession(name: string): void {
   if (!hit) return;
   sessions.delete(name);
   hit.close();
+}
+
+export function closeMcpSessions(): void {
+  for (const name of [...sessions.keys()]) dropSession(name);
 }
 
 function asObjectSchema(

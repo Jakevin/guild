@@ -15,6 +15,7 @@ import {
   type GenerateKind,
 } from "./generate.ts";
 import {
+  liveTrajectoryEvents,
   synthesizeTrajectory,
   turnTrajectoryEvents,
   userTrajectoryEvent,
@@ -28,10 +29,12 @@ import {
   importHostMcp,
   listGuildMcp,
   listHostMcp,
+  listMcpToolRefs,
   removeGuildMcp,
   upsertGuildMcp,
 } from "./mcp.ts";
 import { isBroadcastMention, summonedHandles } from "./mention.ts";
+import { toHistoryItem, type HistoryItem } from "./compact.ts";
 import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
 import type { McpToolRef } from "./mcp.ts";
 
@@ -346,6 +349,10 @@ export function deleteChannel(store: GuildStore, id: string) {
   return store.deleteChannel(id);
 }
 
+export function renameChannel(store: GuildStore, id: string, name: string) {
+  return store.renameChannel(id, name);
+}
+
 export function deleteBot(store: GuildStore, id: string) {
   return store.deleteBot(id);
 }
@@ -525,7 +532,7 @@ export function chatTurnForBot(
   store: GuildStore,
   roomId: string,
   botId: string,
-  history: { id?: string; author: string; body: string }[] = [],
+  history: HistoryItem[] = [],
   userMessage = "",
 ) {
   const detail = store.botDetail(botId);
@@ -577,6 +584,39 @@ function liveDetail(trace: ToolTrace): string {
   return String(args.path || "");
 }
 
+const LIVE_TRACE_CAP = 100;
+const LIVE_TRACE_TEXT = 4_000;
+const LIVE_ARGS_CAP = 4_000;
+
+function clipLiveArgs(args: Record<string, unknown>): Record<string, unknown> {
+  try {
+    const raw = JSON.stringify(args);
+    if (!raw || raw.length <= LIVE_ARGS_CAP) return args;
+    return { preview: raw.slice(0, LIVE_ARGS_CAP) };
+  } catch {
+    return {};
+  }
+}
+
+function clipLiveTraces(traces: ToolTrace[] | undefined): LiveTurn["traces"] {
+  return (traces || []).slice(-LIVE_TRACE_CAP).map((tr) => ({
+    name: tr.name,
+    args: clipLiveArgs(tr.args || {}),
+    text: String(tr.text || "").slice(0, LIVE_TRACE_TEXT),
+    isError: Boolean(tr.isError),
+    running: tr.running,
+  }));
+}
+
+function publicLiveTurn(live: LiveTurn): LiveTurn {
+  return {
+    botId: live.botId,
+    thinking: live.thinking,
+    steps: live.steps,
+    startedAt: live.startedAt,
+  };
+}
+
 export function toLiveTurn(botId: string, update: ToolProgress): LiveTurn {
   const thinking = (update.thinking || "").trim();
   const tools: LiveStep[] = (update.traces || []).map((tr) => ({
@@ -592,21 +632,57 @@ export function toLiveTurn(botId: string, update: ToolProgress): LiveTurn {
     });
   }
   steps.push(...tools.slice(thinking ? -4 : -5));
-  return { botId, thinking, steps };
+  return { botId, thinking, steps, traces: clipLiveTraces(update.traces) };
 }
 
-export function getLiveTurn(store: GuildStore, roomId: string): LiveTurn {
+function liveTrajectoryForRoom(
+  store: GuildStore,
+  roomId: string,
+  logged?: { seq: number; botId?: string; kind: string; ts: string }[],
+) {
+  const liveTurns = store.listLiveRoomTurns(roomId);
+  if (!liveTurns.length) return [];
+  const events = logged ?? store.listTrajectory(roomId);
+  let seq = events.length ? events[events.length - 1].seq + 1 : 0;
+  return liveTurns.flatMap((turn) => {
+    const started = turn.startedAt ? Date.parse(turn.startedAt) : 0;
+    const already = events.some(
+      (event) =>
+        event.botId === turn.botId &&
+        event.kind === "assistant" &&
+        (!started || Date.parse(event.ts) >= started),
+    );
+    if (already) return [];
+    return liveTrajectoryEvents({
+      botId: turn.botId,
+      thinking: turn.thinking,
+      traces: turn.traces,
+      startedAt: turn.startedAt,
+    }).map((draft) => ({ ...draft, seq: seq++, live: true as const }));
+  });
+}
+
+export function getLiveTurn(store: GuildStore, roomId: string) {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
-  const live = store.getLiveTurn(roomId) ?? { botId: "", thinking: "", steps: [] };
   const pending = store.peekSteers(roomId);
-  if (!pending.length) return live;
   const steers: LiveStep[] = pending.map((text) => ({
     name: "steer",
     detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
     running: true,
   }));
-  const rest = live.steps.filter((step) => step.name !== "steer");
-  return { ...live, steps: [...steers, ...rest].slice(0, 5) };
+  const decorate = (live: LiveTurn): LiveTurn => {
+    const shown = publicLiveTurn(live);
+    if (!steers.length) return shown;
+    const rest = shown.steps.filter((step) => step.name !== "steer");
+    return { ...shown, steps: [...steers, ...rest].slice(0, 5) };
+  };
+  const bots = store.listLiveRoomTurns(roomId).map(decorate);
+  const live = bots[bots.length - 1] ?? {
+    botId: "",
+    thinking: "",
+    steps: steers,
+  };
+  return { ...live, bots, traj: liveTrajectoryForRoom(store, roomId) };
 }
 
 export function abortLiveTurn(store: GuildStore, roomId: string) {
@@ -665,95 +741,116 @@ async function generateReplies(
   roomId: string,
   memberIds: string[],
   userMessage: { body: string; attachments?: ChatAttachment[] },
-  history: { id?: string; author: string; body: string }[],
+  history: HistoryItem[],
   onlyBotId?: string,
   env: NodeJS.ProcessEnv = process.env,
   parent?: ChatMessage,
   extras: HandlerExtras = {},
 ) {
-  const extraBotId =
-    parent && parent.author !== "you" ? parent.author : undefined;
+  const extraBotId = hasExplicitSummon(store, userMessage.body)
+    ? undefined
+    : followBotId(store, history, parent);
   const asked = askedText(store, parent, userMessage);
   const targets = onlyBotId
     ? [onlyBotId]
     : replyBots(store, memberIds, userMessage.body, extraBotId);
-  const replies = [];
+  const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
   const signal = store.beginTurn(roomId);
+  const initialSteers = store.drainSteers(roomId);
+  const mcpTools =
+    extras.mcp === false
+      ? []
+      : extras.mcpTools !== undefined
+        ? extras.mcpTools
+        : await listMcpToolRefs(store.dataDir);
   try {
-  for (const botId of targets) {
-    if (!memberIds.includes(botId) && !onlyBotId) continue;
-    if (signal.aborted) break;
-    const startedAt = new Date().toISOString();
-    store.setLiveTurn(roomId, { botId, thinking: "", steps: [], startedAt });
-    let generated;
-    try {
-      generated = await (extras.turn ?? chatReply)({
-        ...chatTurnForBot(store, roomId, botId, history, asked),
-        env,
-        signal,
-        mcpTools: extras.mcp === false ? [] : extras.mcpTools,
-        onProgress: (update) => {
-          const prev = store.getLiveTurn(roomId);
-          store.setLiveTurn(roomId, {
-            ...toLiveTurn(botId, update),
-            startedAt: prev?.startedAt || startedAt,
-          });
-        },
-        pullSteers: () => store.drainSteers(roomId),
-      });
-    } catch (err) {
-      if (isAbortError(err) || signal.aborted) break;
-      throw err;
-    }
-    const usage = { ...(generated.usage || {}), startedAt };
-    const reply = store.appendMessage(
-      roomId,
-      botId,
-      generated.body,
-      generated.parts,
-      undefined,
-      undefined,
-      usage,
-    );
-    recordTurn(store, roomId, botId, generated, reply);
-    replies.push(reply);
-    extras.onTurnComplete?.({
-      roomId,
-      botId,
-      userText: asked,
-      reply: generated.body,
-    });
-    if (generated.source === "llm") {
-      harvested.push({
-        handle: store.getBot(botId)?.handle || botId,
-        author: botId,
-        body: generated.body,
-      });
-      if (extras.harvest !== false) {
-        await harvestBotMemory({
-          store,
+    await Promise.all(
+      targets.map(async (botId) => {
+        if (!memberIds.includes(botId) && !onlyBotId) return;
+        if (signal.aborted) return;
+        const startedAt = new Date().toISOString();
+        store.setLiveTurn(roomId, {
           botId,
-          userMessage: asked,
+          thinking: "",
+          steps: [{ name: "think", detail: "", running: true }],
+          startedAt,
+        });
+        let firstSteer = true;
+        let generated;
+        try {
+          generated = await (extras.turn ?? chatReply)({
+            ...chatTurnForBot(store, roomId, botId, history, asked),
+            env,
+            signal,
+            mcpTools,
+            onProgress: (update) => {
+              const prev = store.getLiveBotTurn(roomId, botId);
+              store.setLiveTurn(roomId, {
+                ...toLiveTurn(botId, update),
+                startedAt: prev?.startedAt || startedAt,
+              });
+            },
+            pullSteers: () => {
+              const extra = store.drainSteers(roomId);
+              if (!firstSteer) return extra;
+              firstSteer = false;
+              return initialSteers.concat(extra);
+            },
+          });
+        } catch (err) {
+          if (isAbortError(err) || signal.aborted) return;
+          throw err;
+        }
+        const usage = { ...(generated.usage || {}), startedAt };
+        const reply = store.appendMessage(
+          roomId,
+          botId,
+          generated.body,
+          generated.parts,
+          undefined,
+          undefined,
+          usage,
+        );
+        recordTurn(store, roomId, botId, generated, reply);
+        replies.push(reply);
+        extras.onTurnComplete?.({
+          roomId,
+          botId,
+          userText: asked,
           reply: generated.body,
-          env,
-          prefer: store.getBot(botId)?.model ?? null,
-        }).catch(() => {});
-      }
+        });
+        if (generated.source === "llm") {
+          harvested.push({
+            handle: store.getBot(botId)?.handle || botId,
+            author: botId,
+            body: generated.body,
+          });
+          if (extras.harvest !== false) {
+            await harvestBotMemory({
+              store,
+              botId,
+              userMessage: asked,
+              reply: generated.body,
+              env,
+              prefer: store.getBot(botId)?.model ?? null,
+            }).catch(() => {});
+          }
+        }
+      }),
+    );
+    const room = store.getRoom(roomId);
+    if (room?.kind === "channel" && harvested.length && extras.harvest !== false) {
+      await harvestChannelMemory({
+        store,
+        roomId,
+        userMessage: asked,
+        replies: harvested,
+        env,
+        prefer: store.getBot(harvested[0].author)?.model ?? null,
+      }).catch(() => {});
     }
-  }
-  const room = store.getRoom(roomId);
-  if (room?.kind === "channel" && harvested.length && extras.harvest !== false) {
-    await harvestChannelMemory({
-      store,
-      roomId,
-      userMessage: asked,
-      replies: harvested,
-      env,
-      prefer: store.getBot(harvested[0].author)?.model ?? null,
-    }).catch(() => {});
-  }
-  return replies;
+    return replies;
   } finally {
     store.endTurn(roomId);
   }
@@ -790,10 +887,17 @@ function recordTurn(
 export function listRoomTrajectory(store: GuildStore, roomId: string) {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
   const logged = store.listTrajectory(roomId);
-  if (logged.length) return { source: "log" as const, events: logged };
+  const base = logged.length
+    ? { source: "log" as const, events: logged }
+    : {
+        source: "derived" as const,
+        events: synthesizeTrajectory(store.listMessages(roomId)),
+      };
+  const extra = liveTrajectoryForRoom(store, roomId, base.events);
   return {
-    source: "derived" as const,
-    events: synthesizeTrajectory(store.listMessages(roomId)),
+    ...base,
+    events: base.events.concat(extra),
+    live: extra.length > 0,
   };
 }
 
@@ -804,6 +908,53 @@ function parentMessage(
   const id = replyTo?.trim();
   if (!id) return undefined;
   return messages.find((item) => item.id === id);
+}
+
+function lastBotSpeaker(
+  store: GuildStore,
+  messages: { author: string }[],
+): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const author = messages[i].author;
+    if (author && author !== "you" && store.getBot(author)) return author;
+  }
+  return undefined;
+}
+
+function followBotId(
+  store: GuildStore,
+  messages: { author: string }[],
+  parent?: ChatMessage,
+): string | undefined {
+  if (parent && parent.author !== "you" && store.getBot(parent.author)) {
+    return parent.author;
+  }
+  return lastBotSpeaker(store, messages);
+}
+
+function hasExplicitSummon(store: GuildStore, userText: string): boolean {
+  if (isBroadcastMention(userText)) return true;
+  return (
+    summonedHandles(
+      userText,
+      store.listBots().map((bot) => bot.handle),
+    ).length > 0
+  );
+}
+
+function includeFollowBot(
+  store: GuildStore,
+  roomId: string,
+  memberIds: string[],
+  follow?: string,
+): string[] {
+  if (!follow || memberIds.includes(follow)) return memberIds;
+  try {
+    store.addMember(roomId, follow);
+    return [...memberIds, follow];
+  } catch {
+    return memberIds;
+  }
 }
 
 function inviteAssignee(
@@ -854,22 +1005,18 @@ export async function postUserMessage(
   } catch {
     /* ignore */
   }
-  const history = previous.map((item) => ({
-    id: item.id,
-    author: item.author,
-    body: item.body,
-  }));
+  const history = previous.map(toHistoryItem);
   const assignee = assigneeId?.trim();
   let memberIds = assignee
     ? inviteAssignee(store, roomId, assignee)
     : inviteMentionedBots(store, roomId, message.body);
-  if (parent && parent.author !== "you" && !memberIds.includes(parent.author)) {
-    try {
-      store.addMember(roomId, parent.author);
-      memberIds = [...memberIds, parent.author];
-    } catch {
-      // bot gone, or this room is a DM
-    }
+  if (!assignee && !hasExplicitSummon(store, message.body)) {
+    memberIds = includeFollowBot(
+      store,
+      roomId,
+      memberIds,
+      followBotId(store, previous, parent),
+    );
   }
   const replies = await generateReplies(
     store,
@@ -908,23 +1055,19 @@ export async function retryMessage(
         : current;
     store.truncateAfter(roomId, messageId);
     const kept = store.listMessages(roomId);
-    const history = kept.slice(0, -1).map((item) => ({
-      id: item.id,
-      author: item.author,
-      body: item.body,
-    }));
+    const history = kept.slice(0, -1).map(toHistoryItem);
     const parent = parentMessage(kept.slice(0, -1), message.replyTo);
     const assignee = assigneeId?.trim();
     let memberIds = assignee
       ? inviteAssignee(store, roomId, assignee)
       : inviteMentionedBots(store, roomId, message.body);
-    if (parent && parent.author !== "you" && !memberIds.includes(parent.author)) {
-      try {
-        store.addMember(roomId, parent.author);
-        memberIds = [...memberIds, parent.author];
-      } catch {
-        // bot gone, or this room is a DM
-      }
+    if (!assignee && !hasExplicitSummon(store, message.body)) {
+      memberIds = includeFollowBot(
+        store,
+        roomId,
+        memberIds,
+        followBotId(store, kept.slice(0, -1), parent),
+      );
     }
     const replies = await generateReplies(
       store,
@@ -944,11 +1087,7 @@ export async function retryMessage(
   while (userIndex >= 0 && messages[userIndex].author !== "you") userIndex -= 1;
   if (userIndex < 0) throw new StoreError(400, "no user message to retry");
   const userMessage = messages[userIndex];
-  const history = messages.slice(0, userIndex).map((item) => ({
-    id: item.id,
-    author: item.author,
-    body: item.body,
-  }));
+  const history = messages.slice(0, userIndex).map(toHistoryItem);
   const startedAt = new Date().toISOString();
   const signal = store.beginTurn(roomId);
   store.setLiveTurn(roomId, {
@@ -971,7 +1110,7 @@ export async function retryMessage(
       signal,
       mcpTools: extras.mcp === false ? [] : extras.mcpTools,
       onProgress: (update) => {
-        const prev = store.getLiveTurn(roomId);
+        const prev = store.getLiveBotTurn(roomId, current.author);
         store.setLiveTurn(roomId, {
           ...toLiveTurn(current.author, update),
           startedAt: prev?.startedAt || startedAt,

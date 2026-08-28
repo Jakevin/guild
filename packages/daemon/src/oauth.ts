@@ -29,6 +29,7 @@ import {
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
+import { estimateSendTokens, trimSendMessages } from "./send-budget.ts";
 import { runAgentLoop } from "./harness.ts";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { defaultDataDir, StoreError } from "./store.ts";
@@ -842,6 +843,14 @@ export async function completeOAuth(input: {
           content: steer,
           timestamp: Date.now(),
         });
+      }
+      const extra =
+        estimateSendTokens(input.system) +
+        estimateSendTokens(JSON.stringify(useTools ? tools : [])) +
+        2048;
+      const fitted = trimSendMessages(transcript, extra);
+      if (fitted.length < transcript.length) {
+        transcript.splice(0, transcript.length, ...fitted);
       }
       const result = await models.completeSimple(
         model,

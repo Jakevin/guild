@@ -4,6 +4,7 @@ import { Context } from "cordis";
 import Loader from "@cordisjs/plugin-loader";
 import Include from "@cordisjs/plugin-include";
 import { DEFAULT_GUILD_PORT } from "@guild/protocol";
+import { envSandbox } from "./harness.ts";
 
 Include.prototype.write = function write() {};
 
@@ -85,6 +86,7 @@ export async function startGuildDaemon(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<StartedDaemon> {
   const ctx = await createGuildContext(env);
+  const harness = ctx.get("harness");
   const line = JSON.stringify({
     listening: true,
     host: ctx.server.host,
@@ -93,6 +95,8 @@ export async function startGuildDaemon(
     status: "ok",
     ready: true,
     dataDir: ctx.store.dataDir,
+    sandbox: envSandbox(env) ?? "position",
+    workspace: harness?.workspace(),
   });
   process.stdout.write(`${line}\n`);
   return { server: ctx.server.node, ctx };

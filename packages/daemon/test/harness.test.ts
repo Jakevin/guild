@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
+  defaultWorkspace,
   gateTool,
   parseSandbox,
   pathInsideWorkspace,
+  policyFor,
   policyFromEnv,
   runAgentLoop,
+  sandboxFromPosition,
 } from "../src/harness.ts";
 import { executeTool, guildTools } from "../src/tools.ts";
 
@@ -22,6 +25,33 @@ test("parseSandbox defaults to full_access", () => {
   assert.equal(parseSandbox("read_only"), "read_only");
   assert.equal(policyFromEnv({}).sandbox, "full_access");
   assert.equal(policyFromEnv({ GUILD_SANDBOX: "workspace_write" }).sandbox, "workspace_write");
+});
+
+test("sandboxFromPosition reads the Tools line", () => {
+  assert.equal(
+    sandboxFromPosition("# RD\n\n## Tools\nsandbox: workspace_write\n"),
+    "workspace_write",
+  );
+  assert.equal(sandboxFromPosition("# PM\n\n- sandbox: read_only\n"), "read_only");
+  assert.equal(sandboxFromPosition("# no line"), undefined);
+});
+
+test("policyFor: env wins over position; position wins over default", () => {
+  const position = "## Tools\nsandbox: workspace_write\n";
+  assert.equal(policyFor({}, { position }).sandbox, "workspace_write");
+  assert.equal(
+    policyFor({ GUILD_SANDBOX: "read_only" }, { position }).sandbox,
+    "read_only",
+  );
+  assert.equal(
+    policyFor({ GUILD_SANDBOX: "full_access" }, { position }).sandbox,
+    "full_access",
+  );
+  assert.equal(policyFor({}).workspace, defaultWorkspace());
+  assert.equal(
+    existsSync(join(defaultWorkspace(), "packages/daemon/cordis.yml")),
+    true,
+  );
 });
 
 test("read_only refuses run/write/mcp and allows read", async () => {

@@ -53,6 +53,9 @@ export const DEFAULT_BOTS: DefaultBotSeed[] = [
 ## Definition of done
 - 服務健康、回滾路徑清楚、祕密沒有外洩。
 - 接手的人看你的紀錄就能重做一次。
+
+## Tools
+sandbox: workspace_write
 `,
   },
   {
@@ -97,6 +100,9 @@ export const DEFAULT_BOTS: DefaultBotSeed[] = [
 
 ## Definition of done
 - 任務可驗收，阻塞有主人，決策有紀錄。
+
+## Tools
+sandbox: read_only
 `,
   },
   {
@@ -140,6 +146,9 @@ export const DEFAULT_BOTS: DefaultBotSeed[] = [
 
 ## Definition of done
 - 測試綠、行為符合任務、reviewer 能 repro。
+
+## Tools
+sandbox: workspace_write
 `,
   },
   {
@@ -183,6 +192,9 @@ export const DEFAULT_BOTS: DefaultBotSeed[] = [
 
 ## Definition of done
 - 工程能按標註實作；空狀態與錯誤狀態有設計。
+
+## Tools
+sandbox: workspace_write
 `,
   },
   {
@@ -232,6 +244,9 @@ export const DEFAULT_BOTS: DefaultBotSeed[] = [
 
 ## Definition of done
 - 有可發布的文案、對象、通路，以及怎麼看有沒有效。
+
+## Tools
+sandbox: read_only
 `,
   },
 ];

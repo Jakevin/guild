@@ -25,7 +25,7 @@
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">大廳</a>
-        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/studio" data-i18n="nav.studio">編制</a>
         <a href="/library" data-i18n="nav.library">工坊</a>
         <div class="side-group">
           <span class="side-group-label" data-i18n="nav.settings">模型</span>
@@ -383,6 +383,11 @@
           "</span><span></span></div>" +
           rows;
       }
+      function maskApiKey(value) {
+        const key = String(value || "");
+        if (key.length <= 10) return key;
+        return key.slice(0, 5) + "…" + key.slice(-5);
+      }
       function storedBadge(p) {
         if (p.stored === "env") return '<span class="badge">env</span>';
         if (p.stored === "literal") return '<span class="badge">' + t("settings.filled") + "</span>";
@@ -412,13 +417,13 @@
           '<option value="openai-completions"' + (p.api !== "anthropic-messages" && p.api !== "openai-responses" ? " selected" : "") + ">openai-completions</option>" +
           '<option value="anthropic-messages"' + (p.api === "anthropic-messages" ? " selected" : "") + ">anthropic-messages</option>" +
           '<option value="openai-responses"' + (p.api === "openai-responses" ? " selected" : "") + ">openai-responses</option></select></div>" +
-          '<div><label>API key</label><input type="password" data-p="' + index + '" data-f="apiKey" value="' +
-          escapeHtml(p.stored === "literal" ? "" : p.apiKey || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div></div>' +
+          '<div><label>API key</label><input type="text" data-p="' + index + '" data-f="apiKey" spellcheck="false" autocomplete="off" autocapitalize="off" value="' +
+          escapeHtml(p.apiKeyPreview || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div></div>' +
           "<label>" + t("model") + "</label>" + models +
           '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>" +
           '<div class="card-foot"><p class="hint">' + t("settings.saveKeyHint") + "</p>" +
           '<button type="button" data-save-keys="' + index + '">' +
-          t("settings.saveKey", { name: p.name || p.id || t("settings.thisProvider") }) +
+          t("settings.saveKey") +
           "</button></div></div>"
         );
       }
@@ -434,7 +439,10 @@
         p.baseUrl = card.querySelector('[data-f="baseUrl"]').value.trim();
         p.api = card.querySelector('[data-f="api"]').value;
         const key = card.querySelector('[data-f="apiKey"]').value.trim();
-        if (key) p.apiKey = key;
+        if (key && key !== (p.apiKeyPreview || "")) {
+          p.apiKey = key;
+          p.apiKeyPreview = maskApiKey(key);
+        }
         const models = [];
         card.querySelectorAll(".model-row").forEach((row) => {
           const mid = row.querySelector('[data-f="id"]').value.trim();
@@ -740,6 +748,19 @@
         render();
         flash("health", t("settings.savedKeyFlash", { name: label }));
       }
+      document.getElementById("providers").addEventListener("focusin", (event) => {
+        const input = event.target.closest('[data-f="apiKey"]');
+        if (input) input.select();
+      });
+      document.getElementById("providers").addEventListener("focusout", (event) => {
+        const input = event.target.closest('[data-f="apiKey"]');
+        if (!input) return;
+        flushVisibleCard();
+        const card = input.closest(".provider-card");
+        const index = card ? Number(card.getAttribute("data-index")) : -1;
+        const p = (data.providers || [])[index];
+        if (p) input.value = p.apiKeyPreview || "";
+      });
       document.getElementById("providers").addEventListener("click", (event) => {
         const el = event.target;
         if (el.closest("[data-save-keys]")) {

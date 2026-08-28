@@ -16,7 +16,7 @@
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">大廳</a>
-        <a href="/studio" data-i18n="nav.studio">酒吧</a>
+        <a href="/studio" data-i18n="nav.studio">編制</a>
         <a class="on" href="/mcp" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
       </nav>
@@ -41,8 +41,9 @@
           <button type="button" id="save" data-i18n="mcpAdd.save">連接</button>
         </section>
         <section class="card">
-          <h2 data-i18n="mcpAdd.hostTitle">從本機 CLI 匯入</h2>
-          <div id="host-list"></div>
+          <h2 data-i18n="mcpAdd.hostTitle">本機已發現</h2>
+          <p class="sub" data-i18n="mcp.host">本機 CLI，對話可直接用</p>
+          <div id="host-list" class="host-list"></div>
         </section>
       </div>
     </section>
@@ -86,6 +87,12 @@
         }
         setFlash("health", t("mcpAdd.saved", { name: body.name || name }));
       });
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/"/g, "&quot;");
+      }
       fetch("/mcp/host")
         .then((r) => r.json())
         .then((rows) => {
@@ -100,42 +107,20 @@
                 .concat((row.launch && row.launch.args) || [])
                 .filter(Boolean)
                 .join(" ");
+              const meta = [row.host, cmd].filter(Boolean).join(" · ");
               return (
-                '<div class="lib-card"><div class="skill-meta"><strong>' +
-                String(row.name || "")
-                  .replace(/&/g, "&amp;")
-                  .replace(/</g, "&lt;") +
-                "</strong><em>" +
-                String(row.host || "") +
-                " · " +
-                String(cmd)
-                  .replace(/&/g, "&amp;")
-                  .replace(/</g, "&lt;") +
-                '</em></div><button type="button" data-import="' +
-                String(row.id || "").replace(/"/g, "&quot;") +
+                '<div class="host-row"><div class="host-copy"><strong>' +
+                escapeHtml(row.name) +
+                '</strong><p class="sub" title="' +
+                escapeHtml(meta) +
                 '">' +
-                t("mcp.import") +
-                "</button></div>"
+                escapeHtml(meta) +
+                "</p></div></div>"
               );
             })
             .join("");
         })
         .catch(() => {});
-      document.getElementById("host-list").addEventListener("click", async (event) => {
-        const btn = event.target.closest("[data-import]");
-        if (!btn) return;
-        const res = await fetch("/mcp/import", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: btn.getAttribute("data-import") }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setFlash("error", body.error || t("saveFailed"));
-          return;
-        }
-        setFlash("health", t("mcpAdd.imported", { name: body.name || "" }));
-      });
     </script>
   </body>
 </html>
