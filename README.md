@@ -4,13 +4,13 @@
 
 [English](README.md) · [中文](README.zh.md) · [日本語](README.ja.md)
 
-**Staff a local bench of bots. @mention the one you actually want. Not another omniscient chat.**
+**A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.**
 
 Local-first. Your files. Your models.
 
-![Staff a local bench. @mention one.](docs/demo.gif)
+![A local guild. @mention one adventurer.](docs/demo.gif)
 
-## Quick start
+## Open the hall
 
 Need [Node](https://nodejs.org) ≥ 22.19 and [pnpm](https://pnpm.io) 10.x.
 
@@ -22,17 +22,17 @@ pnpm dev
 
 Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 
-1. **Models** (`/settings`) — wire a provider or a subscription. Without a model, bots can still ack; they cannot think.
-2. Open a channel. Write `Channel.md` if the room has a job.
-3. `@pm` to scope, `@rd` to look at code. They reply when mentioned (or when you reply to them). `@channel` pings everyone — usually the wrong move.
+1. **Models** (`/settings`) — wire a provider or a subscription. Without a model, adventurers can still ack; they cannot think.
+2. Open a channel — a contract. Write `Channel.md` if the hall has a job.
+3. `@pm` to scope, `@rd` to look at code. They reply when `@mentioned`, when you reply to them, or — if you name nobody — the last adventurer who spoke. `@channel` pings the whole roster — usually the wrong move.
 
 Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in `guild.sqlite` (WAL). Souls / skills / MEMORY.md stay files. Not a cloud account. `guildd` is a Cordis 4 app; plugin composition lives in `packages/daemon/cordis.yml`. `GUILD_*` env vars still win over YAML.
 
-## What it is
+## The roster
 
-- **Person** is the unit: Soul / Agent / Skill / Position, invoked with `@handle`.
-- Default five: `@infra` `@pm` `@rd` `@design` `@marketing`.
-- Hire in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI.
+- **The unit is a named adventurer:** Soul / Agent / Skill / Position, invoked with `@handle`.
+- Default roster of five: `@infra` `@pm` `@rd` `@design` `@marketing`. A roster, not a sortie — work still goes to one `@handle` at a time.
+- Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI.
 - Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter).
 
 ## Workshop
@@ -41,17 +41,18 @@ Open `/library`. One page, three tabs.
 
 | Tab | What |
 |---|---|
-| **Skills** | Markdown instructions. Staff onto a bot. The model must call `skill` to load the body. |
+| **Skills** | Markdown instructions. Staff onto an adventurer. The model must call `skill` to load the body. |
 | **Subagents** | Chat calls `spawn`. The child returns a summary. Cannot nest. No MCP tools. |
 | **MCP** | A stdio tool server, **not a skill**. Do not put it in the skills library. |
 
 ### MCP
 
-1. Workshop → MCP → [Add server](http://127.0.0.1:7420/mcp/add), or import a host card from Codex / Claude / Cursor on this machine.
+1. Workshop → MCP → [Add server](http://127.0.0.1:7420/mcp/add) writes `{GUILD_HOME}/mcp.json`.
 2. Name + command + args. There is no URL field. HTTP MCP is not wired.
-3. After it is connected, **every** bot in chat can call those tools. Names look like `mcp__server__tool`.
+3. Chat also **spawns** stdio MCP already configured for Claude / Cursor / Codex on this machine (`~/.claude.json`, `~/.cursor/mcp.json`, `~/.codex/config.toml`). No import step. A same-name row in `mcp.json` wins; the host leftover is skipped.
+4. After it is live, **every** adventurer in the hall can call those tools. Names look like `mcp__server__tool`.
 
-Config is `{GUILD_HOME}/mcp.json` (default `~/.guild/mcp.json`). Host files (`~/.claude.json`, `~/.cursor/mcp.json`, `~/.codex/config.toml`) are listed read-only until you import. Import copies the launch into Guild; chat does not use the host file directly.
+To keep a host server out of Guild: remove it from the host file, or set `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml` (that unloads Guild MCP entirely, including `mcp.json`).
 
 ```json
 {
@@ -66,16 +67,19 @@ If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a comman
 ## What it is not
 
 - Not a Codex harness
-- Not a project / task board
+- Not a quest board — no project / task board
+- Not a party sortie — you call one adventurer, not a squad
 - Not a cloud account
-- Not sandboxed tools
+- Not an OS jail (optional Position / `GUILD_SANDBOX` tool gate only)
 - Not `apps/desktop` (orphan; the product UI is the daemon)
 
 ## Current limits
 
-**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`).** Default cwd for `run` is `$HOME`. Optional `read_only` / `workspace_write` (with `GUILD_WORKSPACE`) are a tool gate, not Codex isolation. Details: [SECURITY.md](./SECURITY.md).
+**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`, unless the bot's POSITION.md has `sandbox:`).** Default cwd for `run` is `$HOME` (`workspace_write` uses `GUILD_WORKSPACE` or this checkout). The gate is not Codex isolation. Details: [SECURITY.md](./SECURITY.md).
 
-**MCP spawns a local process as you.** Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
+**MCP spawns a local process as you** — Guild `mcp.json` **and** host Claude / Cursor / Codex configs, with no import / consent prompt. Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
+
+**Browser is off-login by default.** `browser` drives a throwaway Chrome profile. Set `GUILD_BROWSER_REAL_PROFILE=1` to snapshot your **active** Chrome profile (`last_used`) into `~/.guild/browser-profile/chrome` (Hermes-shaped copy — never the live profile). Details: [SECURITY.md](./SECURITY.md).
 
 Also not built: Tauri app, staffing, approvals, per-bot `CODEX_HOME`, HTTP MCP. Design docs under `docs/` describe a later shape — they are not a changelog.
 
