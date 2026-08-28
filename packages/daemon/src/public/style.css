@@ -1,14 +1,19 @@
 :root {
-  --bg: #000;
-  --panel: #000;
-  --lift: #111;
-  --card: #111;
-  --card-hover: #1a1a1a;
-  --line: #1c1c1c;
-  --fill: #161616;
-  --text: #ececec;
-  --muted: #8b8b8b;
-  --accent: #c9cdd3;
+  --enamel: #0B0E12;
+  --paper: #F3EFE6;
+  --ink: #0B0E12;
+  --steel: #A8B0BC;
+  --signal: #C9A227;
+  --bg: #0B0E12;
+  --panel: #10141A;
+  --lift: #161C24;
+  --card: #161C24;
+  --card-hover: #1A222C;
+  --line: #1C222C;
+  --fill: #141A22;
+  --text: #E8E4DC;
+  --muted: #8B8F96;
+  --accent: #A8B0BC;
   --ok: #9fdfb2;
   --err: #fca5a5;
   --radius: 14px;
@@ -31,7 +36,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(12px);
   z-index: 10;
 }
@@ -51,14 +56,14 @@ a:hover { text-decoration: underline; }
   font-size: 0.9rem;
 }
 .nav-link:hover { background: var(--card); color: var(--text); text-decoration: none; }
-.nav-link.on { background: #3a3a3a; color: var(--text); }
+.nav-link.on { background: var(--lift); color: var(--text); }
 .locale-switch {
   display: inline-flex;
   gap: 2px;
   margin-left: 0.5rem;
   padding: 2px;
   border-radius: 999px;
-  background: #1c1c1c;
+  background: var(--line);
 }
 .locale-switch button {
   margin: 0;
@@ -66,13 +71,13 @@ a:hover { text-decoration: underline; }
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #8b8b8b;
+  color: var(--muted);
   font: inherit;
   font-size: 0.75rem;
   cursor: pointer;
 }
 .locale-switch button.on,
-.locale-switch button:hover { background: #2f2f2f; color: #eee; }
+.locale-switch button:hover { background: var(--lift); color: var(--text); }
 
 body.app {
   display: grid;
@@ -147,6 +152,11 @@ body.app .side-nav .side-sub {
   margin-left: 1.05rem;
   padding-left: 0.7rem;
 }
+body.app.bar-page #side-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 body.settings-page [data-sec-panel] { display: none; }
 body.settings-page[data-section="main"] [data-sec-panel="main"],
 body.settings-page[data-section="subs"] [data-sec-panel="subs"],
@@ -184,8 +194,8 @@ body.app .pane-head a.tab:hover {
   text-decoration: none;
 }
 body.app .pane-head a.tab.on {
-  background: #ececec;
-  color: #111;
+  background: var(--paper);
+  color: var(--ink);
 }
 body.app .side-foot {
   margin-top: auto;
@@ -286,8 +296,8 @@ button {
   padding: 0.55rem 0.95rem;
   font: inherit;
   font-weight: 560;
-  color: #111;
-  background: var(--text);
+  color: var(--ink);
+  background: var(--paper);
   border: 0;
   border-radius: 999px;
   cursor: pointer;
@@ -428,7 +438,7 @@ button:disabled { opacity: 0.45; }
 }
 .skill-card.on .skill-check {
   border: 0;
-  background: #ececec url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23111111' stroke-width='2.2' d='M3 8.2 6.3 11.5 13 4.5'/></svg>") center / 12px no-repeat;
+  background: var(--paper) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%230B0E12' stroke-width='2.2' d='M3 8.2 6.3 11.5 13 4.5'/></svg>") center / 12px no-repeat;
 }
 
 .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1rem 0 0.8rem; }
@@ -442,7 +452,7 @@ button:disabled { opacity: 0.45; }
   color: var(--muted);
   font-size: 0.85rem;
 }
-.chip.on { background: #ececec; color: #111; }
+.chip.on { background: var(--paper); color: var(--ink); }
 .chip-n {
   opacity: 0.55;
   font-variant-numeric: tabular-nums;
@@ -467,7 +477,7 @@ button:disabled { opacity: 0.45; }
   cursor: pointer;
 }
 .mini-tag:hover { color: var(--text); background: #4a4a4a; }
-.mini-tag.on { background: #ececec; color: #111; }
+.mini-tag.on { background: var(--paper); color: var(--ink); }
 
 .more {
   margin: 0.4rem 0 1.2rem;
@@ -521,7 +531,7 @@ a.bot-card:hover {
   color: var(--muted);
   border: 0;
 }
-.tab.on { background: #ececec; color: #111; }
+.tab.on { background: var(--paper); color: var(--ink); }
 .tab-pane.hidden { display: none; }
 .hidden { display: none; }
 
@@ -904,15 +914,18 @@ dialog.pick .dialog-actions {
   margin-top: 0.9rem;
 }
 
-body.bar-page { background: #07060c; }
-body.bar-page .appbar {
-  background: rgba(7, 6, 12, 0.92);
-  border-bottom-color: #1c1830;
+body.app.bar-page .page-body {
+  max-width: 68rem;
+  padding-top: 0.85rem;
+}
+body.app.bar-page .shell {
+  max-width: none;
+  padding: 1.1rem 0 2rem;
 }
 .rpg-wrap {
   max-width: 960px;
   margin: 0 auto;
-  padding: 1rem 1.2rem 0.4rem;
+  padding: 0 0 0.4rem;
 }
 .rpg-screen {
   position: relative;

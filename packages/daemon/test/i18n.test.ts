@@ -42,12 +42,16 @@ test("zh-Hant and en packs share the same keys", () => {
 test("t interpolates and switches locale in memory", () => {
   setGuildLocale("zh-Hant");
   assert.equal(guildLocale(), "zh-Hant");
-  assert.equal(t("nav.chat"), "訊息");
+  assert.equal(t("nav.chat"), "大廳");
+  assert.equal(t("channels"), "委託");
+  assert.equal(t("dms"), "密談");
   assert.equal(t("minutesAgo", { n: 3 }), "3 分鐘前");
   assert.equal(tagLabel("development"), "開發");
   setGuildLocale("en");
   assert.equal(guildLocale(), "en");
-  assert.equal(t("nav.chat"), "Chat");
+  assert.equal(t("nav.chat"), "Hall");
+  assert.equal(t("channels"), "Quests");
+  assert.equal(t("dms"), "Whispers");
   assert.equal(t("minutesAgo", { n: 3 }), "3 min ago");
   assert.equal(tagLabel("development"), "Dev");
   assert.equal(t("missing.key"), "missing.key");
@@ -76,4 +80,11 @@ test("every public page loads i18n.js", () => {
   assert.match(settings, /data-locale="zh-Hant"/);
   assert.match(settings, /data-locale="en"/);
   assert.match(settings, /sidebar-resizer/);
+  const studio = readFileSync(STUDIO, "utf8");
+  assert.match(studio, /class="app bar-page"/);
+  assert.match(studio, /sidebar-resizer/);
+  assert.match(studio, /class="side-nav"/);
+  assert.match(studio, /href="\/studio"/);
+  assert.match(studio, /id="side-roster"/);
+  assert.match(studio, /id="side-hire"/);
 });

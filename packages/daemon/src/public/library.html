@@ -27,7 +27,7 @@
     <aside class="sidebar">
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
-        <a href="/" data-i18n="nav.chat">訊息</a>
+        <a href="/" data-i18n="nav.chat">大廳</a>
         <a href="/studio" data-i18n="nav.studio">酒吧</a>
         <a class="on" href="/library" data-i18n="nav.library">工坊</a>
         <a href="/settings" data-i18n="nav.settings">模型</a>
@@ -97,7 +97,7 @@
 
         <section data-lib-panel="mcp">
           <p class="lede" data-i18n-html="mcp.lede">
-            連接器，不是技能。Skill 是說明書；MCP 是工具伺服器。連上之後，對話裡的 bot 可以直接 call 這些 tools。
+            連接器，不是技能。Skill 是說明書；MCP 是工具伺服器。連上之後，隊員可以直接 call 這些 tools。
           </p>
           <div class="toolbar">
             <div class="search">
@@ -115,7 +115,7 @@
     </section>
     <script>
       const flash = document.getElementById("flash");
-      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
       const summaryEl = document.getElementById("lib-summary");
 
       function libSection() {

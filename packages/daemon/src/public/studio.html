@@ -17,20 +17,30 @@
     />
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body class="bar-page" data-i18n-page="studio">
-    <header class="appbar">
-      <a class="logo" href="/">Guild</a>
-      <nav>
-        <a class="nav-link" href="/" data-i18n="nav.chat">訊息</a>
-        <a class="nav-link on" href="/studio" data-i18n="nav.studio">酒吧</a>
-        <a class="nav-link" href="/library" data-i18n="nav.library">工坊</a>
-        <a class="nav-link" href="/settings" data-i18n="nav.settings">模型</a>
+  <body class="app bar-page" data-i18n-page="studio">
+    <aside class="sidebar">
+      <div class="side-brand"><a class="logo" href="/">Guild</a></div>
+      <nav class="side-nav">
+        <a href="/" data-i18n="nav.chat">大廳</a>
+        <div class="side-group">
+          <span class="side-group-label" data-i18n="nav.studio">酒吧</span>
+          <a class="side-sub" id="side-hire" href="/studio" data-i18n="studio.hireChip">招募</a>
+          <div id="side-roster"></div>
+        </div>
+        <a href="/library" data-i18n="nav.library">工坊</a>
+        <a href="/settings" data-i18n="nav.settings">模型</a>
+      </nav>
+      <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
+    </aside>
+    <section class="pane">
+      <header class="pane-head">
+        <h1 data-i18n="nav.studio">酒吧</h1>
         <div class="locale-switch">
           <button type="button" data-locale="zh-Hant" data-i18n="lang.zh">中</button>
           <button type="button" data-locale="en" data-i18n="lang.en">EN</button>
         </div>
-      </nav>
-    </header>
+      </header>
+      <div class="page-body">
     <div class="rpg-wrap">
       <div class="rpg-screen" id="rpg-screen" data-scene="street">
         <div class="rpg-scene is-street" id="scene-street">
@@ -65,7 +75,7 @@
     </div>
     <main class="shell shell-wide" id="hire">
       <p class="eyebrow" id="page-eyebrow">今晚</p>
-      <h1 id="page-title">招募新人</h1>
+      <h1 id="page-title">招募隊員</h1>
       <p class="lede" id="page-lede">寫好 Soul / Agent / Position，勾技能（含本機 Codex、Grok 等 CLI），請他入座。</p>
       <p id="flash" class="muted"></p>
       <form id="create-bot">
@@ -75,9 +85,9 @@
           <label>Handle</label>
           <input name="handle" required placeholder="ada" />
           <label data-i18n="studio.oneLiner">一句話</label>
-          <input name="oneLiner" placeholder="這個 bot 在團隊裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
+          <input name="oneLiner" placeholder="這名隊員在小隊裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
           <div class="card-foot">
-            <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">刪除這個人</button>
+            <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">請這名隊員離隊</button>
             <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
           </div>
         </section>
@@ -119,8 +129,8 @@
         </section>
 
         <section class="skill-picker">
-          <h2 data-i18n="studio.botSkills">這個 bot 的技能（含本機 CLI）</h2>
-          <p class="muted" data-i18n-html="studio.botSkillsHint">Guild 技能庫，加上本機 Claude、Codex、Pi、Grok、Cursor、DSH 的 SKILL.md。勾或取消會立刻存檔，拷進 Guild 再配給這個人。沒有的可到 <a href="/skills/add">追加技能</a> 安裝，不影響其他人。</p>
+          <h2 data-i18n="studio.botSkills">這名隊員的技能（含本機 CLI）</h2>
+          <p class="muted" data-i18n-html="studio.botSkillsHint">公會技能庫，加上本機 Claude、Codex、Pi、Grok、Cursor、DSH 的 SKILL.md。勾或取消會立刻存檔，拷進公會再配給這名隊員。沒有的可到 <a href="/skills/add">追加技能</a> 安裝，不影響其他人。</p>
           <div class="toolbar">
             <div class="search">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -138,11 +148,13 @@
         <button type="submit" id="submit-btn">請他入座</button>
       </form>
     </main>
+      </div>
+    </section>
     <script>
       const flash = document.getElementById("flash");
       const form = document.getElementById("create-bot");
       const EDIT_ID = (location.pathname.match(/^\/edit\/([^/]+)$/) || [])[1];
-      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
       let allSkills = [];
       let selected = new Set();
       let openId = "";
@@ -822,8 +834,29 @@
           "</a>"
         );
       }
+      function renderSideRoster(bots) {
+        const hire = document.getElementById("side-hire");
+        const box = document.getElementById("side-roster");
+        if (hire) hire.classList.toggle("on", !EDIT_ID);
+        if (!box) return;
+        box.innerHTML = (bots || [])
+          .map((bot) => {
+            const on = EDIT_ID === bot.id ? " on" : "";
+            return (
+              '<a class="side-sub' +
+              on +
+              '" href="/edit/' +
+              encodeURIComponent(bot.id) +
+              '">@' +
+              esc(bot.handle) +
+              "</a>"
+            );
+          })
+          .join("");
+      }
       function renderBar(bots) {
         barBots = bots || [];
+        renderSideRoster(barBots);
         const bottles = ["#c44", "#4a8", "#c84", "#48c", "#a4c", "#cc8", "#844", "#4cc"];
         document.getElementById("inn-bottles").innerHTML = bottles
           .map((c) => '<span style="background:' + c + '"></span>')

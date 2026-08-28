@@ -62,6 +62,8 @@ test("prose @handles are references; only the leading group or the first @handle
   assert.deepEqual(summonedHandles("請 @pm 看 @rd 的 PR", handles), ["pm"]);
   assert.deepEqual(summonedHandles("沒有人 ` @pm ` 在 code 裡", handles), []);
   assert.equal(isBroadcastMention("@here 全員"), true);
+  assert.equal(isBroadcastMention("@channel 全員"), true);
+  assert.equal(isBroadcastMention("@quest 全員"), true);
   assert.equal(isBroadcastMention("照 @marketing 的方案"), false);
   assert.deepEqual(
     mentionedHandles(

@@ -487,7 +487,7 @@ test("home is chat and studio is the bar", () => {
   assert.equal(DEFAULT_GUILD_HOST, "127.0.0.1");
   assert.equal(DEFAULT_GUILD_PORT, 7420);
   const home = readFileSync(CHAT_HTML, "utf8");
-  assert.match(home, /私訊/);
+  assert.match(home, /密談/);
   assert.match(home, /href="\/studio"/);
   assert.match(home, /酒吧/);
   assert.match(home, /href="\/settings"/);
@@ -496,6 +496,13 @@ test("home is chat and studio is the bar", () => {
   assert.match(home, /Ask anything/);
   assert.match(home, /\/i18n\.js/);
   assert.match(home, /sidebar-resizer/);
+  const chatCss = readFileSync(
+    fileURLToPath(new URL("../src/public/chat.css", import.meta.url)),
+    "utf8",
+  );
+  assert.match(chatCss, /body\.grok \.sidebar/);
+  assert.match(chatCss, /#EDE6D6/);
+  assert.match(chatCss, /#16100B/);
   assert.doesNotMatch(home, /locale-switch/);
   assert.match(home, /t\("deepDiving"\)/);
   assert.match(home, /t\("think"\)/);
@@ -586,6 +593,8 @@ test("home is chat and studio is the bar", () => {
     fileURLToPath(new URL("../src/public/style.css", import.meta.url)),
     "utf8",
   );
+  assert.match(style, /--bg:\s*#0B0E12/);
+  assert.match(style, /--paper:\s*#F3EFE6/);
   assert.match(style, /grid-template-columns:\s*40px minmax\(0,\s*1fr\)/);
   assert.match(style, /-webkit-line-clamp:\s*2/);
   assert.doesNotMatch(library, /Add Soul/);
@@ -622,7 +631,7 @@ test("home is chat and studio is the bar", () => {
   assert.doesNotMatch(studio, /skill-host-label/);
   assert.match(studio, /PATCH/);
   assert.match(studio, /EDIT_ID/);
-  assert.match(studio, /這個 bot 的技能（含本機 CLI）/);
+  assert.match(studio, /這名隊員的技能（含本機 CLI）/);
   assert.match(studio, /不影響其他人/);
   assert.match(studio, /Codex、Grok/);
   assert.match(studio, /tag-row/);
@@ -697,7 +706,7 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     const html = await page.text();
     assert.match(html, /members-btn/);
     assert.match(html, /members-pop/);
-    assert.match(html, /私訊/);
+    assert.match(html, /密談/);
     assert.match(html, /function formatUpdated/);
     assert.match(html, /function formatMsgClock/);
     assert.match(html, /function msgStamp/);

@@ -1,5 +1,5 @@
-/** @channel / @here / @all still mean the whole room. */
-const BROADCAST = /(^|\s)@(channel|here|all)\b/i;
+/** @channel / @quest / @here / @all still mean the whole quest. */
+const BROADCAST = /(^|\s)@(channel|quest|here|all)\b/i;
 const HANDLE = /@([A-Za-z0-9_-]+)/g;
 /** Consecutive @handles at the start of the message. */
 const LEADING = /^\s*((?:@[A-Za-z0-9_-]+[\s,、]*)+)/;

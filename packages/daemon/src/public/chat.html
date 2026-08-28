@@ -7,7 +7,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
-    <title>Guild — 訊息</title>
+    <title>Guild — 大廳</title>
     <link rel="stylesheet" href="/chat.css" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
@@ -18,15 +18,15 @@
         <input class="search" id="filter" placeholder="搜尋" data-i18n-placeholder="search" />
       </div>
       <div class="section-h">
-        <span data-i18n="channels">頻道</span>
-        <button type="button" class="add-ch" id="toggle-create" title="新頻道" data-i18n-title="newChannel">+</button>
+        <span data-i18n="channels">委託</span>
+        <button type="button" class="add-ch" id="toggle-create" title="新委託" data-i18n-title="newChannel">+</button>
       </div>
       <form class="create-row" id="create-row">
-        <input id="new-channel" placeholder="新頻道名稱" data-i18n-placeholder="newChannelName" />
+        <input id="new-channel" placeholder="委託名稱" data-i18n-placeholder="newChannelName" />
         <button type="submit" data-i18n="create">建立</button>
       </form>
       <ul class="navlist" id="channels"></ul>
-      <div class="section-h" data-i18n="dms">私訊</div>
+      <div class="section-h" data-i18n="dms">密談</div>
       <ul class="navlist" id="dms"></ul>
       <div class="side-foot">
         <a href="/studio" data-i18n="nav.studio">酒吧</a>
@@ -45,14 +45,14 @@
         <div class="head-actions">
           <button type="button" class="traj-btn" id="traj-btn" title="Trajectory" data-i18n="trace" data-i18n-title="trace">Trajectory</button>
         <div class="members-wrap" id="members-wrap" hidden>
-          <button type="button" class="members-btn" id="members-btn" title="成員" data-i18n-title="members">
+          <button type="button" class="members-btn" id="members-btn" title="小隊" data-i18n-title="members">
             <span class="members-stack" id="members-stack"></span>
             <span class="members-count" id="members-count"></span>
           </button>
           <div class="members-pop" id="members-pop" hidden>
-            <div class="members-sec" data-i18n="members.in">在頻道裡</div>
+            <div class="members-sec" data-i18n="members.in">在這張委託裡</div>
             <div id="members-in"></div>
-            <div class="members-sec" data-i18n="members.out">不在頻道中</div>
+            <div class="members-sec" data-i18n="members.out">不在這張委託</div>
             <div id="members-out"></div>
           </div>
         </div>
@@ -201,27 +201,27 @@
       <div class="bot-card-handle" id="bot-card-handle"></div>
       <p class="bot-card-bio" id="bot-card-bio"></p>
       <div class="bot-card-actions">
-        <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">訊息</a>
+        <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">密談</a>
         <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">設定</a>
         <button type="button" class="bot-card-btn" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
       </div>
     </div>
     <dialog id="channel-md">
-      <h2 data-i18n="channel.md">Channel.md</h2>
-      <p data-i18n="channel.mdHelp">這個頻道的工作說明。用 @handle 叫 bot 時會讀到這份筆記。私訊沒有 Channel.md。</p>
+      <h2 data-i18n="channel.md">委託書</h2>
+      <p data-i18n="channel.mdHelp">這張委託的任務說明。用 @handle 叫隊員時會讀到。密談沒有委託書。</p>
       <textarea id="channel-md-body" rows="8" placeholder="# Channel.md"></textarea>
-      <h2 data-i18n="memory.channel">Channel MEMORY.md</h2>
-      <p data-i18n="memory.channelHelp">這個頻道共享的站立筆記。有用的回合後會自動更新。人寫的 Channel.md 優先。</p>
+      <h2 data-i18n="memory.channel">委託 MEMORY.md</h2>
+      <p data-i18n="memory.channelHelp">這張委託共享的站立筆記。有用的回合後會自動更新。人寫的委託書優先。</p>
       <textarea id="channel-memory-body" rows="8" placeholder="# MEMORY.md"></textarea>
       <div class="dialog-actions">
-        <button type="button" class="ghost danger" id="channel-md-del" data-i18n="channel.delete">刪除頻道</button>
+        <button type="button" class="ghost danger" id="channel-md-del" data-i18n="channel.delete">刪除委託</button>
         <button type="button" class="ghost" id="channel-md-cancel" data-i18n="cancel">取消</button>
         <button type="button" id="channel-md-save" data-i18n="save">儲存</button>
       </div>
     </dialog>
     <dialog id="bot-memory">
       <h2 data-i18n="memory.bot">MEMORY.md</h2>
-      <p data-i18n="memory.botHelp">這個 bot 學會的站立筆記。有用的回合後會自動更新。</p>
+      <p data-i18n="memory.botHelp">這名隊員學會的站立筆記。有用的回合後會自動更新。</p>
       <textarea id="bot-memory-body" rows="12" placeholder="# MEMORY.md"></textarea>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="bot-memory-cancel" data-i18n="cancel">取消</button>
@@ -237,8 +237,8 @@
       </div>
     </dialog>
     <dialog id="invite">
-      <h2 data-i18n="invite.title">拉 bot 進頻道</h2>
-      <p data-i18n="invite.body">勾選要進來的人。頻道裡用 @handle 叫他們回話。</p>
+      <h2 data-i18n="invite.title">拉隊員進委託</h2>
+      <p data-i18n="invite.body">勾選要接這張委託的人。委託裡用 @handle 叫他們。</p>
       <div class="pick" id="pick"></div>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="invite-cancel" data-i18n="cancel">取消</button>
@@ -246,7 +246,7 @@
       </div>
     </dialog>
     <script>
-      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e", "#c9a227"];
+      const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
       const state = {
         channels: [],
         bots: [],
@@ -932,7 +932,7 @@
       function botsFromSend(text) {
         if (state.kind === "dm") return [state.id];
         const scan = mentionScanText(text);
-        if (/(^|\s)@(channel|here|all)\b/i.test(scan)) {
+        if (/(^|\s)@(channel|quest|here|all)\b/i.test(scan)) {
           const ch = currentChannel();
           return (ch && ch.memberIds) || [];
         }
@@ -950,7 +950,7 @@
       function assignCandidates(text) {
         if (state.kind === "dm") return [];
         const scan = mentionScanText(text);
-        if (/(^|\s)@(channel|here|all)\b/i.test(scan)) return [];
+        if (/(^|\s)@(channel|quest|here|all)\b/i.test(scan)) return [];
         const ids = mentionedBotIds(text).slice();
         if (
           state.replyTo &&
@@ -1101,18 +1101,22 @@
         const chip = opts.chip
           ? '<span class="nav-chip">' + escapeHtml(opts.chip) + "</span>"
           : "";
+        const flash = opts.busy
+          ? '<span class="busy-flash" title="' + t("busy") + '"></span>'
+          : "";
+        const av = opts.av
+          ? '<span class="nav-av">' + opts.av + flash + "</span>"
+          : flash;
         return (
           '<li><a class="nav-row' +
           (opts.on ? " on" : "") +
           (opts.unread ? " unread" : "") +
+          (opts.notice ? " notice" : "") +
           '" href="' +
           opts.href +
-          '"><span class="nav-av">' +
-          opts.av +
-          (opts.busy
-            ? '<span class="busy-flash" title="' + t("busy") + '"></span>'
-            : "") +
-          '</span><span class="nav-body"><span class="nav-top"><strong>' +
+          '">' +
+          av +
+          '<span class="nav-body"><span class="nav-top"><strong>' +
           escapeHtml(opts.name) +
           "</strong>" +
           chip +
@@ -1178,7 +1182,7 @@
             return navRowHtml({
               href: "#c/" + encodeURIComponent(ch.id),
               on: state.kind === "channel" && state.id === ch.id,
-              av: '<span class="avatar hash-av">#</span>',
+              notice: true,
               name: ch.name,
               updatedAt: ch.updatedAt,
               preview: lastPreview(ch, "channel"),
