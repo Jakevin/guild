@@ -7,7 +7,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
-    <title>Guild — 酒吧</title>
+    <title>Guild — 編制</title>
     <script src="/i18n.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,7 +23,7 @@
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">大廳</a>
         <div class="side-group">
-          <span class="side-group-label" data-i18n="nav.studio">酒吧</span>
+          <span class="side-group-label" data-i18n="nav.studio">編制</span>
           <a class="side-sub" id="side-hire" href="/studio" data-i18n="studio.hireChip">招募</a>
           <div id="side-roster"></div>
         </div>
@@ -34,7 +34,7 @@
     </aside>
     <section class="pane">
       <header class="pane-head">
-        <h1 data-i18n="nav.studio">酒吧</h1>
+        <h1 data-i18n="nav.studio">編制</h1>
         <div class="locale-switch">
           <button type="button" data-locale="zh-Hant" data-i18n="lang.zh">中</button>
           <button type="button" data-locale="en" data-i18n="lang.en">EN</button>
@@ -67,7 +67,7 @@
         <div class="rpg-dialog" id="rpg-dialog">
           <div class="rpg-dialog-inner">
             <div class="rpg-name" id="rpg-name">酒館</div>
-            <p class="rpg-line" id="rpg-line">夜晚的酒館還開著。點那扇門進去。</p>
+            <p class="rpg-line" id="rpg-line">夜晚的編制還開著。點那扇門進去。</p>
             <div class="rpg-acts" id="rpg-acts"></div>
           </div>
         </div>
@@ -75,7 +75,7 @@
     </div>
     <main class="shell shell-wide" id="hire">
       <p class="eyebrow" id="page-eyebrow">今晚</p>
-      <h1 id="page-title">招募隊員</h1>
+      <h1 id="page-title">招募冒險者</h1>
       <p class="lede" id="page-lede">寫好 Soul / Agent / Position，勾技能（含本機 Codex、Grok 等 CLI），請他入座。</p>
       <p id="flash" class="muted"></p>
       <form id="create-bot">
@@ -85,9 +85,9 @@
           <label>Handle</label>
           <input name="handle" required placeholder="ada" />
           <label data-i18n="studio.oneLiner">一句話</label>
-          <input name="oneLiner" placeholder="這名隊員在小隊裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
+          <input name="oneLiner" placeholder="這名冒險者在編制裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
           <div class="card-foot">
-            <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">請這名隊員離隊</button>
+            <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">請這名冒險者離席</button>
             <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
           </div>
         </section>
@@ -129,8 +129,8 @@
         </section>
 
         <section class="skill-picker">
-          <h2 data-i18n="studio.botSkills">這名隊員的技能（含本機 CLI）</h2>
-          <p class="muted" data-i18n-html="studio.botSkillsHint">公會技能庫，加上本機 Claude、Codex、Pi、Grok、Cursor、DSH 的 SKILL.md。勾或取消會立刻存檔，拷進公會再配給這名隊員。沒有的可到 <a href="/skills/add">追加技能</a> 安裝，不影響其他人。</p>
+          <h2 data-i18n="studio.botSkills">這名冒險者的技能（含本機 CLI）</h2>
+          <p class="muted" data-i18n-html="studio.botSkillsHint">公會技能庫，加上本機 Claude、Codex、Pi、Grok、Cursor、DSH 的 SKILL.md。勾或取消會立刻存檔，拷進公會再配給這名冒險者。沒有的可到 <a href="/skills/add">追加技能</a> 安裝，不影響其他人。</p>
           <div class="toolbar">
             <div class="search">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
