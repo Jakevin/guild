@@ -26,7 +26,7 @@ pnpm dev
 2. チャンネルを開く。部屋に仕事があるなら `Channel.md` を書く。
 3. `@pm` で範囲を切る。`@rd` にコードを見てもらう。@ されたとき（または返信したとき）だけ返す。`@channel` は全員に飛ぶ——大抵まちがい。
 
-データは `GUILD_HOME`（既定 `~/.guild`）。クラウドアカウントではない。`guildd` は Cordis 4 アプリ。プラグイン構成は `packages/daemon/cordis.yml`。`GUILD_*` 環境変数が YAML より優先。
+データは `GUILD_HOME`（既定 `~/.guild`）。部屋・メッセージ・trajectory は `guild.sqlite`（WAL）。Soul / skill / MEMORY.md はファイルのまま。クラウドアカウントではない。`guildd` は Cordis 4 アプリ。プラグイン構成は `packages/daemon/cordis.yml`。`GUILD_*` 環境変数が YAML より優先。
 
 ## これは何か
 
@@ -77,7 +77,7 @@ pnpm dev
 
 **MCP はあなたとしてローカルプロセスを spawn する。** env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
 
-まだ無いもの：Tauri アプリ、SQLite、staffing、approvals、bot ごとの `CODEX_HOME`、HTTP MCP。`docs/` の設計文書は後の形——changelog ではない。
+まだ無いもの：Tauri アプリ、staffing、approvals、bot ごとの `CODEX_HOME`、HTTP MCP。`docs/` の設計文書は後の形——changelog ではない。
 
 ## ライセンス
 

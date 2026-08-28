@@ -26,7 +26,7 @@ pnpm dev
 2. 開一個頻道。房間有任務就寫 `Channel.md`。
 3. `@pm` 收範圍，`@rd` 看程式。被 @ 到（或你回他們）才會回。`@channel` 會叫所有人——通常是錯的。
 
-資料在 `GUILD_HOME`（預設 `~/.guild`）。不是雲端帳號。`guildd` 是 Cordis 4 應用；插件組合在 `packages/daemon/cordis.yml`。`GUILD_*` 環境變數仍蓋過 YAML。
+資料在 `GUILD_HOME`（預設 `~/.guild`）。房間、訊息、軌跡在 `guild.sqlite`（WAL）；Soul / skill / MEMORY.md 仍是檔案。不是雲端帳號。`guildd` 是 Cordis 4 應用；插件組合在 `packages/daemon/cordis.yml`。`GUILD_*` 環境變數仍蓋過 YAML。
 
 ## 它是什麼
 
@@ -77,7 +77,7 @@ pnpm dev
 
 **MCP 會以你的身分 spawn 本機 process。** env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
 
-也還沒做：Tauri app、SQLite、staffing、approvals、每 bot 一份 `CODEX_HOME`、HTTP MCP。`docs/` 裡的設計文件是之後的形狀——不是 changelog。
+也還沒做：Tauri app、staffing、approvals、每 bot 一份 `CODEX_HOME`、HTTP MCP。`docs/` 裡的設計文件是之後的形狀——不是 changelog。
 
 ## 授權
 

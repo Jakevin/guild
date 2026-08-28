@@ -16,6 +16,9 @@ export class StoreService extends Service {
     const dataDir =
       this.env.GUILD_HOME ?? config.dataDir ?? defaultDataDir(this.env);
     this.guild = new GuildStore(dataDir);
+    ctx.effect(() => () => {
+      this.guild.close();
+    });
   }
 
   get dataDir(): string {

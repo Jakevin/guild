@@ -418,7 +418,7 @@ Must remain true after the rewrite:
 
 - `GET /health` body unchanged.
 - Default listen `127.0.0.1:7420`.
-- Data in `GUILD_HOME` / `~/.guild` with the same directory layout (`bots/`, `library/`, `rooms/`, `models.json`, `mcp.json`, `oauth.json`).
+- Data in `GUILD_HOME` / `~/.guild`: `guild.sqlite` for rooms / messages / trajectory; `bots/`, `library/`, `rooms/` markdown, `models.json`, `mcp.json`, `oauth.json` still files.
 - Default five bots still seeded.
 - Static routes in the current `PAGES` map still 200.
 - `@mention` / `@channel` / reply-to / steer / abort live turn unchanged.

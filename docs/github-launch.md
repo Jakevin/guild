@@ -195,13 +195,13 @@ Shipped (this repo, v0.1.0)
 - @mention people, not a group chat that all reply
 - Channel.md / DM
 - Tools: run, read, write, list, skill — unsandboxed
-- Data in ~/.guild (JSON files, not SQLite)
+- Data in ~/.guild (`guild.sqlite` for rooms/messages/trajectory; markdown for library)
 
 Not shipped (design docs under docs/ are a target, not a changelog)
 - Codex app-server / Harness trait
 - Position → sandbox / approval
 - Project, staffing, task board
-- Tauri desktop, SQLite, Guild MCP
+- Tauri desktop, HTTP MCP
 
 What we will not add next
 - More chat-room toys (attachments, mention, retry are enough)

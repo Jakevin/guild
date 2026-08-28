@@ -30,7 +30,7 @@ Names match Codex: `read_only` | `workspace_write` | `full_access`. Unset = `ful
 
 This is a Guild gate around `executeTool`, not Codex `app-server` isolation and not a kernel sandbox. `spawn` inherits the same mode. Position files still do not change OS permissions.
 
-Data lives under `GUILD_HOME` (default `~/.guild`): bots, rooms, `models.json`, `oauth.json` (mode `0600`). API keys may be env vars (`$OPENAI_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
+Data lives under `GUILD_HOME` (default `~/.guild`): `guild.sqlite` (rooms, messages, trajectory; WAL), plus bots / library markdown, `models.json`, `oauth.json` (mode `0600`). API keys may be env vars (`$OPENAI_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
 
 ## What is not here
 

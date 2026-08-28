@@ -26,7 +26,7 @@ Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 2. Open a channel. Write `Channel.md` if the room has a job.
 3. `@pm` to scope, `@rd` to look at code. They reply when mentioned (or when you reply to them). `@channel` pings everyone — usually the wrong move.
 
-Data: `GUILD_HOME` (default `~/.guild`). Not a cloud account. `guildd` is a Cordis 4 app; plugin composition lives in `packages/daemon/cordis.yml`. `GUILD_*` env vars still win over YAML.
+Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in `guild.sqlite` (WAL). Souls / skills / MEMORY.md stay files. Not a cloud account. `guildd` is a Cordis 4 app; plugin composition lives in `packages/daemon/cordis.yml`. `GUILD_*` env vars still win over YAML.
 
 ## What it is
 
@@ -77,7 +77,7 @@ If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a comman
 
 **MCP spawns a local process as you.** Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
 
-Also not built: Tauri app, SQLite, staffing, approvals, per-bot `CODEX_HOME`, HTTP MCP. Design docs under `docs/` describe a later shape — they are not a changelog.
+Also not built: Tauri app, staffing, approvals, per-bot `CODEX_HOME`, HTTP MCP. Design docs under `docs/` describe a later shape — they are not a changelog.
 
 ## License
 

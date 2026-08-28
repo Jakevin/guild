@@ -1,5 +1,4 @@
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -11,6 +10,7 @@ import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { closeGuildDb, openGuildDb, type GuildDb } from "./db.ts";
 import type {
   Bot,
   ChatAttachment,
@@ -66,6 +66,8 @@ export class GuildStore {
   private readonly liveTurns = new Map<string, LiveTurn>();
   private readonly pendingSteers = new Map<string, string[]>();
   private readonly turnAborts = new Map<string, AbortController>();
+  private readonly db: GuildDb;
+  private closed = false;
 
   constructor(readonly dataDir: string) {
     mkdirSync(join(dataDir, "library", "souls"), { recursive: true });
@@ -75,9 +77,17 @@ export class GuildStore {
     mkdirSync(join(dataDir, "library", "subagents"), { recursive: true });
     mkdirSync(join(dataDir, "bots"), { recursive: true });
     mkdirSync(join(dataDir, "rooms"), { recursive: true });
+    this.db = openGuildDb(dataDir);
+    this.db.importLegacyFiles(dataDir);
     this.seedCatalog();
     this.seedDefaultBots();
     this.ensureGeneralChannel();
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    closeGuildDb(this.db);
   }
 
   private seedCatalog(): void {
@@ -585,15 +595,7 @@ export class GuildStore {
   }
 
   getRoom(id: string): Room | null {
-    try {
-      const raw = readFileSync(
-        join(this.dataDir, "rooms", id, "room.json"),
-        "utf8",
-      );
-      return JSON.parse(raw) as Room;
-    } catch {
-      return null;
-    }
+    return this.db.getRoom(id);
   }
 
   createChannel(name: string): Room {
@@ -666,7 +668,7 @@ export class GuildStore {
 
   listMessages(roomId: string): ChatMessage[] {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
-    return this.readMessages(roomId);
+    return this.db.listMessages(roomId);
   }
 
   lastMessageAt(roomId: string): string | undefined {
@@ -678,7 +680,7 @@ export class GuildStore {
     body: string;
     createdAt: string;
   } | undefined {
-    const message = this.readMessages(roomId).at(-1);
+    const message = this.db.peekLastMessage(roomId);
     if (!message) return undefined;
     return {
       author: message.author,
@@ -688,45 +690,13 @@ export class GuildStore {
   }
 
   listTrajectory(roomId: string): TrajectoryEvent[] {
-    try {
-      const raw = readFileSync(this.trajectoryPath(roomId), "utf8");
-      const events: TrajectoryEvent[] = [];
-      for (const line of raw.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const parsed = JSON.parse(trimmed) as TrajectoryEvent;
-          if (parsed && typeof parsed.kind === "string") events.push(parsed);
-        } catch {
-          /* skip bad line */
-        }
-      }
-      return events;
-    } catch {
-      return [];
-    }
+    return this.db.listTrajectory(roomId);
   }
 
   appendTrajectory(roomId: string, drafts: TrajectoryDraft[]): TrajectoryEvent[] {
     if (!drafts.length) return [];
-    const dir = join(this.dataDir, "rooms", roomId);
-    mkdirSync(dir, { recursive: true });
-    const existing = this.listTrajectory(roomId);
-    let seq = existing.at(-1)?.seq ?? -1;
-    const written: TrajectoryEvent[] = [];
-    const lines: string[] = [];
-    for (const draft of drafts) {
-      seq += 1;
-      const event: TrajectoryEvent = { ...draft, seq };
-      written.push(event);
-      lines.push(JSON.stringify(event));
-    }
-    appendFileSync(this.trajectoryPath(roomId), `${lines.join("\n")}\n`);
-    return written;
-  }
-
-  private trajectoryPath(roomId: string): string {
-    return join(this.dataDir, "rooms", roomId, "trajectory.jsonl");
+    if (!this.getRoom(roomId)) return [];
+    return this.db.appendTrajectory(roomId, drafts);
   }
 
   appendMessage(
@@ -758,19 +728,15 @@ export class GuildStore {
       ...(author !== "you" ? { finishedAt: now } : {}),
       ...(steer ? { steer: true } : {}),
     };
-    this.writeMessages(roomId, [...this.readMessages(roomId), message]);
+    this.db.appendMessage(message);
     return message;
   }
 
   updateMessage(roomId: string, messageId: string, body: string): ChatMessage {
     const text = body.trim();
     if (!text) throw new StoreError(400, "message is required");
-    const messages = this.readMessages(roomId);
-    const index = messages.findIndex((item) => item.id === messageId);
-    if (index < 0) throw new StoreError(404, "message not found");
-    const next = { ...messages[index], body: text };
-    messages[index] = next;
-    this.writeMessages(roomId, messages);
+    const next = this.db.updateMessageBody(roomId, messageId, text);
+    if (!next) throw new StoreError(404, "message not found");
     return next;
   }
 
@@ -783,48 +749,31 @@ export class GuildStore {
   ): ChatMessage {
     const text = body.trim();
     if (!text) throw new StoreError(400, "message is required");
-    const messages = this.readMessages(roomId);
-    const index = messages.findIndex((item) => item.id === messageId);
-    if (index < 0) throw new StoreError(404, "message not found");
     const now = new Date().toISOString();
-    const startedAt = usage?.startedAt;
-    const next = {
-      ...messages[index],
+    const next = this.db.replaceMessage(roomId, messageId, {
       body: text,
       parts: parts && parts.length ? parts : undefined,
-      ...(usage ? { usage } : { usage: undefined }),
-      createdAt: startedAt || now,
+      usage,
+      createdAt: usage?.startedAt || now,
       finishedAt: now,
-    };
-    messages[index] = next;
-    this.writeMessages(roomId, messages);
+    });
+    if (!next) throw new StoreError(404, "message not found");
     return next;
   }
 
   truncateAfter(roomId: string, messageId: string): ChatMessage[] {
-    const messages = this.readMessages(roomId);
-    const index = messages.findIndex((item) => item.id === messageId);
-    if (index < 0) throw new StoreError(404, "message not found");
-    const kept = messages.slice(0, index + 1);
-    this.writeMessages(roomId, kept);
+    const kept = this.db.truncateAfter(roomId, messageId);
+    if (!kept) throw new StoreError(404, "message not found");
     return kept;
   }
 
   private listRooms(): Room[] {
-    const root = join(this.dataDir, "rooms");
-    const ids = readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-    return ids
-      .map((id) => this.getRoom(id))
-      .filter((room): room is Room => room !== null)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return this.db.listRooms();
   }
 
   private writeRoom(room: Room): void {
-    const dir = join(this.dataDir, "rooms", room.id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "room.json"), `${JSON.stringify(room, null, 2)}\n`);
+    this.db.upsertRoom(room);
+    mkdirSync(join(this.dataDir, "rooms", room.id), { recursive: true });
   }
 
   private retiredPath(): string {
@@ -867,6 +816,7 @@ export class GuildStore {
     if (!roomId || /[\\/]/.test(roomId) || roomId.includes("..")) {
       throw new StoreError(400, "bad room id");
     }
+    this.db.deleteRoom(roomId);
     rmSync(join(this.dataDir, "rooms", roomId), { recursive: true, force: true });
   }
 
@@ -953,30 +903,8 @@ export class GuildStore {
     return text;
   }
 
-  private readMessages(roomId: string): ChatMessage[] {
-    try {
-      const raw = readFileSync(
-        join(this.dataDir, "rooms", roomId, "messages.json"),
-        "utf8",
-      );
-      const parsed = JSON.parse(raw) as ChatMessage[];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
   private writeMessages(roomId: string, messages: ChatMessage[]): void {
-    const dir = join(this.dataDir, "rooms", roomId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "messages.json"),
-      `${JSON.stringify(messages, null, 2)}\n`,
-    );
-  }
-
-  private compactPath(roomId: string): string {
-    return join(this.dataDir, "rooms", roomId, "compact.json");
+    this.db.replaceMessages(roomId, messages);
   }
 
   readCompact(roomId: string): {
@@ -986,25 +914,7 @@ export class GuildStore {
     messageCount: number;
   } | null {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
-    const path = this.compactPath(roomId);
-    if (!existsSync(path)) return null;
-    try {
-      const parsed = JSON.parse(readFileSync(path, "utf8")) as {
-        throughId?: string;
-        summary?: string;
-        updatedAt?: string;
-        messageCount?: number;
-      };
-      if (!parsed.throughId || !parsed.summary) return null;
-      return {
-        throughId: parsed.throughId,
-        summary: parsed.summary,
-        updatedAt: parsed.updatedAt || "",
-        messageCount: Number(parsed.messageCount) || 0,
-      };
-    } catch {
-      return null;
-    }
+    return this.db.readCompact(roomId);
   }
 
   writeCompact(
@@ -1017,9 +927,7 @@ export class GuildStore {
     },
   ): void {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
-    const dir = join(this.dataDir, "rooms", roomId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(this.compactPath(roomId), `${JSON.stringify(compact, null, 2)}\n`);
+    this.db.writeCompact(roomId, compact);
   }
 }
 
