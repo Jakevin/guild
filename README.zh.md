@@ -73,7 +73,7 @@ pnpm dev
 
 ## 現況限制
 
-**`run` 與 `write` 以你的身分、在你的 shell 執行，沒有沙盒。** `run` 的預設 cwd 是 `$HOME`。`write` 能寫行程式能寫的任何路徑。少數破壞性指令會被拒絕；那不是防護。
+**預設：`run` 與 `write` 以你的身分、在你的 shell 執行（`GUILD_SANDBOX` 未設 = `full_access`）。** `run` 的預設 cwd 是 `$HOME`。可選 `read_only` / `workspace_write`（搭配 `GUILD_WORKSPACE`）是 tool gate，不是 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
 
 **MCP 會以你的身分 spawn 本機 process。** env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
 

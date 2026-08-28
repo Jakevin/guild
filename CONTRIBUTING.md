@@ -24,7 +24,7 @@ Attachments, `@mention`, and retry are enough. New composer toys, extra room typ
 
 ## Next product cut
 
-Extract a `Harness` and sandbox from `tools.executeTool`. Design lives in `docs/2026-08-23-guild-design.md` and `docs/2026-08-23-codex-harness-addendum.md`. Those docs are a target, **not** a feature list — do not open PRs that pretend Codex supervisor / task board / Tauri already exist.
+Harness: `runAgentLoop` in `src/harness.ts` (OpenAI / Anthropic / OAuth all call it). Tools go through `ctx.tools`. Default sandbox is `full_access`. Next is still **not** Codex app-server / task board / Tauri. Target docs: `docs/2026-08-23-guild-design.md` and `docs/2026-08-23-codex-harness-addendum.md`.
 
 ## PRs
 

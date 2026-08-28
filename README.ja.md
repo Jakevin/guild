@@ -73,7 +73,7 @@ pnpm dev
 
 ## いまの限界
 
-**`run` と `write` はあなたとして、あなたのシェルで、サンドボックスなしで実行される。** `run` の既定 cwd は `$HOME`。`write` はプロセスが書ける任意のパスに書ける。破壊的なコマンドはいくつか拒否される。それは防護ではない。
+**既定：`run` と `write` はあなたとして、あなたのシェルで実行される（`GUILD_SANDBOX` 未設定 = `full_access`）。** `run` の既定 cwd は `$HOME`。任意の `read_only` / `workspace_write`（`GUILD_WORKSPACE` と併用）は tool gate であり、Codex isolation ではない。詳細：[SECURITY.md](./SECURITY.md)。
 
 **MCP はあなたとしてローカルプロセスを spawn する。** env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
 

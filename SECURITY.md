@@ -1,6 +1,6 @@
 # Security
 
-**`run` / `write` currently use your user shell. There is no sandbox.** Treat Guild as a workshop / experiment, not as something you point at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on.
+**Default sandbox is `full_access`: `run` / `write` use your user shell.** Treat Guild as a workshop / experiment, not as something you point at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on.
 
 ## What ships today
 
@@ -18,13 +18,25 @@ The only hard refusals in `run` are a narrow `rm -rf /` pattern and `mkfs`. That
 
 MCP blast radius is larger than a skill: it is another process with your uid, your env, and whatever the server binary does. Setting `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml` unloads Guild MCP (`GET /mcp/servers` is empty; mutating routes 503). It does **not** sandbox `run` / `write`.
 
+### Optional sandbox (`GUILD_SANDBOX`)
+
+Names match Codex: `read_only` | `workspace_write` | `full_access`. Unset = `full_access`.
+
+| Mode | `run` / `write` | MCP / `image_gen` |
+|---|---|---|
+| `full_access` (default) | Any path the process can touch. `run` cwd defaults to `$HOME`. | Allowed |
+| `workspace_write` | Only inside `GUILD_WORKSPACE` (else `GUILD_HOME`). Relative paths resolve there. | Refused (child is unsandboxed) |
+| `read_only` | Refused | Refused |
+
+This is a Guild gate around `executeTool`, not Codex `app-server` isolation and not a kernel sandbox. `spawn` inherits the same mode. Position files still do not change OS permissions.
+
 Data lives under `GUILD_HOME` (default `~/.guild`): bots, rooms, `models.json`, `oauth.json` (mode `0600`). API keys may be env vars (`$OPENAI_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
 
 ## What is not here
 
 - Codex `app-server` isolation / `CODEX_HOME` per bot
 - Position → sandbox / approval mapping
-- A `Harness` boundary around `tools.executeTool`
+- OS-level jail (Seatbelt / bubblewrap). `GUILD_SANDBOX` is a tool gate only.
 - Multi-user auth, network allowlists, or an installer
 
 Those are design, not code. See `docs/2026-08-23-guild-design.md`.

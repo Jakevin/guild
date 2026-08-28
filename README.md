@@ -73,7 +73,7 @@ If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a comman
 
 ## Current limits
 
-**`run` and `write` execute as you, in your shell, with no sandbox.** Default cwd for `run` is `$HOME`. `write` can write any path the process can write. A couple of destructive commands are refused; that is not protection.
+**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`).** Default cwd for `run` is `$HOME`. Optional `read_only` / `workspace_write` (with `GUILD_WORKSPACE`) are a tool gate, not Codex isolation. Details: [SECURITY.md](./SECURITY.md).
 
 **MCP spawns a local process as you.** Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
 

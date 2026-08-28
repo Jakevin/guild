@@ -6,7 +6,7 @@
 | Date | 2026-08-28 |
 | Repo | product name remains Guild; public `https://github.com/Jakevin/guild` |
 | Decision | Rewrite `guildd` internals as a Cordis 4 app. Composition is Loader + `cordis.yml` (approach C). |
-| Out of scope | DeepSeek Harness, Koishi / `@cordisjs/core` 3, product rename, `@cordisjs/plugin-server`, replacing pi-ai, Tauri / `apps/desktop`, HMR |
+| Out of scope | DeepSeek Harness (`@deepseek-ai/dsh`), Koishi / `@cordisjs/core` 3, product rename, `@cordisjs/plugin-server`, replacing pi-ai, Tauri / `apps/desktop`, HMR. Guild `src/harness.ts` is a later cut, not this kernel. |
 
 This spec was the contract for the first kernel cut. **What landed is an adapter layer.** Do not re-implement the items in **Not in v1** below as if they were missing bugs.
 
@@ -15,8 +15,8 @@ This spec was the contract for the first kernel cut. **What landed is an adapter
 | Draft said | What shipped |
 |---|---|
 | `api` owns the router; handlers take `ctx` | `plugins/api.ts` only calls `ctx.server.listen()`. Routes stay in `router.ts` + `GuildStore` + `HandlerExtras` flags |
-| `@mention` goes through `ctx.chat.reply` | `handlers.ts` still `import { chatReply } from "./generate.ts"`. `chat` exists so `api.inject` can wait |
-| `ctx.tools` adds MCP tools only via `ctx.get("mcp")` | `generate.ts` calls `listMcpToolRefs` unless `extras.mcp === false` passes `[]` |
+| `@mention` goes through `ctx.chat.reply` | **Live HTTP does:** `extras.turn = ctx.chat.reply` → `ctx.harness.turn`. Fallback is still `chatReply`. `generate.ts` is still imported. |
+| `ctx.tools` adds MCP tools only via `ctx.get("mcp")` | **Live:** `plugins/mcp.ts` `registerPrefix("mcp__")`; `harness.turn` uses `ctx.get("mcp")` else `[]`. Direct `chatReply` still `listMcpToolRefs(dataDir)` (disk backdoor). |
 | Each plugin exports schemastery `Config` | `schemastery` is a dependency; plugins export none. Bad YAML config is ignored, not `FAILED` |
 | `@cordisjs/plugin-hmr` in YAML, `disabled: true` | **No HMR entry.** Do not add the package until someone needs HMR |
 | `ctx.server.route()` as reversible effects | One `http.createServer` listener. Unload `api` does not unmount routes; dispose the root fiber to close HTTP |
@@ -422,7 +422,7 @@ Must remain true after the rewrite:
 - Default five bots still seeded.
 - Static routes in the current `PAGES` map still 200.
 - `@mention` / `@channel` / reply-to / steer / abort live turn unchanged.
-- Tools `run` and `write` still unsandboxed (SECURITY.md still accurate).
+- Default `run` / `write` still unsandboxed (`GUILD_SANDBOX` unset = `full_access`). Optional tool gate is not a kernel sandbox. SECURITY.md still accurate.
 - `service: "guildd"` in health and the stdout listen line.
 
 ---
