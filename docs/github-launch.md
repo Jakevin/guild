@@ -4,18 +4,19 @@
 
 Gate: LICENSE + README + SECURITY.md + 60s GIF. **No GIF → do not go public.** Public date may be before sandbox, not before honest limits are in the README.
 
-Status (2026-08-26):
+Status (2026-08-28):
 
 | Item | State |
 |---|---|
 | G1 LICENSE MIT | done |
-| G2 README rewrite | done (GIF slot marked, not filled) |
-| G3 SECURITY.md | done |
+| G2 README rewrite | done (adventurer-guild voice; GIF in README) |
+| G3 SECURITY.md | done (host MCP live, Position `sandbox:`, browser) |
 | G4 CONTRIBUTING.md | done |
 | G5 issue templates + this file | done |
 | G6 60s GIF | signed and hung in README |
-| G7 `git init` + GitHub remote | **human** — in progress (OWNER is `Jakevin`; git init still not done) |
-| G8 public + `v0.1.0` | **human**, after G6+G7 |
+| G7 GitHub remote | done — `https://github.com/Jakevin/guild` |
+| G8 public + `v0.1.0` | done (first cut, tag stays) |
+| G9 `v0.2.0` | hall UI, host MCP, browser, parallel turns — this cut |
 
 **Repo name locked: `guild`.** Public URL is `https://github.com/Jakevin/guild`. OWNER is `Jakevin`. `.github/ISSUE_TEMPLATE/config.yml` points at `Jakevin/guild`.
 
@@ -26,14 +27,14 @@ Status (2026-08-26):
 **Description**
 
 ```
-Local-first talent bench for AI bots. @mention the one you want. Not another omniscient chat.
+A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.
 ```
 
 **Website:** leave empty until there is a real site. The README is the landing page.
 
 **Topics** (exact): `local-first` `ai-agents` `ollama` `openai` `anthropic` `typescript`
 
-**Social preview:** one bench / channel screenshot. Not RPG tavern art. Not a logo lockup.
+**Social preview:** one hall / roster screenshot. Not RPG tavern art. Not a logo lockup.
 
 **Pin:** Discussion `Current vs design` (body below).
 
@@ -62,17 +63,17 @@ Quick capture on this Mac (once you are in the UI): QuickTime Player → New Scr
 **Title**
 
 ```
-Show HN: Guild – local-first bench of bots you @mention, not another omniscient chat
+Show HN: Guild – local guild of adventurers you @mention, not another omniscient chat
 ```
 
 **Body** (paste as-is after URL replace)
 
 ```
-Guild is a local-first talent bench. You staff bots (@pm, @rd, …) and @mention the one you actually want. Data lives in ~/.guild. Models are yours (OpenAI / Anthropic / Ollama / OpenRouter, API key or OAuth).
+Guild is a local guild of adventurers. You hire @pm, @rd, … and @mention the one you actually want. Data lives in ~/.guild. Models are yours (OpenAI / Anthropic / Ollama / OpenRouter, API key or OAuth).
 
-It is not another omniscient chat window. It is also not a Codex harness, not a task board, and not sandboxed.
+It is not another omniscient chat window. It is also not a Codex harness and not a quest board. A roster is not a sortie — work still goes to one @handle.
 
-Tools (run / write) execute in your user shell. Default cwd for run is $HOME. Treat this as a workshop, not a product launch. Details are in SECURITY.md.
+Tools (run / write) execute in your user shell unless you set GUILD_SANDBOX or a Position sandbox: line. Default cwd for run is $HOME. Host Claude/Cursor/Codex MCP is live in chat with no import step. Treat this as a workshop. Details are in SECURITY.md.
 
 Quick start: Node ≥ 22, then:
 
@@ -89,11 +90,11 @@ Do not include: CrewAI / OpenClaw comparison tables, Harness dates, Product Hunt
 ## X (one post, not a thread)
 
 ```
-Staff a local bench of bots. @mention the one you actually want.
+A local guild of adventurers. @mention the one you actually want.
 Not another omniscient chat.
 Local-first. Your files. Your models.
 
-Tools are unsandboxed — treat as a workshop.
+Tools run as you — treat as a workshop.
 
 https://github.com/Jakevin/guild
 ```
@@ -107,20 +108,20 @@ Attach the 60s GIF. Do not follow with a vision thread.
 **Title**
 
 ```
-Guild – local-first bot bench; bring your own Ollama (or OpenAI / Anthropic)
+Guild – local guild of adventurers; bring your own Ollama (or OpenAI / Anthropic)
 ```
 
 **Body**
 
 ```
-I open-sourced Guild: a local bench of bots you @mention, instead of one omniscient chat.
+I open-sourced Guild: a local guild of adventurers you @mention, instead of one omniscient chat.
 
 - Data in ~/.guild, not a cloud account
-- Default five seats; hire more in Bot Studio
+- Default roster of five; hire more in Bot Studio
 - Soul / Agent / Skill / Position are markdown
 - Wire Ollama, OpenAI, Anthropic, OpenRouter (key or OAuth)
 
-Honest limit: run / write use your user shell. No sandbox. README and SECURITY.md say this up front.
+Honest limit: run / write use your user shell unless you set GUILD_SANDBOX or Position sandbox:. Host MCP is live without import. README and SECURITY.md say this up front.
 
     pnpm i && pnpm dev
     # Node ≥ 22 → http://127.0.0.1:7420
@@ -137,39 +138,52 @@ Do not post to r/ChatGPT.
 Pick *one* agent-builder Discord. Do not spray.
 
 ```
-Open-sourced Guild: local-first bench of bots you @mention.
+Open-sourced Guild: local guild of adventurers you @mention.
 https://github.com/Jakevin/guild
-Known: run/write are unsandboxed. Treat as a workshop. GIF in the README.
+Known: run/write execute as you. Host MCP is live without import. Treat as a workshop. GIF in the README.
 ```
 
 ---
 
-## GitHub Release `v0.1.0` (T0+1)
+## GitHub Release `v0.1.0` (first public)
 
-Tag only on the public day, after a clean clone walk.
+Leave the tag on `d16b581`. Do not move it.
 
 **Title:** `v0.1.0 — local bench`
+
+## GitHub Release `v0.2.0` (this cut)
+
+Tag `main` after a clean clone walk. Do not retag `v0.1.0`.
+
+**Title:** `v0.2.0 — adventurer guild`
 
 **Body**
 
 ```
-First public cut. A local-first talent bench, not a team product yet.
+A local guild of adventurers. @mention the one you actually want.
 
 Has
-- Bench of persistent bots (default: @infra @pm @rd @design @marketing)
+- Roster of persistent adventurers (default: @infra @pm @rd @design @marketing)
 - Bot Studio (hire / edit Soul, Agent, Skill, Position)
-- Channels + DMs; reply on @mention
-- Local tools: run, read, write, list, skill
+- Halls (channels) + whispers (DMs); reply on @mention, on reply-to, or — if you name nobody — the last adventurer who spoke
+- @all runs members in parallel
+- Workshop: skills, spawn subagents, stdio MCP
+- Host Claude / Cursor / Codex MCP live in chat — no import step
+- Local tools: run, read, write, list, skill, spawn, browser, image_gen
+- Optional Position sandbox: / GUILD_SANDBOX tool gate (unset = full_access)
+- SQLite for rooms, messages, trajectory
 - Models you wire: OpenAI, Anthropic, xAI, Ollama, OpenRouter (key or OAuth)
+- Cordis 4 daemon (guildd)
 
 Does not have
-- Sandbox / approval around run and write
-- Project / task board / staffing
+- OS jail / approval around run and write (the sandbox is a tool gate)
+- Quest / project / task board — a roster is not a sortie
 - Codex app-server harness
-- Tauri desktop app (apps/desktop is an orphan)
+- Tauri product UI (apps/desktop is an orphan)
+- HTTP MCP
 
 Security
-run and write execute as you. Default cwd for run is $HOME. Read SECURITY.md before you point this at a machine you care about.
+run and write execute as you unless you set GUILD_SANDBOX or a Position sandbox: line. Default cwd for run is $HOME. Host MCP spawns as you with no import / consent prompt. Read SECURITY.md before you point this at a machine you care about.
 
 Quick start
 pnpm i && pnpm test && pnpm dev
@@ -190,23 +204,25 @@ Current vs design
 ```
 Please read this before filing a wishlist issue.
 
-Shipped (this repo, v0.1.0)
-- Local bench + Bot Studio
-- @mention people, not a group chat that all reply
+Shipped (this repo, v0.2.0)
+- Local guild + Bot Studio
+- @mention one adventurer; unnamed follow-up goes to the last speaker; @all is parallel
 - Channel.md / DM
-- Tools: run, read, write, list, skill — unsandboxed
+- Tools: run, read, write, list, skill, spawn, browser, image_gen
+- Optional Position sandbox: / GUILD_SANDBOX (unset = full_access — still your shell)
+- stdio MCP (mcp.json + host Claude/Cursor/Codex, no import)
 - Data in ~/.guild (`guild.sqlite` for rooms/messages/trajectory; markdown for library)
 
 Not shipped (design docs under docs/ are a target, not a changelog)
-- Codex app-server / Harness trait
-- Position → sandbox / approval
-- Project, staffing, task board
-- Tauri desktop, HTTP MCP
+- Codex app-server isolation / CODEX_HOME per bot
+- Position → approval mapping
+- Quest / project / task board
+- Tauri product UI, HTTP MCP
 
 What we will not add next
-- More chat-room toys (attachments, mention, retry are enough)
 - Treating apps/desktop as the product UI
-- Dates for the Harness cut
+- A quest board or party sortie
+- Dates for a later isolation cut
 
 Useful issue types: bug (does not match README), security (see SECURITY.md), idea that is not a chat feature.
 ```
@@ -220,7 +236,7 @@ Useful issue types: bug (does not match README), security (see SECURITY.md), ide
 3. Walk: `pnpm i && pnpm test && pnpm dev` in a fresh clone.
 4. Paste 60s GIF at the top of README.
 5. Set About, Topics, social preview, issue templates, pin Discussion.
-6. Then shout — Release, Show HN, X, r/LocalLLaMA, one Discord. Same URL. Same limits sentence.
+6. Then shout — Release `v0.2.0`, Show HN, X, r/LocalLLaMA, one Discord. Same URL. Same limits sentence. Leave `v0.1.0` where it is.
 7. Not before.
 
 ---

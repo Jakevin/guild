@@ -1,9 +1,9 @@
 {
   "name": "guild",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
-  "description": "Local-first talent bench for AI bots. @mention the one you want. Not another omniscient chat.",
+  "description": "A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.",
   "type": "module",
   "packageManager": "pnpm@10.16.1",
   "engines": {
