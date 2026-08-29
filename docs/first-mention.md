@@ -4,7 +4,7 @@ Guild is a local guild of adventurers. You staff people with names and `@mention
 
 Your disk (default `~/.guild`). Your models. The log stays at the hall.
 
-![A local guild. @mention one adventurer.](demo-hall-en.gif)
+![A local guild. @mention one adventurer.](demo-hall-en-2026-08-29.gif)
 
 Repo: https://github.com/Jakevin/guild · `v0.2.1`
 

@@ -8,7 +8,7 @@
 
 Local-first. Your files. Your models.
 
-![A local guild. @mention one adventurer.](docs/demo-hall-en.gif)
+![A local guild. @mention one adventurer.](docs/demo-hall-en-2026-08-29.gif)
 
 ## Open the hall
 
