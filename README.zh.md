@@ -28,12 +28,16 @@ pnpm dev
 
 資料在 `GUILD_HOME`（預設 `~/.guild`）。房間、訊息、軌跡在 `guild.sqlite`（WAL）；Soul / skill / MEMORY.md 仍是檔案。不是雲端帳號。`guildd` 是 Cordis 4 應用；插件組合在 `packages/daemon/cordis.yml`。`GUILD_*` 環境變數仍蓋過 YAML。
 
+![大廳：委託、編制與即時對話。](docs/readme-hall-2026-08-29.png)
+
 ## 編制
 
 - **單位是有名字的冒險者：** Soul / Agent / Skill / Position，用 `@handle` 叫。
 - 預設小隊五席——是編制，不是出征：`@infra` `@pm` `@rd` `@design` `@marketing`。出活仍點名一人。
 - 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。
 - 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter）。
+
+![編制：五位有名字的冒險者。](docs/readme-roster-2026-08-29.png)
 
 ## 工坊
 
@@ -45,12 +49,16 @@ pnpm dev
 | **子代理** | 對話裡 call `spawn`。子代理回一份摘要。不能再套一層。沒有 MCP 工具。 |
 | **MCP** | stdio 工具伺服器，**不是技能**。不要放進技能庫。 |
 
+![工坊：技能、子代理與 MCP。](docs/readme-workshop-2026-08-29.png)
+
 ### MCP
 
 1. 工坊 → MCP → [連接伺服器](http://127.0.0.1:7420/mcp/add) 寫進 `{GUILD_HOME}/mcp.json`。
 2. Name + command + args。沒有 URL 欄。HTTP MCP 沒接。
 3. 這台機器上 Claude / Cursor / Codex 已配的 stdio MCP **免匯入、直接 spawn**（`~/.claude.json`、`~/.cursor/mcp.json`、`~/.codex/config.toml`）。`mcp.json` 裡同名的列贏，host 那份略過。
 4. 活著之後，據點裡**每個**冒險者都能 call 這些工具。名字長得像 `mcp__server__tool`。
+
+![本機 MCP 免匯入，可直接在對話中使用。](docs/readme-mcp-2026-08-29.png)
 
 不要讓某個 host server 進 Guild：從 host 設定拿掉，或把 `packages/daemon/cordis.yml` 的 `id: mcp` 設成 `disabled: true`（Guild MCP 整包關掉，含 `mcp.json`）。
 

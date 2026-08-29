@@ -28,12 +28,16 @@ pnpm dev
 
 データは `GUILD_HOME`（既定 `~/.guild`）。部屋・メッセージ・trajectory は `guild.sqlite`（WAL）。Soul / skill / MEMORY.md はファイルのまま。クラウドアカウントではない。`guildd` は Cordis 4 アプリ。プラグイン構成は `packages/daemon/cordis.yml`。`GUILD_*` 環境変数が YAML より優先。
 
+![拠点：チャンネル、ロスター、会話。](docs/readme-hall-2026-08-29.png)
+
 ## ロスター
 
 - **単位は名のある冒険者：** Soul / Agent / Skill / Position。`@handle` で呼ぶ。
 - 既定の五人はロスター（出撃パーティーではない）：`@infra` `@pm` `@rd` `@design` `@marketing`。仕事はいつも一人の `@handle` へ。
 - Bot Studio（`/studio`）で迎える。スキルは markdown。ローカル CLI からコピーできる。
 - モデルは自分で繋ぐ：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key または OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter）。
+
+![ロスター：名前のある五人の冒険者。](docs/readme-roster-2026-08-29.png)
 
 ## 工房（Workshop）
 
@@ -45,12 +49,16 @@ pnpm dev
 | **Subagents** | チャットが `spawn` する。子は要約を返す。ネスト不可。MCP ツールは無い。 |
 | **MCP** | stdio のツールサーバ。**スキルではない。** スキル庫に入れない。 |
 
+![工房：Skills、Subagents、MCP。](docs/readme-workshop-2026-08-29.png)
+
 ### MCP
 
 1. Workshop → MCP → [Add server](http://127.0.0.1:7420/mcp/add) で `{GUILD_HOME}/mcp.json` に書く。
 2. Name + command + args。URL 欄は無い。HTTP MCP は未接続。
 3. このマシンの Claude / Cursor / Codex に既にある stdio MCP も **import なしで spawn** される（`~/.claude.json`、`~/.cursor/mcp.json`、`~/.codex/config.toml`）。同じ名前が `mcp.json` にあればそちらが勝ち、ホスト側はスキップ。
 4. 生きていれば、拠点の **すべての** 冒険者が `mcp__server__tool` を呼べる。
+
+![ホスト側 MCP は import なしでチャットから使える。](docs/readme-mcp-2026-08-29.png)
 
 ホスト側を Guild から外すには、ホスト設定から消す。または `packages/daemon/cordis.yml` で `id: mcp` を `disabled: true`（`mcp.json` ごと Guild MCP が落ちる）。
 
