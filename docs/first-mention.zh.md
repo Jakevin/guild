@@ -4,7 +4,7 @@ Guild 是本機冒險者工會。你養一組有名字的人，用 `@handle` 叫
 
 資料在你的磁碟（預設 `~/.guild`）。模型是你接的。日誌留在據點。
 
-![本機冒險者工會。點名一人。](demo-en.gif)
+![本機冒險者工會。點名一人。](demo-hall-en.gif)
 
 Repo：https://github.com/Jakevin/guild · `v0.2.1`
 
