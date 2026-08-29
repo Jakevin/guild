@@ -34,6 +34,7 @@ import {
   upsertGuildMcp,
 } from "./mcp.ts";
 import { isBroadcastMention, summonedHandles } from "./mention.ts";
+import { slashNames } from "./slash.ts";
 import { toHistoryItem, type HistoryItem } from "./compact.ts";
 import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
 import type { McpToolRef } from "./mcp.ts";
@@ -381,6 +382,40 @@ export function openDm(store: GuildStore, botId: string) {
   return store.openDm(botId);
 }
 
+function handoffTargets(
+  store: GuildStore,
+  memberIds: string[],
+  replies: ChatMessage[],
+  asked: string,
+  history: HistoryItem[],
+): { botId: string; asked: string; history: HistoryItem[] }[] {
+  const bots = store.listBots();
+  const handles = bots.map((bot) => bot.handle);
+  const spoke = new Set(replies.map((row) => row.author));
+  const hops: { botId: string; asked: string; history: HistoryItem[] }[] = [];
+  const queued = new Set<string>();
+  for (const reply of replies) {
+    if (isBroadcastMention(reply.body)) continue;
+    const names = summonedHandles(reply.body, handles);
+    if (!names.length) continue;
+    const from = bots.find((bot) => bot.id === reply.author);
+    const spec = `（@${from?.handle || reply.author} 交棒）\n${reply.body}`;
+    const hopHistory = history.concat(
+      { author: "you", body: asked },
+      { author: reply.author, body: reply.body },
+    );
+    for (const bot of bots) {
+      if (!names.includes(bot.handle.toLowerCase())) continue;
+      if (!memberIds.includes(bot.id)) continue;
+      if (bot.id === reply.author) continue;
+      if (spoke.has(bot.id) || queued.has(bot.id)) continue;
+      queued.add(bot.id);
+      hops.push({ botId: bot.id, asked: spec, history: hopHistory });
+    }
+  }
+  return hops;
+}
+
 function replyBots(
   store: GuildStore,
   memberIds: string[],
@@ -527,6 +562,57 @@ function staffedSkills(store: GuildStore, botId: string): SkillRef[] {
     }));
 }
 
+function skillLookupKey(value: string): string {
+  return value.trim().replace(/^\/+/, "").toLowerCase();
+}
+
+/** Skills named with `/slug` this turn, including host leftover not staffed on the bot. */
+export function extraTurnSkills(store: GuildStore, text: string): SkillRef[] {
+  const names = slashNames(text).slice(0, 8);
+  if (!names.length) return [];
+  const want = new Set(names);
+  const out: SkillRef[] = [];
+  const seen = new Set<string>();
+  const push = (item: {
+    name: string;
+    slug: string;
+    body: string;
+    description?: string;
+    path?: string;
+  }) => {
+    const slug = skillLookupKey(item.slug || item.name);
+    const name = skillLookupKey(item.name);
+    if (!want.has(slug) && !want.has(name)) return;
+    if (seen.has(slug) || seen.has(name)) return;
+    seen.add(slug);
+    if (name) seen.add(name);
+    out.push({
+      name: item.name,
+      slug: item.slug,
+      body: item.body,
+      description: item.description,
+      path: item.path,
+    });
+  };
+  for (const item of store.listLibrary("skills")) push(item);
+  for (const item of listHostSkills()) push(item);
+  return out;
+}
+
+function mergeSkillRefs(staffed: SkillRef[], extra: SkillRef[]): SkillRef[] {
+  const seen = new Set(
+    staffed.map((item) => skillLookupKey(item.slug || item.name)),
+  );
+  const out = staffed.slice();
+  for (const item of extra) {
+    const key = skillLookupKey(item.slug || item.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
 /** POST /channels/:id/messages and DM replies share this turn input. */
 export function chatTurnForBot(
   store: GuildStore,
@@ -534,6 +620,7 @@ export function chatTurnForBot(
   botId: string,
   history: HistoryItem[] = [],
   userMessage = "",
+  slashText?: string,
 ) {
   const detail = store.botDetail(botId);
   const room = store.getRoom(roomId);
@@ -547,7 +634,10 @@ export function chatTurnForBot(
     userMessage,
     dataDir: store.dataDir,
     model: detail.model ?? null,
-    skills: staffedSkills(store, botId),
+    skills: mergeSkillRefs(
+      staffedSkills(store, botId),
+      extraTurnSkills(store, slashText ?? userMessage),
+    ),
     subagents: listSpawnRefs(store.listLibrary("subagents")),
     channelMd: channelMarkdownForRoom(store, roomId),
     botMemory: store.readBotMemory(botId),
@@ -664,15 +754,15 @@ function liveTrajectoryForRoom(
 
 export function getLiveTurn(store: GuildStore, roomId: string) {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
-  const pending = store.peekSteers(roomId);
-  const steers: LiveStep[] = pending.map((text) => ({
-    name: "steer",
-    detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
-    running: true,
-  }));
   const decorate = (live: LiveTurn): LiveTurn => {
     const shown = publicLiveTurn(live);
-    if (!steers.length) return shown;
+    const pending = store.peekSteers(roomId, live.botId);
+    if (!pending.length) return shown;
+    const steers: LiveStep[] = pending.map((text) => ({
+      name: "steer",
+      detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
+      running: true,
+    }));
     const rest = shown.steps.filter((step) => step.name !== "steer");
     return { ...shown, steps: [...steers, ...rest].slice(0, 5) };
   };
@@ -680,15 +770,25 @@ export function getLiveTurn(store: GuildStore, roomId: string) {
   const live = bots[bots.length - 1] ?? {
     botId: "",
     thinking: "",
-    steps: steers,
+    steps: store.peekSteers(roomId).map((text) => ({
+      name: "steer" as const,
+      detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
+      running: true,
+    })),
   };
   return { ...live, bots, traj: liveTrajectoryForRoom(store, roomId) };
 }
 
-export function abortLiveTurn(store: GuildStore, roomId: string) {
+export function abortLiveTurn(
+  store: GuildStore,
+  roomId: string,
+  botId?: string,
+) {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
-  const live = store.getLiveTurn(roomId);
-  const had = store.abortTurn(roomId);
+  const live = botId
+    ? store.getLiveBotTurn(roomId, botId)
+    : store.getLiveTurn(roomId);
+  const had = store.abortTurn(roomId, botId);
   if (!live && !had) throw new StoreError(409, "no live turn");
   return { ok: true };
 }
@@ -707,20 +807,24 @@ export function steerUserMessage(
   roomId: string,
   body: string,
   attachments?: ChatAttachment[],
+  replyTo?: string,
+  botId?: string,
 ) {
   if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
-  if (!store.getLiveTurn(roomId)) {
+  const live = store.listLiveRoomTurns(roomId);
+  if (!live.length) {
     throw new StoreError(409, "no live turn");
   }
   const packed = parseAttachments(attachments);
   const tokens = packed?.map((att) => att.token).join(" ") || "";
   const text = body.trim() || tokens;
+  const parent = parentMessage(store.listMessages(roomId), replyTo);
   const message = store.appendMessage(
     roomId,
     "you",
     text,
     undefined,
-    undefined,
+    parent?.id,
     packed,
     undefined,
     true,
@@ -732,7 +836,12 @@ export function steerUserMessage(
   } catch {
     /* ignore */
   }
-  store.pushSteer(roomId, askedText(store, undefined, message));
+  const asked = askedText(store, parent, message);
+  if (botId && live.some((turn) => turn.botId === botId)) {
+    store.pushSteer(roomId, asked, botId);
+  } else {
+    for (const turn of live) store.pushSteer(roomId, asked, turn.botId);
+  }
   return { message };
 }
 
@@ -756,89 +865,99 @@ async function generateReplies(
     : replyBots(store, memberIds, userMessage.body, extraBotId);
   const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
-  const signal = store.beginTurn(roomId);
-  const initialSteers = store.drainSteers(roomId);
+  const signal = store.beginTurn(roomId, targets);
   const mcpTools =
     extras.mcp === false
       ? []
       : extras.mcpTools !== undefined
         ? extras.mcpTools
         : await listMcpToolRefs(store.dataDir);
-  try {
-    await Promise.all(
-      targets.map(async (botId) => {
-        if (!memberIds.includes(botId) && !onlyBotId) return;
-        if (signal.aborted) return;
-        const startedAt = new Date().toISOString();
-        store.setLiveTurn(roomId, {
-          botId,
-          thinking: "",
-          steps: [{ name: "think", detail: "", running: true }],
-          startedAt,
-        });
-        let firstSteer = true;
-        let generated;
-        try {
-          generated = await (extras.turn ?? chatReply)({
-            ...chatTurnForBot(store, roomId, botId, history, asked),
-            env,
-            signal,
-            mcpTools,
-            onProgress: (update) => {
-              const prev = store.getLiveBotTurn(roomId, botId);
-              store.setLiveTurn(roomId, {
-                ...toLiveTurn(botId, update),
-                startedAt: prev?.startedAt || startedAt,
-              });
-            },
-            pullSteers: () => {
-              const extra = store.drainSteers(roomId);
-              if (!firstSteer) return extra;
-              firstSteer = false;
-              return initialSteers.concat(extra);
-            },
-          });
-        } catch (err) {
-          if (isAbortError(err) || signal.aborted) return;
-          throw err;
-        }
-        const usage = { ...(generated.usage || {}), startedAt };
-        const reply = store.appendMessage(
+  const speak = async (
+    botId: string,
+    turnAsked: string,
+    turnHistory: HistoryItem[],
+  ) => {
+    if (!memberIds.includes(botId) && !onlyBotId) return;
+    if (signal.aborted) return;
+    const startedAt = new Date().toISOString();
+    store.setLiveTurn(roomId, {
+      botId,
+      thinking: "",
+      steps: [{ name: "think", detail: "", running: true }],
+      startedAt,
+    });
+    let generated;
+    try {
+      generated = await (extras.turn ?? chatReply)({
+        ...chatTurnForBot(
+          store,
           roomId,
           botId,
-          generated.body,
-          generated.parts,
-          undefined,
-          undefined,
-          usage,
-        );
-        recordTurn(store, roomId, botId, generated, reply);
-        replies.push(reply);
-        extras.onTurnComplete?.({
-          roomId,
-          botId,
-          userText: asked,
-          reply: generated.body,
-        });
-        if (generated.source === "llm") {
-          harvested.push({
-            handle: store.getBot(botId)?.handle || botId,
-            author: botId,
-            body: generated.body,
+          turnHistory,
+          turnAsked,
+          userMessage.body,
+        ),
+        env,
+        signal,
+        mcpTools,
+        onProgress: (update) => {
+          const prev = store.getLiveBotTurn(roomId, botId);
+          store.setLiveTurn(roomId, {
+            ...toLiveTurn(botId, update),
+            startedAt: prev?.startedAt || startedAt,
           });
-          if (extras.harvest !== false) {
-            await harvestBotMemory({
-              store,
-              botId,
-              userMessage: asked,
-              reply: generated.body,
-              env,
-              prefer: store.getBot(botId)?.model ?? null,
-            }).catch(() => {});
-          }
-        }
-      }),
+        },
+        pullSteers: () => store.drainSteers(roomId, botId),
+      });
+    } catch (err) {
+      if (isAbortError(err) || signal.aborted) return;
+      throw err;
+    }
+    const usage = { ...(generated.usage || {}), startedAt };
+    const reply = store.appendMessage(
+      roomId,
+      botId,
+      generated.body,
+      generated.parts,
+      undefined,
+      undefined,
+      usage,
     );
+    recordTurn(store, roomId, botId, generated, reply);
+    replies.push(reply);
+    extras.onTurnComplete?.({
+      roomId,
+      botId,
+      userText: turnAsked,
+      reply: generated.body,
+    });
+    if (generated.source === "llm") {
+      harvested.push({
+        handle: store.getBot(botId)?.handle || botId,
+        author: botId,
+        body: generated.body,
+      });
+      if (extras.harvest !== false) {
+        await harvestBotMemory({
+          store,
+          botId,
+          userMessage: turnAsked,
+          reply: generated.body,
+          env,
+          prefer: store.getBot(botId)?.model ?? null,
+        }).catch(() => {});
+      }
+    }
+  };
+  try {
+    await Promise.all(targets.map((botId) => speak(botId, asked, history)));
+    const hops = handoffTargets(store, memberIds, replies, asked, history);
+    if (hops.length && !signal.aborted) {
+      for (const hop of hops) store.adoptTurn(roomId, hop.botId, signal);
+      await Promise.all(
+        hops.map((hop) => speak(hop.botId, hop.asked, hop.history)),
+      );
+    }
     const room = store.getRoom(roomId);
     if (room?.kind === "channel" && harvested.length && extras.harvest !== false) {
       await harvestChannelMemory({
@@ -852,7 +971,7 @@ async function generateReplies(
     }
     return replies;
   } finally {
-    store.endTurn(roomId);
+    store.endTurn(roomId, signal);
   }
 }
 
@@ -1089,7 +1208,7 @@ export async function retryMessage(
   const userMessage = messages[userIndex];
   const history = messages.slice(0, userIndex).map(toHistoryItem);
   const startedAt = new Date().toISOString();
-  const signal = store.beginTurn(roomId);
+  const signal = store.beginTurn(roomId, [current.author]);
   store.setLiveTurn(roomId, {
     botId: current.author,
     thinking: "",
@@ -1105,6 +1224,7 @@ export async function retryMessage(
         current.author,
         history,
         userMessage.body,
+        userMessage.body,
       ),
       env,
       signal,
@@ -1116,7 +1236,7 @@ export async function retryMessage(
           startedAt: prev?.startedAt || startedAt,
         });
       },
-      pullSteers: () => store.drainSteers(roomId),
+      pullSteers: () => store.drainSteers(roomId, current.author),
     });
   } catch (err) {
     if (isAbortError(err) || signal.aborted) {
@@ -1124,7 +1244,7 @@ export async function retryMessage(
     }
     throw err;
   } finally {
-    store.endTurn(roomId);
+    store.endTurn(roomId, signal);
   }
   const usage = { ...(generated.usage || {}), startedAt };
   const reply = store.replaceMessage(

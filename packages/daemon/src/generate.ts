@@ -9,7 +9,7 @@ import { MEMORY_INJECT_CAP } from "./memory.ts";
 import { llmComplete } from "./llm.ts";
 import { policyFor, type Sandbox } from "./harness.ts";
 import { listMcpToolRefs, type McpToolRef } from "./mcp.ts";
-import { StoreError } from "./store.ts";
+import { CHANNEL_ROSTER_CAP, StoreError } from "./store.ts";
 import {
   hostContext,
   TOOL_SYSTEM,
@@ -60,14 +60,14 @@ export function localGenerate(
     return {
       name,
       source: "local",
-      body: `# ${name}\n\n${idea}\n\n## Voice\n- Speak in this stance: ${idea}\n- Be specific. No filler.\n\n## Values\n- Prefer truth over comfort.\n- Leave the workspace better than you found it.\n\n## Boundaries\n- Do not invent facts.\n- Ask before destructive actions.\n`,
+      body: `# ${name}\n\n${idea}\n\n## Voice\n- Speak in this stance: ${idea}\n- Be specific. No filler.\n\n## Values\n- Prefer truth over comfort.\n- Leave the workspace better than you found it.\n\n## Boundaries\n- Do not invent facts.\n- Ask before destructive actions.\n- Do not do another seat's job. Hand off with a spec.\n`,
     };
   }
   if (kind === "agent") {
     return {
       name,
       source: "local",
-      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## How you work\n1. Restate the goal in one sentence.\n2. Inspect the workspace before editing.\n3. Make the smallest change that satisfies the goal.\n4. Verify with a command or test.\n5. Summarize what changed and what is still open.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n`,
+      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## How you work\n1. Restate the goal in one sentence.\n2. Inspect the workspace before editing.\n3. Make the smallest change that satisfies the goal.\n4. Verify with a command or test.\n5. Summarize what changed and what is still open.\n6. Work that belongs to another seat: @handle with Goal / Done when / out of scope / files.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
     };
   }
   if (kind === "skill") {
@@ -97,7 +97,7 @@ export function localGenerate(
   return {
     name,
     source: "local",
-    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Hand off with a written summary and artifacts.\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\nsandbox: workspace_write\n`,
+    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Do not cover another seat. Hand off with a spec (goal, done when, constraints, files).\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\nsandbox: workspace_write\n`,
   };
 }
 
@@ -148,6 +148,17 @@ ${bodyHint} name is a short title. Language: follow the user's prompt.`;
   return { name: parsed.name, body: parsed.body, source: "llm" };
 }
 
+/** Seat exclusivity, spec handoffs, quiet unless blocked. */
+export const HALL_RULES = `# Hall
+Own this seat. Do not do another staffed bot's job.
+When work belongs to someone else, @handle them with a written spec, not a suggestion:
+- Goal (one sentence)
+- Done when
+- Constraints / out of scope
+- Files or evidence
+Do not @all unless the human did. Do not recruit extra people; the human staffs the roster (max ${CHANNEL_ROSTER_CAP} on a quest).
+Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.`;
+
 export function buildChatSystem(input: {
   botName: string;
   handle: string;
@@ -165,7 +176,7 @@ export function buildChatSystem(input: {
   const skillLine = skills.length
     ? [
         "<system-reminder>",
-        "A skill is a reusable set of task-specific instructions. The following skills are staffed on this bot:",
+        "A skill is a reusable set of task-specific instructions. The following skills are available this turn (staffed on this bot, or invoked with /name):",
         "",
         "<available_skills>",
         ...skills.map((item) => {
@@ -195,7 +206,7 @@ export function buildChatSystem(input: {
           return `- \`${key}\` (${mode}): ${desc}`;
         }),
         "</available_subagents>",
-        "Call spawn with the exact name (or slug) and a self-contained prompt. The child has a fresh context and returns a summary.",
+        "Call spawn with the exact name (or slug) and a self-contained prompt. If the user writes /name matching a subagent, spawn that one. The child has a fresh context and returns a summary.",
       ].join("\n")
     : "";
   const channel = (input.channelMd ?? "").trim();
@@ -213,6 +224,7 @@ export function buildChatSystem(input: {
   return [
     `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
     "Reply in the user's language. Be brief. Stay in character.",
+    HALL_RULES,
     hostContext(),
     TOOL_SYSTEM,
     skillLine,
@@ -220,8 +232,8 @@ export function buildChatSystem(input: {
     channelBlock,
     botMemBlock,
     roomMemBlock,
-    input.soul.slice(0, 1800),
-    input.agent.slice(0, 1200),
+    input.soul.slice(0, 2400),
+    input.agent.slice(0, 1600),
     input.position.slice(0, 800),
   ]
     .filter(Boolean)

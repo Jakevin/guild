@@ -431,11 +431,23 @@ function piModels(dataDir: string): MutableModels {
   return models;
 }
 
+function copilotAllowedIds(dataDir: string): string[] | undefined {
+  const cred = getStore(dataDir).peek("github-copilot");
+  if (cred?.type !== "oauth") return undefined;
+  if (!Array.isArray(cred.availableModelIds)) return undefined;
+  return cred.availableModelIds.filter((item) => typeof item === "string");
+}
+
 function catalogModels(id: string, dataDir: string): ModelEntryLite[] {
+  if (id === "github-copilot" && copilotAutoOnly(dataDir)) {
+    return [{ id: "auto", name: "Auto" }];
+  }
   try {
     const models = piModels(dataDir).getModels(id);
-    if (models.length) {
-      return models.map((model) => ({
+    const allowed = id === "github-copilot" ? copilotAllowedIds(dataDir) : undefined;
+    const kept = allowed ? models.filter((model) => allowed.includes(model.id)) : models;
+    if (kept.length) {
+      return kept.map((model) => ({
         id: model.id,
         name: model.name || model.id,
       }));
@@ -444,6 +456,186 @@ function catalogModels(id: string, dataDir: string): ModelEntryLite[] {
     /* catalog not ready */
   }
   return [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function copilotSkuFromToken(token: string): string | undefined {
+  const match = token.match(/(?:^|;)sku=([^;]+)/);
+  return match?.[1];
+}
+
+/** Free / Student Copilot may only use auto model selection. */
+export function isCopilotAutoOnlySku(sku?: string): boolean {
+  if (!sku) return false;
+  const key = sku.toLowerCase();
+  if (/(?:^|_)(?:pro|business|enterprise|max)(?:_|$)/.test(key) && !/free/.test(key)) {
+    return false;
+  }
+  return /free|student|edu/.test(key);
+}
+
+function copilotPeekSku(dataDir: string): string | undefined {
+  const cred = getStore(dataDir).peek("github-copilot");
+  if (cred?.type !== "oauth") return undefined;
+  return copilotSkuFromToken(cred.access);
+}
+
+function copilotAutoOnly(dataDir: string): boolean {
+  return isCopilotAutoOnlySku(copilotPeekSku(dataDir));
+}
+
+function copilotSkuAllowsModel(
+  item: Record<string, unknown>,
+  sku?: string,
+): boolean {
+  const billing = asRecord(item.billing);
+  const restricted = billing?.restricted_to;
+  if (!Array.isArray(restricted) || !restricted.length) return true;
+  if (!sku) return true;
+  return restricted.includes(sku);
+}
+
+export function parseCopilotPickerIds(
+  raw: unknown,
+  allowPolicyFallback: boolean,
+  sku?: string,
+): string[] {
+  const data = asRecord(raw)?.data;
+  if (!Array.isArray(data)) return [];
+  const pickerIds: string[] = [];
+  const policyEnabledIds: string[] = [];
+  for (const rawItem of data) {
+    const item = asRecord(rawItem);
+    const id = item?.id;
+    if (!item || typeof id !== "string") continue;
+    const capabilities = asRecord(item.capabilities);
+    const supports = asRecord(capabilities?.supports);
+    if (supports?.tool_calls === false) continue;
+    if (!copilotSkuAllowsModel(item, sku)) continue;
+    const policy = asRecord(item.policy);
+    if (item.model_picker_enabled === true && policy?.state !== "disabled") {
+      pickerIds.push(id);
+    }
+    if (policy?.state === "enabled") policyEnabledIds.push(id);
+  }
+  return pickerIds.length > 0 || !allowPolicyFallback ? pickerIds : policyEnabledIds;
+}
+
+const copilotCatalogAt = new Map<string, number>();
+const COPILOT_CATALOG_TTL_MS = 30_000;
+const COPILOT_API_VERSION = "2026-06-01";
+
+/** IDE headers Copilot requires. Missing X-GitHub-Api-Version looks like a named-model 400. */
+export function copilotIdeHeaders(sessionToken?: string): Record<string, string> {
+  return {
+    "User-Agent": "GitHubCopilotChat/0.35.0",
+    "Editor-Version": "vscode/1.107.0",
+    "Editor-Plugin-Version": "copilot-chat/0.35.0",
+    "Copilot-Integration-Id": "vscode-chat",
+    "X-GitHub-Api-Version": COPILOT_API_VERSION,
+    ...(sessionToken ? { "Copilot-Session-Token": sessionToken } : {}),
+  };
+}
+
+function copilotAuthHeaders(token: string, sessionToken?: string): Record<string, string> {
+  return {
+    Accept: "application/json",
+    Authorization: `Bearer ${token}`,
+    ...copilotIdeHeaders(sessionToken),
+  };
+}
+
+/** Refresh github-copilot availableModelIds from Copilot's picker, not the full catalog. */
+export async function refreshCopilotCatalog(dataDir: string): Promise<void> {
+  const store = getStore(dataDir);
+  const cred = store.peek("github-copilot");
+  if (cred?.type !== "oauth") return;
+  const prev = copilotCatalogAt.get(dataDir) ?? 0;
+  if (
+    Date.now() - prev < COPILOT_CATALOG_TTL_MS &&
+    Array.isArray(cred.availableModelIds)
+  ) {
+    return;
+  }
+  try {
+    const resolved = await piModels(dataDir).getAuth("github-copilot");
+    const token = resolved?.auth.apiKey;
+    const baseUrl = (resolved?.auth.baseUrl || "").replace(/\/+$/, "");
+    if (!token || !baseUrl) return;
+    const response = await fetch(`${baseUrl}/models`, {
+      headers: copilotAuthHeaders(token),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return;
+    const ids = parseCopilotPickerIds(
+      await response.json(),
+      baseUrl.includes("api.individual.githubcopilot.com"),
+      copilotSkuFromToken(token),
+    );
+    await store.modify("github-copilot", async (current) => {
+      if (current?.type !== "oauth") return current;
+      return { ...current, availableModelIds: ids };
+    });
+    copilotCatalogAt.set(dataDir, Date.now());
+  } catch {
+    /* keep the last stored list */
+  }
+}
+
+type CopilotAutoSession = {
+  selectedModel: string;
+  sessionToken: string;
+};
+
+async function openCopilotAutoSession(dataDir: string): Promise<CopilotAutoSession> {
+  const resolved = await piModels(dataDir).getAuth("github-copilot");
+  const token = resolved?.auth.apiKey;
+  const baseUrl = (resolved?.auth.baseUrl || "").replace(/\/+$/, "");
+  if (!token || !baseUrl) {
+    throw new Error("GitHub Copilot is not logged in");
+  }
+  const response = await fetch(`${baseUrl}/models/session`, {
+    method: "POST",
+    headers: {
+      ...copilotAuthHeaders(token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ auto_mode: { enabled: true } }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      text || "GitHub Copilot Auto 無法開 session。免費／學生方案只能走 Auto。",
+    );
+  }
+  const body = asRecord(await response.json());
+  const selected =
+    typeof body?.selected_model === "string" ? body.selected_model : "";
+  const sessionToken =
+    typeof body?.session_token === "string" ? body.session_token : "";
+  if (!selected || !sessionToken) {
+    throw new Error("GitHub Copilot Auto 沒有可用模型。");
+  }
+  return { selectedModel: selected, sessionToken };
+}
+
+function copilotModelForId(
+  models: MutableModels,
+  id: string,
+): ReturnType<MutableModels["getModel"]> {
+  const exact = models.getModel("github-copilot", id);
+  if (exact) return exact;
+  const template = models
+    .getModels("github-copilot")
+    .find((model) => model.api === "openai-responses");
+  if (!template) return undefined;
+  return { ...template, id, name: id };
 }
 
 export type OAuthStatus = {
@@ -723,15 +915,22 @@ export function formatOAuthError(provider: string, message?: string): string {
   if (
     /^模型請求/.test(text) ||
     text.includes("不是訂閱失效") ||
-    text.includes("登入已失效")
+    text.includes("登入已失效") ||
+    text.includes("這個 GitHub Copilot 帳號不支援")
   ) {
-    return text;
+    return text.replace(/^模型請求失敗：/, "");
   }
   if (/terminated|timed?\s*out|timeout|aborted/i.test(text)) {
     return "模型請求逾時，多半是思考或工具跑太久，不是訂閱失效。再送一次即可。";
   }
   if (/401|unauthorized|invalid.?token|not logged in/i.test(text)) {
     return "登入已失效，請到模型頁重新連接。";
+  }
+  if (
+    (provider === "github-copilot" || /github/.test(provider)) &&
+    /model_not_supported|not supported/i.test(text)
+  ) {
+    return "這個 GitHub Copilot 帳號不支援指定模型。免費／學生方案只能用 Auto，到模型頁選 Auto。";
   }
   if (provider === "xai" && /426|outdated/i.test(text)) {
     return "Grok CLI 被判定過舊。請執行 grok update。";
@@ -770,8 +969,29 @@ export async function completeOAuth(input: {
   const sub = subscriptionByPicker(input.pickerId);
   if (!sub) throw new Error(`unknown oauth provider ${input.pickerId}`);
   const models = piModels(input.dataDir);
-  const model = models.getModel(sub.id, input.model);
-  if (!model) throw new Error(`${sub.id} has no model ${input.model}`);
+  let modelId = input.model;
+  let copilotSessionToken = "";
+  if (sub.id === "github-copilot") {
+    await refreshCopilotCatalog(input.dataDir);
+    const autoOnly = copilotAutoOnly(input.dataDir);
+    if (autoOnly || modelId === "auto") {
+      const session = await openCopilotAutoSession(input.dataDir);
+      modelId = session.selectedModel;
+      copilotSessionToken = session.sessionToken;
+    } else {
+      const allowed = copilotAllowedIds(input.dataDir);
+      if (allowed && !allowed.includes(modelId)) {
+        throw new Error(
+          `這個 GitHub Copilot 帳號不支援 ${modelId}。免費／學生方案請選 Auto。`,
+        );
+      }
+    }
+  }
+  const model =
+    sub.id === "github-copilot"
+      ? copilotModelForId(models, modelId)
+      : models.getModel(sub.id, modelId);
+  if (!model) throw new Error(`${sub.id} has no model ${modelId}`);
   const auth = await models.checkAuth(sub.id);
   if (!auth) {
     throw new Error(`${sub.name} is not logged in`);
@@ -783,36 +1003,51 @@ export async function completeOAuth(input: {
       : stubAssistant(model, item.content, now),
   );
   const useTools = Boolean(input.tools);
+  const dropCopilotTemperature = Boolean(
+    copilotSessionToken || (sub.id === "github-copilot" && model.reasoning),
+  );
   const options: {
-    temperature: number;
+    temperature?: number;
     reasoning?: "minimal" | "low" | "medium" | "high";
     timeoutMs: number;
     transformHeaders?: (
       headers: Record<string, string | null>,
     ) => Record<string, string | null>;
+    onPayload?: (payload: unknown) => unknown;
   } = {
-    temperature: input.temperature ?? 0.4,
+    temperature: dropCopilotTemperature ? undefined : (input.temperature ?? 0.4),
     reasoning: input.reasoning,
     timeoutMs: LLM_ROUND_TIMEOUT_MS,
-    ...(sub.id === "xai"
-      ? {
-          transformHeaders: (headers: Record<string, string | null>) => ({
-            ...headers,
-            ...grokCliHeaders(),
-          }),
-        }
-      : {}),
   };
+  if (sub.id === "xai" || sub.id === "github-copilot") {
+    options.transformHeaders = (headers) => ({
+      ...headers,
+      ...(sub.id === "xai" ? grokCliHeaders() : {}),
+      ...(sub.id === "github-copilot"
+        ? copilotIdeHeaders(copilotSessionToken || undefined)
+        : {}),
+    });
+  }
+  if (dropCopilotTemperature) {
+    options.onPayload = (payload) => {
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return payload;
+      }
+      const next = { ...(payload as Record<string, unknown>) };
+      delete next.temperature;
+      return next;
+    };
+  }
   const traces: ToolTrace[] = [];
   const thinkingChunks: string[] = [];
   const usage = blankUsage();
   usage.provider = input.pickerId;
-  usage.model = input.model;
+  usage.model = modelId;
   const started = Date.now();
   const finish = (text: string) => ({
     text,
     provider: input.pickerId,
-    model: input.model,
+    model: modelId,
     traces,
     thinking: thinkingChunks.join("\n\n"),
     usage: withDuration(usage, started),

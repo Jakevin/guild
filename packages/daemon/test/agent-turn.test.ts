@@ -114,9 +114,16 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /event.live/);
   assert.match(html, /resumeCurrentLive/);
   assert.match(html, /stopTurn/);
+  assert.match(html, /data-live-stop/);
+  assert.match(html, /data-live-steer/);
+  assert.match(html, /insertIntoBotTurn/);
   assert.match(html, /slice\(-5\)/);
-  assert.match(html, /steer\.hint/);
+  assert.match(html, /live\.steer/);
   assert.match(html, /enqueuePending/);
+  assert.match(html, /dispatchBusySend/);
+  assert.match(html, /splitSendTargets/);
+  assert.match(html, /inFlightBotIds/);
+  assert.match(html, /replyAuthorId/);
   assert.match(html, /formatMsgClock/);
   assert.match(html, /msgStamp/);
   assert.match(html, /finishedAt/);

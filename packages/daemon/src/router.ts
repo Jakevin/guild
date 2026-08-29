@@ -48,6 +48,7 @@ import type { GuildStore } from "./store.ts";
 import {
   completeLogin,
   listSubscriptions,
+  refreshCopilotCatalog,
   logoutOAuth,
   pollLogin,
   startLogin,
@@ -502,13 +503,27 @@ export async function handleRequest(
 
     const channelAbort = path.match(/^\/channels\/([^/]+)\/abort$/);
     if (channelAbort && method === "POST") {
-      json(res, 200, abortLiveTurn(store, decodeURIComponent(channelAbort[1])));
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        abortLiveTurn(
+          store,
+          decodeURIComponent(channelAbort[1]),
+          str(body, "botId") || undefined,
+        ),
+      );
       return;
     }
     const dmAbort = path.match(/^\/dms\/([^/]+)\/abort$/);
     if (dmAbort && method === "POST") {
       const room = openDm(store, decodeURIComponent(dmAbort[1]));
-      json(res, 200, abortLiveTurn(store, room.id));
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        abortLiveTurn(store, room.id, str(body, "botId") || undefined),
+      );
       return;
     }
 
@@ -523,6 +538,8 @@ export async function handleRequest(
           decodeURIComponent(channelSteer[1]),
           str(body, "body"),
           parseAttachments(body.attachments),
+          str(body, "replyTo") || undefined,
+          str(body, "botId") || undefined,
         ),
       );
       return;
@@ -539,6 +556,8 @@ export async function handleRequest(
           room.id,
           str(body, "body"),
           parseAttachments(body.attachments),
+          str(body, "replyTo") || undefined,
+          str(body, "botId") || undefined,
         ),
       );
       return;
@@ -713,6 +732,7 @@ export async function handleRequest(
     }
 
     if (method === "GET" && path === "/settings/models") {
+      await refreshCopilotCatalog(store.dataDir);
       json(res, 200, publicModels(store.dataDir));
       return;
     }
@@ -749,6 +769,7 @@ export async function handleRequest(
         json(res, 200, { subscriptions: [] });
         return;
       }
+      await refreshCopilotCatalog(store.dataDir);
       json(res, 200, { subscriptions: listSubscriptions(store.dataDir) });
       return;
     }

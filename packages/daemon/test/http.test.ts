@@ -550,7 +550,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /id="assign"/);
   assert.match(home, /function mentionAt/);
   assert.match(home, /function mentionChoices/);
+  assert.match(home, /function slashAt/);
+  assert.match(home, /function loadSlashCatalog/);
+  assert.match(home, /\/library\/skills\/host/);
+  assert.match(home, /\/library\/subagents\/host/);
   assert.match(home, /id="mention-pop"/);
+  assert.match(home, /data-attach="agents"/);
   assert.match(home, /assignCandidates/);
   assert.match(home, /assigneeId/);
   assert.match(home, /canStopHere/);
@@ -570,6 +575,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /trajFollow/);
   assert.match(home, /resumeCurrentLive/);
   assert.match(home, /function stopTurn/);
+  assert.match(home, /data-live-stop/);
+  assert.match(home, /data-live-steer/);
+  assert.match(home, /function insertIntoBotTurn/);
+  assert.match(home, /function ingestFiles/);
+  assert.match(home, /filesFromClipboard/);
+  assert.match(home, /live\.steer/);
   assert.match(home, /\/abort/);
   assert.match(home, /\/live/);
   assert.match(home, /steer\.queue/);
@@ -577,6 +588,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /flashSteerAck/);
   assert.match(home, /function sendSteer/);
   assert.match(home, /function enqueuePending/);
+  assert.match(home, /function dispatchBusySend/);
+  assert.match(home, /function splitSendTargets/);
+  assert.match(home, /function inFlightBotIds/);
+  assert.match(home, /function replyAuthorId/);
+  assert.match(home, /payload.replyTo = pending.replyTo/);
+  assert.match(home, /steer\.waiting/);
   assert.doesNotMatch(home, /\.disabled = stop/);
   const library = readFileSync(LIBRARY_HTML, "utf8");
   const studio = readFileSync(STUDIO_HTML, "utf8");
@@ -1288,15 +1305,22 @@ test("POST steer injects into a live turn and 409s when idle", async () => {
       thinking: "",
       steps: [],
     });
+    const parent = store.appendMessage(
+      "channel-general",
+      store.listBots()[0].id,
+      "先前的回覆",
+    );
     const steered = await postJson(origin, "/channels/channel-general/steer", {
       body: "use the other file",
+      replyTo: parent.id,
     });
     assert.equal(steered.status, 201);
     const message = (steered.body as {
-      message: { author: string; body: string; steer?: boolean };
+      message: { author: string; body: string; steer?: boolean; replyTo?: string };
     }).message;
     assert.equal(message.author, "you");
     assert.equal(message.steer, true);
+    assert.equal(message.replyTo, parent.id);
     assert.match(message.body, /other file/);
     const live = await getJson(origin, "/channels/channel-general/live");
     const liveBody = live.body as {

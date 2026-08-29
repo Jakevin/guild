@@ -60,7 +60,7 @@
       </header>
       <div class="thread" id="thread"></div>
       <form class="composer" id="composer">
-        <div class="composer-card">
+        <div class="composer-card" data-drop-hint="放到這裡" data-i18n-drop="attach.drop">
           <div class="mention-pop" id="mention-pop" hidden>
             <div id="mention-results"></div>
           </div>
@@ -98,6 +98,7 @@
                   <button type="button" class="attach-item" data-attach="files"><span class="attach-ico">&lt;/&gt;</span><span data-i18n="attach.files">檔案</span></button>
                   <button type="button" class="attach-item" data-attach="dirs"><span class="attach-ico">📁</span><span data-i18n="attach.dirs">資料夾</span></button>
                   <button type="button" class="attach-item" data-attach="skills"><span class="attach-ico">✎</span><span data-i18n="attach.skills">技能</span></button>
+                  <button type="button" class="attach-item" data-attach="agents"><span class="attach-ico">◈</span><span data-i18n="attach.agents">子代理</span></button>
                   <button type="button" class="attach-item" data-attach="conv"><span class="attach-ico">💬</span><span data-i18n="attach.conv">對話</span></button>
                   <button type="button" class="attach-item" data-attach="git"><span class="attach-ico">⑂</span><span data-i18n="attach.git">Git</span></button>
                   <button type="button" class="attach-item" data-attach="rules"><span class="attach-ico">☰</span><span data-i18n="attach.rules">規則</span></button>
@@ -250,6 +251,14 @@
     </dialog>
     <script>
       const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
+      const CHANNEL_ROSTER_CAP = 6;
+      function isGeneralChannel(ch) {
+        return Boolean(ch && (ch.id === "channel-general" || ch.name === "general"));
+      }
+      function rosterFull(ch) {
+        if (!ch || isGeneralChannel(ch)) return false;
+        return ((ch.memberIds && ch.memberIds.length) || 0) >= CHANNEL_ROSTER_CAP;
+      }
       const state = {
         channels: [],
         bots: [],
@@ -267,6 +276,12 @@
         liveGen: 0,
         mention: null,
         mentionIndex: 0,
+        slash: null,
+        slashIndex: 0,
+        slashCatalog: null,
+        slashCatalogAt: 0,
+        slashLoading: false,
+        slashCatalogPromise: null,
         replyTo: null,
         attachments: [],
         attachCwd: "",
@@ -276,6 +291,8 @@
         queue: [],
         queueSeq: 0,
         posting: false,
+        inFlight: 0,
+        aborts: [],
         serverLive: [],
         unread: (function () {
           try {
@@ -866,6 +883,48 @@
         if (currentRoomBusy()) return true;
         return Boolean(state.kind === "dm" && state.busyBots[state.id]);
       }
+      function inFlightBotIds() {
+        const ids = [];
+        (state.aborts || []).forEach((item) => {
+          (item.botIds || []).forEach((id) => {
+            if (id && ids.indexOf(id) < 0) ids.push(id);
+          });
+        });
+        return ids;
+      }
+      function liveBotIds() {
+        const ids = [];
+        (state.lives || []).forEach((row) => {
+          if (row && row.botId && ids.indexOf(row.botId) < 0) ids.push(row.botId);
+        });
+        inFlightBotIds().forEach((id) => {
+          if (ids.indexOf(id) < 0) ids.push(id);
+        });
+        return ids;
+      }
+      function splitSendTargets(botIds) {
+        const live = liveBotIds();
+        const ids = (botIds || []).filter(Boolean);
+        return {
+          live: live,
+          fresh: ids.filter((id) => live.indexOf(id) < 0),
+          same: ids.filter((id) => live.indexOf(id) >= 0),
+        };
+      }
+      function replyAuthorId(replyToId) {
+        if (!replyToId) return "";
+        const parent = (state.messages || []).find((msg) => msg.id === replyToId);
+        if (parent && parent.author && parent.author !== "you") return parent.author;
+        if (
+          state.replyTo &&
+          state.replyTo.id === replyToId &&
+          state.replyTo.author &&
+          state.replyTo.author !== "you"
+        ) {
+          return state.replyTo.author;
+        }
+        return "";
+      }
       function composerHasPayload() {
         const draft = document.getElementById("draft");
         return Boolean(
@@ -879,46 +938,27 @@
       function syncSteerHint() {
         const hint = document.getElementById("composer-steer");
         if (!hint) return;
-        if (hint.classList.contains("ok")) return;
-        if (!currentRoomBusy()) {
-          hint.hidden = true;
-          hint.textContent = "";
-          return;
-        }
-        hint.hidden = false;
-        hint.textContent = t("steer.hint", { mod: steerModLabel() });
+        hint.hidden = true;
+        hint.textContent = "";
+        hint.classList.remove("ok");
       }
       let toastTimer = 0;
-      function showToast(text) {
+      function showToast(text, ms) {
         const el = document.getElementById("toast");
         if (!el || !text) return;
         el.textContent = text;
         el.classList.add("on");
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.remove("on"), 1600);
+        toastTimer = setTimeout(() => el.classList.remove("on"), ms || 1600);
       }
       let steerAckTimer = 0;
       function flashSteerAck() {
-        const hint = document.getElementById("composer-steer");
-        if (!hint) return;
-        hint.hidden = false;
-        hint.classList.add("ok");
-        hint.textContent = t("steer.done");
-        clearTimeout(steerAckTimer);
-        steerAckTimer = setTimeout(() => {
-          hint.classList.remove("ok");
-          syncSteerHint();
-        }, 2800);
+        showToast(t("steer.done"), 2200);
       }
       function syncSendButton() {
-        const stop = canStopHere() && !composerHasPayload();
         const send = document.getElementById("send");
-        send.classList.toggle("stopping", stop);
-        const label = stop
-          ? t("stop")
-          : currentRoomBusy()
-            ? t("steer.queue")
-            : t("send");
+        send.classList.remove("stopping");
+        const label = currentRoomBusy() ? t("steer.queue") : t("send");
         send.title = label;
         send.setAttribute("aria-label", label);
         syncSteerHint();
@@ -1288,7 +1328,7 @@
           .join("");
       }
 
-      function memberRowHtml(bot, action, locked) {
+      function memberRowHtml(bot, action, locked, full) {
         const act =
           action === "in" && !locked
             ? '<button type="button" class="members-act out" data-remove="' +
@@ -1296,13 +1336,15 @@
               '">' +
               t("members.kick") +
               "</button>"
-            : action === "out"
+            : action === "out" && !full
               ? '<button type="button" class="members-act" data-add="' +
                 escapeHtml(bot.id) +
                 '">' +
                 t("members.add") +
                 "</button>"
-              : "";
+              : action === "out" && full
+                ? '<span class="meta">' + t("members.addDisabled") + "</span>"
+                : "";
         return (
           '<div class="members-row"><button type="button" class="avatar sm" data-bot-id="' +
           escapeHtml(bot.id) +
@@ -1348,9 +1390,7 @@
         const ch = currentChannel();
         document.getElementById("title").textContent = ch ? ch.name : "…";
         const members = ch ? ch.members || [] : [];
-        const locked = Boolean(
-          ch && (ch.id === "channel-general" || ch.name === "general"),
-        );
+        const locked = isGeneralChannel(ch);
         document.getElementById("subtitle").textContent = "";
         av.textContent = "#";
         av.style.background = "";
@@ -1369,16 +1409,22 @@
               "</span>",
           )
           .join("");
-        document.getElementById("members-count").textContent = members.length
-          ? String(members.length)
-          : "0";
+        document.getElementById("members-count").textContent = locked
+          ? members.length
+            ? String(members.length)
+            : "0"
+          : t("members.cap", {
+              used: members.length,
+              max: CHANNEL_ROSTER_CAP,
+            });
         const taken = new Set((ch && ch.memberIds) || members.map((b) => b.id));
         const outsiders = (state.bots || []).filter((bot) => !taken.has(bot.id));
+        const full = rosterFull(ch);
         document.getElementById("members-in").innerHTML = members.length
-          ? members.map((bot) => memberRowHtml(bot, "in", locked)).join("")
+          ? members.map((bot) => memberRowHtml(bot, "in", locked, full)).join("")
           : '<div class="members-empty">' + t("members.empty") + "</div>";
         document.getElementById("members-out").innerHTML = outsiders.length
-          ? outsiders.map((bot) => memberRowHtml(bot, "out", locked)).join("")
+          ? outsiders.map((bot) => memberRowHtml(bot, "out", locked, full)).join("")
           : '<div class="members-empty">' + t("members.allIn") + "</div>";
         setModelPickerVisible(false);
         syncDraftPlaceholder();
@@ -1451,9 +1497,13 @@
       function applyLiveTurns(lives) {
         state.lives = lives || [];
         state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
-        state.lives.forEach((row) => {
-          if (row.botId) state.busyBots[row.botId] = true;
+        const next = {};
+        liveBotIds().forEach((id) => {
+          next[id] = true;
         });
+        state.busyBots = next;
+        state.busy = liveBotIds().length > 0;
+        if (!state.busy) state.busyRoom = null;
       }
       function liveBot() {
         const id =
@@ -1498,6 +1548,21 @@
           elapsed >= 15000
             ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
             : "";
+        const botId = live && live.botId ? live.botId : "";
+        const actions = botId
+          ? '<div class="turn-actions">' +
+            '<button type="button" class="turn-stop" data-live-stop="' +
+            escapeHtml(botId) +
+            '">' +
+            t("live.stop") +
+            "</button>" +
+            '<button type="button" class="turn-steer" data-live-steer="' +
+            escapeHtml(botId) +
+            '">' +
+            t("live.steer") +
+            "</button>" +
+            "</div>"
+          : "";
         return (
           '<div class="turn-live">' +
           '<div class="turn-status">' +
@@ -1505,6 +1570,7 @@
           clock +
           "</div>" +
           liveStepsHtml(live && live.steps) +
+          actions +
           "</div>"
         );
       }
@@ -1591,7 +1657,7 @@
           if (!res.ok || state.liveGen !== gen) return;
           const lives = liveTurnsFrom(body);
           if (!lives.length) {
-            if (state.posting) return;
+            if (state.inFlight > 0 || state.posting) return;
             mergeLiveTraj(body);
             if (currentRoomBusy()) {
               setBusy(false);
@@ -1610,21 +1676,33 @@
           /* poll is best-effort while the POST is in flight */
         }
       }
+      function threadMessages() {
+        const queued = currentQueue().map((item) => ({
+          id: item.id,
+          author: "you",
+          body: composeSendBody(item.raw),
+          replyTo: item.replyTo || undefined,
+          queued: true,
+          createdAt: item.createdAt,
+        }));
+        return (state.messages || []).concat(queued);
+      }
       function renderThread() {
         const root = document.getElementById("thread");
-        if (!state.messages.length && !currentRoomBusy()) {
+        const rows = threadMessages();
+        if (!rows.length && !currentRoomBusy()) {
           root.innerHTML =
             '<div class="empty-thread">' + t("noMessages") + "</div>";
           return;
         }
         root.innerHTML =
-          state.messages
+          rows
             .map((msg, index) => {
               const you = msg.author === "you";
               const bot = you ? null : botById(msg.author);
               const name = bot ? bot.name : msg.author;
               const handle = bot ? bot.handle : "";
-              const prev = index > 0 ? state.messages[index - 1] : null;
+              const prev = index > 0 ? rows[index - 1] : null;
               const stamp = msgStamp(msg);
               const day = dayKey(stamp);
               const rule =
@@ -1646,9 +1724,11 @@
                 : you
                   ? replyQuoteHtml(msg) +
                     youAttachHtml(msg) +
-                    (msg.steer
-                      ? '<p class="steer-tag">' + t("steer.tag") + "</p>"
-                      : "") +
+                    (msg.queued
+                      ? '<p class="steer-tag waiting">' + t("steer.waiting") + "</p>"
+                      : msg.steer
+                        ? '<p class="steer-tag">' + t("steer.tag") + "</p>"
+                        : "") +
                     '<p class="bubble">' +
                     formatYouBody(msg.body) +
                     "</p>"
@@ -1670,7 +1750,13 @@
                   t("copy") +
                   "</button>" +
                   (you
-                    ? '<button type="button" data-edit="' +
+                    ? msg.queued
+                      ? '<button type="button" data-queue-del="' +
+                        escapeHtml(msg.id) +
+                        '">' +
+                        t("steer.remove") +
+                        "</button>"
+                      : '<button type="button" data-edit="' +
                       escapeHtml(msg.id) +
                       '">' +
                       t("edit") +
@@ -1689,7 +1775,7 @@
                 return (
                   rule +
                   '<article class="msg you' +
-                  (msg.steer ? " steer" : "") +
+                  (msg.queued ? " queued" : msg.steer ? " steer" : "") +
                   '" data-id="' +
                   escapeHtml(msg.id) +
                   '">' +
@@ -1831,14 +1917,47 @@
           ? "/dms/" + encodeURIComponent(r.id) + "/abort"
           : "/channels/" + encodeURIComponent(r.id) + "/abort";
       }
-      function stopTurn() {
+      function stopTurn(botId) {
         const room = state.busyRoom || { kind: state.kind, id: state.id };
-        try {
-          state.abort && state.abort.abort();
-        } catch {
-          /* ignore */
+        (state.aborts || []).forEach((item) => {
+          const controller = item && item.abort ? item : item && item.controller;
+          const ids = item && item.botIds;
+          if (botId && ids && ids.length && ids.indexOf(botId) < 0) return;
+          try {
+            controller && controller.abort();
+          } catch {
+            /* ignore */
+          }
+        });
+        if (!botId) {
+          try {
+            state.abort && state.abort.abort();
+          } catch {
+            /* ignore */
+          }
         }
-        fetch(abortUrl(room), { method: "POST" }).catch(() => {});
+        fetch(abortUrl(room), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(botId ? { botId: botId } : {}),
+        }).catch(() => {});
+      }
+      async function insertIntoBotTurn(botId) {
+        if (!composerHasPayload()) {
+          const draft = document.getElementById("draft");
+          if (draft) draft.focus();
+          showToast(t("live.steer"), 1600);
+          return;
+        }
+        const pending = takeComposerPending();
+        if (!pending) return;
+        await sendSteer({
+          raw: pending.raw,
+          packed: pending.packed,
+          replyTo: pending.replyTo,
+          botIds: [botId],
+          assigneeId: botId,
+        });
       }
       function currentQueue() {
         return (state.queue || []).filter(
@@ -1885,8 +2004,10 @@
           replyTo: pending.replyTo,
           botIds: pending.botIds || [],
           assigneeId: pending.assigneeId || "",
+          createdAt: new Date().toISOString(),
         });
         renderQueue();
+        renderThread();
       }
       function takeComposerPending() {
         const draft = document.getElementById("draft");
@@ -2036,6 +2157,29 @@
             insertAttachToken(chipToken.getAttribute("data-chip-insert-token"));
             return;
           }
+          const liveStop = event.target.closest("[data-live-stop]");
+          if (liveStop) {
+            event.preventDefault();
+            stopTurn(liveStop.getAttribute("data-live-stop"));
+            return;
+          }
+          const liveSteer = event.target.closest("[data-live-steer]");
+          if (liveSteer) {
+            event.preventDefault();
+            insertIntoBotTurn(liveSteer.getAttribute("data-live-steer")).catch(
+              (err) => alert(err.message),
+            );
+            return;
+          }
+          const queueDel = event.target.closest("[data-queue-del]");
+          if (queueDel) {
+            event.preventDefault();
+            const id = queueDel.getAttribute("data-queue-del");
+            state.queue = (state.queue || []).filter((item) => item.id !== id);
+            renderQueue();
+            renderThread();
+            return;
+          }
           if (jump) {
             event.preventDefault();
             const target = document.querySelector(
@@ -2169,11 +2313,22 @@
             { method: "DELETE" },
           );
         } else {
-          await fetch("/channels/" + encodeURIComponent(state.id) + "/members", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ botId: add.getAttribute("data-add") }),
-          });
+          const res = await fetch(
+            "/channels/" + encodeURIComponent(state.id) + "/members",
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ botId: add.getAttribute("data-add") }),
+            },
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            showToast(
+              body.error || t("members.full", { max: CHANNEL_ROSTER_CAP }),
+              3200,
+            );
+            return;
+          }
         }
         await loadWorkspace();
         membersPop.hidden = false;
@@ -2384,7 +2539,14 @@
         const ch = currentChannel();
         const taken = new Set((ch && ch.memberIds) || []);
         const available = state.bots.filter((bot) => !taken.has(bot.id));
-        document.getElementById("pick").innerHTML = available.length
+        const open = Math.max(
+          0,
+          CHANNEL_ROSTER_CAP - ((ch && ch.memberIds && ch.memberIds.length) || 0),
+        );
+        const full = !isGeneralChannel(ch) && open === 0;
+        document.getElementById("pick").innerHTML = full
+          ? '<p class="meta">' + t("members.full", { max: CHANNEL_ROSTER_CAP }) + "</p>"
+          : available.length
           ? available
               .map(
                 (bot) =>
@@ -2449,17 +2611,10 @@
           const id = pick.getAttribute("data-pick");
           const kind = state.attachSheet && state.attachSheet.kind;
           if (kind === "files" || kind === "dirs" || kind === "tree") await pickFs(id);
-          else if (kind === "skills") {
+          else if (kind === "skills" || kind === "agents") {
             const row = state.attachSheet.rows.find((item) => item.id === id);
             if (!row) return;
-            addAttachment({
-              kind: "skill",
-              title: "skill " + row.name,
-              body:
-                t("attach.skillBody", { name: row.name }) +
-                "\n\n" +
-                String(row.body || "").slice(0, 2400),
-            });
+            await attachLibraryPick(kind === "agents" ? "agent" : "skill", row);
           } else if (kind === "conv") await pickConv(id);
           else if (kind === "slash") await pickSlash(id);
         } catch (err) {
@@ -2490,65 +2645,48 @@
       document.getElementById("attach-upload").addEventListener("change", async (event) => {
         const files = [...(event.target.files || [])];
         event.target.value = "";
-        for (const file of files) {
-          const image = /^image\//.test(file.type) || /\.(png|jpe?g|gif|webp|bmp|heic|svg)$/i.test(file.name);
-          const textish =
-            /^text\/|^application\/(json|javascript|xml|toml|yaml)/.test(file.type) ||
-            /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|rs|go|toml|ya?ml|sh|c|h|cpp|java|rb|php|sql|svg)$/i.test(
-              file.name,
-            );
-          if (image && !textish) {
-            addAttachment({
-              kind: "file",
-              title: file.name,
-              image: true,
-              mime: file.type,
-              body: t("attach.imageBody", {
-                name: file.name,
-                type: file.type,
-                size: file.size,
-                token: nextAttachToken("Image"),
-              }),
-            });
-            continue;
-          }
-          if (!textish) {
-            addAttachment({
-              kind: "file",
-              title: file.name,
-              mime: file.type,
-              body: t("attach.uploadNoPath", {
-                name: file.name,
-                type: file.type,
-                size: file.size,
-              }),
-            });
-            continue;
-          }
-          if (file.size > 256000) {
-            addAttachment({
-              kind: "file",
-              title: file.name,
-              mime: file.type,
-              image: image,
-              body: t("attach.tooBig", { name: file.name }),
-            });
-            continue;
-          }
-          const text = await file.text();
-          addAttachment({
-            kind: "file",
-            title: file.name,
-            mime: file.type,
-            image: image,
-            body:
-              t("attach.uploadText", { name: file.name }) +
-              "\n```\n" +
-              text.slice(0, 48000) +
-              "\n```",
-          });
-        }
+        await ingestFiles(files);
       });
+      (function bindComposerDrop() {
+        const form = document.getElementById("composer");
+        let depth = 0;
+        function setDropOn(on) {
+          form.classList.toggle("drop-on", on);
+        }
+        form.addEventListener("dragenter", (event) => {
+          if (!dtHasFiles(event)) return;
+          event.preventDefault();
+          depth += 1;
+          setDropOn(true);
+        });
+        form.addEventListener("dragover", (event) => {
+          if (!dtHasFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        });
+        form.addEventListener("dragleave", (event) => {
+          if (!dtHasFiles(event) && depth === 0) return;
+          depth = Math.max(0, depth - 1);
+          if (!depth) setDropOn(false);
+        });
+        form.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          depth = 0;
+          setDropOn(false);
+          const files = [
+            ...((event.dataTransfer && event.dataTransfer.files) || []),
+          ];
+          await ingestFiles(files);
+        });
+        form.addEventListener("paste", (event) => {
+          const files = filesFromClipboard(event);
+          if (!files.length) return;
+          const text =
+            event.clipboardData && event.clipboardData.getData("text/plain");
+          if (!String(text || "").trim()) event.preventDefault();
+          ingestFiles(files);
+        });
+      })();
       document.addEventListener("click", (event) => {
         if (event.target.closest(".attach-wrap")) return;
         if (event.target.closest("#attach-sheet")) return;
@@ -2560,11 +2698,22 @@
           (el) => el.value,
         );
         for (const botId of ids) {
-          await fetch("/channels/" + encodeURIComponent(state.id) + "/members", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ botId }),
-          });
+          const res = await fetch(
+            "/channels/" + encodeURIComponent(state.id) + "/members",
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ botId }),
+            },
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            showToast(
+              body.error || t("members.full", { max: CHANNEL_ROSTER_CAP }),
+              3200,
+            );
+            break;
+          }
         }
         dialog.close();
         await loadWorkspace();
@@ -2660,6 +2809,7 @@
           return "Image";
         }
         if (att.kind === "skill") return "Skill";
+        if (att.kind === "agent") return "Agent";
         if (att.kind === "git") return "Git";
         if (att.kind === "conv") return "Chat";
         if (att.kind === "rules") return "Rules";
@@ -2718,10 +2868,115 @@
           token: "",
         };
         item.token = nextAttachToken(attachPrefix(item));
+        if (item.image && !String(item.body || "").trim()) {
+          item.body = t("attach.imageBody", {
+            name: item.title,
+            type: item.mime || "image",
+            size: att.size || 0,
+            token: item.token,
+          });
+        }
         state.attachments.push(item);
         renderAttachChips();
         hideAttach();
-        insertAttachToken(item.token);
+        if (!att.skipInsert) insertAttachToken(item.token);
+      }
+      function clipboardFileName(file) {
+        const mime = String((file && file.type) || "");
+        const ext =
+          mime === "image/jpeg"
+            ? "jpg"
+            : mime === "image/gif"
+              ? "gif"
+              : mime === "image/webp"
+                ? "webp"
+                : mime === "image/png"
+                  ? "png"
+                  : mime.indexOf("image/") === 0
+                    ? mime.slice(6).replace(/[^a-z0-9]+/gi, "") || "png"
+                    : "bin";
+        return "clipboard." + ext;
+      }
+      function dtHasFiles(event) {
+        const types = event.dataTransfer && event.dataTransfer.types;
+        if (!types) return false;
+        return Array.prototype.indexOf.call(types, "Files") >= 0;
+      }
+      function filesFromClipboard(event) {
+        const dt = event.clipboardData;
+        if (!dt) return [];
+        const fromFiles = [...(dt.files || [])].filter(Boolean);
+        if (fromFiles.length) return fromFiles;
+        const out = [];
+        [...(dt.items || [])].forEach((item) => {
+          if (!item || item.kind !== "file") return;
+          const file = item.getAsFile && item.getAsFile();
+          if (file) out.push(file);
+        });
+        return out;
+      }
+      async function ingestFiles(list) {
+        const files = [...(list || [])].filter((file) => file);
+        for (const file of files) await ingestFile(file);
+      }
+      async function ingestFile(file) {
+        const name = String(file.name || "").trim() || clipboardFileName(file);
+        const image =
+          /^image\//.test(file.type) ||
+          /\.(png|jpe?g|gif|webp|bmp|heic|svg)$/i.test(name);
+        const textish =
+          /^text\/|^application\/(json|javascript|xml|toml|yaml)/.test(file.type) ||
+          /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|rs|go|toml|ya?ml|sh|c|h|cpp|java|rb|php|sql|svg)$/i.test(
+            name,
+          );
+        if (image && !textish) {
+          addAttachment({
+            kind: "file",
+            title: name,
+            image: true,
+            mime: file.type,
+            size: file.size,
+          });
+          return;
+        }
+        if (!textish) {
+          addAttachment({
+            kind: "file",
+            title: name,
+            mime: file.type,
+            size: file.size,
+            body: t("attach.uploadNoPath", {
+              name: name,
+              type: file.type,
+              size: file.size,
+            }),
+          });
+          return;
+        }
+        if (file.size > 256000) {
+          addAttachment({
+            kind: "file",
+            title: name,
+            mime: file.type,
+            image: image,
+            size: file.size,
+            body: t("attach.tooBig", { name: name }),
+          });
+          return;
+        }
+        const text = await file.text();
+        addAttachment({
+          kind: "file",
+          title: name,
+          mime: file.type,
+          image: image,
+          size: file.size,
+          body:
+            t("attach.uploadText", { name: name }) +
+            "\n```\n" +
+            text.slice(0, 48000) +
+            "\n```",
+        });
       }
       function composeSendBody(text) {
         const missing = state.attachments
@@ -2950,17 +3205,22 @@
         }
       }
       async function openSkillsSheet() {
-        const skills = await fetch("/library/skills").then((r) => r.json());
-        const rows = (Array.isArray(skills) ? skills : []).map((item) => ({
-          id: item.id,
-          label: item.name,
-          hint: item.slug || "",
-          name: item.name,
-          body: item.body || "",
-        }));
+        const catalog = await loadSlashCatalog();
+        const rows = (catalog.skills || []).map((item) => librarySheetRow(item));
         state.attachSheet = {
           kind: "skills",
           title: t("attach.skills"),
+          q: "",
+          rows: rows,
+        };
+        renderAttachSheet();
+      }
+      async function openAgentsSheet() {
+        const catalog = await loadSlashCatalog();
+        const rows = (catalog.agents || []).map((item) => librarySheetRow(item));
+        state.attachSheet = {
+          kind: "agents",
+          title: t("attach.agents"),
           q: "",
           rows: rows,
         };
@@ -3111,6 +3371,7 @@
         if (kind === "dirs") return openFsSheet("dirs");
         if (kind === "tree") return openFsSheet("tree");
         if (kind === "skills") return openSkillsSheet();
+        if (kind === "agents") return openAgentsSheet();
         if (kind === "conv") return openConvSheet();
         if (kind === "git") return attachGit();
         if (kind === "rules") return attachRules();
@@ -3121,40 +3382,27 @@
         }
         if (kind === "slash") return openSlashSheet();
       }
-      function setBusy(on, botIds, opts) {
-        state.busy = on;
-        state.liveGen += 1;
+      function startLiveTimers() {
         const gen = state.liveGen;
-        if (!opts || !opts.keepLive) {
-          state.live = { botId: "", thinking: "", steps: [] };
-          state.lives = (on ? botIds || [] : []).map((id) => ({
-            botId: id,
-            thinking: "",
-            steps: [],
-            startedAt: "",
-          }));
-        }
-        if (on) {
-          const started = opts && opts.startedAt ? Date.parse(opts.startedAt) : NaN;
-          state.busySince = Number.isFinite(started) ? started : Date.now();
-          state.busyRoom = { kind: state.kind, id: state.id };
-          state.busyBots = {};
-          (botIds || []).forEach((id) => {
-            state.busyBots[id] = true;
-          });
-          if (!state.lives.length) {
-            state.lives = (botIds || []).map((id) => ({
-              botId: id,
-              thinking: "",
-              steps: [],
-              startedAt: "",
-            }));
+        if (state.liveTimer) return;
+        pollLive(gen);
+        state.liveTimer = setInterval(() => pollLive(gen), 400);
+        state.clockTimer = setInterval(() => {
+          if (!currentRoomBusy()) return;
+          const el = document.querySelector(".turn-status");
+          if (!el) return;
+          const elapsed = Date.now() - state.busySince;
+          if (elapsed < 15000) return;
+          let clock = el.querySelector(".clock");
+          if (!clock) {
+            clock = document.createElement("span");
+            clock.className = "clock";
+            el.appendChild(clock);
           }
-        } else {
-          state.busyBots = {};
-          state.busyRoom = null;
-          state.lives = [];
-        }
+          clock.textContent = Math.floor(elapsed / 1000) + "s";
+        }, 1000);
+      }
+      function stopLiveTimers() {
         if (state.clockTimer) {
           clearInterval(state.clockTimer);
           state.clockTimer = null;
@@ -3163,36 +3411,81 @@
           clearInterval(state.liveTimer);
           state.liveTimer = null;
         }
-        syncSendButton();
-        renderThread();
-        renderNav();
+      }
+      function setBusy(on, botIds, opts) {
+        const ids = (botIds || []).filter(Boolean);
         if (on) {
-          pollLive(gen);
-          state.liveTimer = setInterval(() => pollLive(gen), 400);
-          state.clockTimer = setInterval(() => {
-            if (!currentRoomBusy()) return;
-            const el = document.querySelector(".turn-status");
-            if (!el) return;
-            const elapsed = Date.now() - state.busySince;
-            if (elapsed < 15000) return;
-            let clock = el.querySelector(".clock");
-            if (!clock) {
-              clock = document.createElement("span");
-              clock.className = "clock";
-              el.appendChild(clock);
+          const wasBusy = state.busy;
+          ids.forEach((id) => {
+            state.busyBots[id] = true;
+          });
+          state.busy = true;
+          const started = opts && opts.startedAt ? Date.parse(opts.startedAt) : NaN;
+          if (!wasBusy) {
+            state.busySince = Number.isFinite(started) ? started : Date.now();
+            state.busyRoom = { kind: state.kind, id: state.id };
+          } else if (Number.isFinite(started) && started < state.busySince) {
+            state.busySince = started;
+          }
+          if (!state.busyRoom) state.busyRoom = { kind: state.kind, id: state.id };
+          if (!opts || !opts.keepLive) {
+            const have = new Set((state.lives || []).map((row) => row.botId));
+            ids.forEach((id) => {
+              if (!have.has(id)) {
+                state.lives.push({
+                  botId: id,
+                  thinking: "",
+                  steps: [],
+                  startedAt: "",
+                });
+                have.add(id);
+              }
+            });
+            if (!state.live || !state.live.botId) {
+              state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
             }
-            clock.textContent = Math.floor(elapsed / 1000) + "s";
-          }, 1000);
+          }
+          syncSendButton();
+          renderThread();
+          renderNav();
+          if (!wasBusy) {
+            state.liveGen += 1;
+            stopLiveTimers();
+            startLiveTimers();
+          }
+          return;
+        }
+        if (ids.length) {
+          ids.forEach((id) => {
+            delete state.busyBots[id];
+          });
+          state.lives = (state.lives || []).filter((row) => ids.indexOf(row.botId) < 0);
         } else {
+          state.busyBots = {};
+          state.lives = [];
+        }
+        state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
+        state.busy = liveBotIds().length > 0;
+        if (!state.busy) {
+          state.busyRoom = null;
+          state.liveGen += 1;
+          stopLiveTimers();
           const trajOpen = document.getElementById("traj");
           if (trajOpen && !trajOpen.hidden) {
             refreshTraj({ silent: true }).catch(function () {});
           }
         }
+        syncSendButton();
+        renderThread();
+        renderNav();
       }
       async function postChat(path, payload, sent, botIds) {
         const controller = new AbortController();
         state.abort = controller;
+        state.aborts = (state.aborts || []).concat([
+          { controller: controller, botIds: botIds || [] },
+        ]);
+        state.inFlight = (state.inFlight || 0) + 1;
         state.posting = true;
         setBusy(true, botIds);
         let ok = false;
@@ -3209,7 +3502,10 @@
           const here =
             state.kind === sent.kind && state.id === sent.id;
           if (here) {
-            await loadMessages();
+            await loadMessages({ resume: false });
+            if (liveBotIds().filter((id) => (botIds || []).indexOf(id) < 0).length) {
+              resumeCurrentLive().catch(() => {});
+            }
           } else {
             const lastReply =
               Array.isArray(body.replies) && body.replies.length
@@ -3237,19 +3533,30 @@
           }
           throw err;
         } finally {
-          state.posting = false;
-          state.abort = null;
-          setBusy(false);
+          state.aborts = (state.aborts || []).filter(
+            (item) => item !== controller && item.controller !== controller,
+          );
+          state.inFlight = Math.max(0, (state.inFlight || 1) - 1);
+          state.posting = state.inFlight > 0;
+          if (state.abort === controller) {
+            state.abort = (state.aborts[0] && state.aborts[0].controller) || null;
+          }
+          setBusy(false, botIds);
         }
         if (ok) await flushQueued(sent);
       }
       async function flushQueued(sent) {
-        const idx = (state.queue || []).findIndex(
-          (item) => item.room.kind === sent.kind && item.room.id === sent.id,
-        );
+        const live = liveBotIds();
+        const idx = (state.queue || []).findIndex((item) => {
+          if (item.room.kind !== sent.kind || item.room.id !== sent.id) return false;
+          const ids = item.botIds || [];
+          if (!ids.length) return live.length === 0;
+          return ids.every((id) => live.indexOf(id) < 0);
+        });
         if (idx < 0) return;
         const next = state.queue.splice(idx, 1)[0];
         renderQueue();
+        renderThread();
         await flushSend(
           next.raw,
           next.packed,
@@ -3268,15 +3575,20 @@
         const text = composeSendBody(pending.raw);
         const payload = { body: text };
         if (attachments.length) payload.attachments = attachments;
-        const optimisticId = "pending-steer";
+        if (pending.replyTo) payload.replyTo = pending.replyTo;
+        if (pending.botIds && pending.botIds.length === 1) {
+          payload.botId = pending.botIds[0];
+        }
+        const optimisticId = "pending-steer-" + Date.now();
         state.messages = state.messages
-          .filter((msg) => msg.id !== optimisticId)
+          .filter((msg) => String(msg.id).indexOf("pending-steer") !== 0)
           .concat([
             {
               id: optimisticId,
               author: "you",
               body: text,
               steer: true,
+              replyTo: pending.replyTo || undefined,
               createdAt: new Date().toISOString(),
             },
           ]);
@@ -3316,6 +3628,54 @@
         }
         flashSteerAck();
       }
+      async function dispatchBusySend(steerNow) {
+        const draft = document.getElementById("draft");
+        const raw = draft.value.trim();
+        const packed = state.attachments.slice();
+        const replyTo = state.replyTo ? state.replyTo.id : "";
+        const cands = assignCandidates(raw);
+        if (cands.length > 1) {
+          openAssign(cands, {
+            raw: raw,
+            packed: packed,
+            replyTo: replyTo,
+            queue: !steerNow,
+          });
+          return;
+        }
+        const pending = takeComposerPending();
+        if (!pending) return;
+        const fromCands = (cands || []).map((bot) => bot.id).filter(Boolean);
+        const fromReply = replyAuthorId(pending.replyTo);
+        const botIds = fromCands.length
+          ? fromCands
+          : fromReply
+            ? [fromReply]
+            : botsFromSend(pending.raw) || [];
+        const assigneeId = botIds.length === 1 ? botIds[0] : "";
+        const ids = botIds;
+        const split = splitSendTargets(ids);
+        if (split.fresh.length) {
+          await flushSend(
+            pending.raw,
+            pending.packed,
+            pending.replyTo,
+            split.fresh,
+            split.fresh.length === 1 ? split.fresh[0] : assigneeId,
+          );
+        }
+        const rest = split.same.length ? split.same : split.fresh.length ? [] : split.live;
+        if (!rest.length) return;
+        const next = {
+          raw: pending.raw,
+          packed: pending.packed,
+          replyTo: pending.replyTo,
+          botIds: rest,
+          assigneeId: rest.length === 1 ? rest[0] : assigneeId,
+        };
+        if (steerNow) await sendSteer(next);
+        else enqueuePending(next);
+      }
       let pendingAssign = null;
       async function flushSend(raw, packed, replyTo, botIds, assigneeId, dest) {
         const draft = document.getElementById("draft");
@@ -3341,7 +3701,7 @@
         if (here) {
           state.messages = state.messages.concat([
             {
-              id: "pending-you",
+              id: "pending-you-" + Date.now(),
               author: "you",
               body: text,
               replyTo: replyTo || undefined,
@@ -3407,6 +3767,11 @@
         document.getElementById("assign").close();
         if (pending.queue) {
           takeComposerPending();
+          const split = splitSendTargets([id]);
+          if (split.fresh.length) {
+            await flushSend(pending.raw, pending.packed, pending.replyTo, [id], id);
+            return;
+          }
           enqueuePending({
             raw: pending.raw,
             packed: pending.packed,
@@ -3428,37 +3793,8 @@
       document.getElementById("composer").addEventListener("submit", async (event) => {
         event.preventDefault();
         if (currentRoomBusy()) {
-          if (!composerHasPayload()) {
-            if (canStopHere()) stopTurn();
-            return;
-          }
-          const draft = document.getElementById("draft");
-          const raw = draft.value.trim();
-          const packed = state.attachments.slice();
-          const replyTo = state.replyTo ? state.replyTo.id : "";
-          const cands = assignCandidates(raw);
-          if (cands.length > 1) {
-            openAssign(cands, {
-              raw: raw,
-              packed: packed,
-              replyTo: replyTo,
-              queue: true,
-            });
-            return;
-          }
-          const pending = takeComposerPending();
-          if (!pending) return;
-          enqueuePending({
-            raw: pending.raw,
-            packed: pending.packed,
-            replyTo: pending.replyTo,
-            botIds: botsFromSend(pending.raw) || [],
-            assigneeId: cands.length === 1 ? cands[0].id : "",
-          });
-          return;
-        }
-        if (canStopHere()) {
-          stopTurn();
+          if (!composerHasPayload()) return;
+          await dispatchBusySend(false);
           return;
         }
         if (state.busy) return;
@@ -3477,9 +3813,124 @@
         const assigneeId = cands.length === 1 ? cands[0].id : "";
         await flushSend(raw, packed, replyTo, botIds, assigneeId);
       });
+      function asLibList(value) {
+        return Array.isArray(value) ? value : [];
+      }
+      function mergeLibRows(guild, host) {
+        const out = [];
+        const slugs = new Set();
+        const names = new Set();
+        const push = (item) => {
+          if (!item || !item.id) return;
+          const slug = String(item.slug || "").toLowerCase();
+          const name = String(item.name || "").toLowerCase();
+          if (slug && slugs.has(slug)) return;
+          if (name && names.has(name)) return;
+          if (slug) slugs.add(slug);
+          if (name) names.add(name);
+          out.push(item);
+        };
+        const guildItems = asLibList(guild);
+        guildItems.filter((item) => item.source !== "catalog").forEach(push);
+        asLibList(host).forEach(push);
+        guildItems.filter((item) => item.source === "catalog").forEach(push);
+        return out;
+      }
+      function librarySheetRow(item) {
+        return {
+          id: item.id,
+          label: item.name,
+          hint: item.description || item.slug || item.hostName || "",
+          name: item.name,
+          slug: item.slug || "",
+          body: item.body || "",
+          instructions: item.instructions || "",
+          description: item.description || "",
+          source: item.source || "",
+          hostName: item.hostName || "",
+        };
+      }
+      async function loadSlashCatalog(force) {
+        if (
+          !force &&
+          state.slashCatalog &&
+          Date.now() - state.slashCatalogAt < 30000
+        ) {
+          return state.slashCatalog;
+        }
+        if (state.slashCatalogPromise) return state.slashCatalogPromise;
+        state.slashLoading = true;
+        state.slashCatalogPromise = Promise.all([
+          fetch("/library/skills")
+            .then((r) => r.json())
+            .catch(() => []),
+          fetch("/library/skills/host?body=0")
+            .then((r) => r.json())
+            .catch(() => []),
+          fetch("/library/subagents")
+            .then((r) => r.json())
+            .catch(() => []),
+          fetch("/library/subagents/host?body=0")
+            .then((r) => r.json())
+            .catch(() => []),
+        ])
+          .then(([skills, hostSkills, agents, hostAgents]) => {
+            state.slashCatalog = {
+              skills: mergeLibRows(skills, hostSkills),
+              agents: mergeLibRows(agents, hostAgents),
+            };
+            state.slashCatalogAt = Date.now();
+            return state.slashCatalog;
+          })
+          .finally(() => {
+            state.slashLoading = false;
+            state.slashCatalogPromise = null;
+          });
+        return state.slashCatalogPromise;
+      }
+      async function attachLibraryPick(kind, row, opts) {
+        const skipInsert = Boolean(opts && opts.skipInsert);
+        const name = row.name || row.slug || "item";
+        const title = (kind === "agent" ? "agent " : "skill ") + name;
+        if (state.attachments.some((att) => att.title === title)) return;
+        let body = String(row.body || row.instructions || "");
+        const hostId = String(row.id || "");
+        if (!body && hostId.indexOf("host:") === 0) {
+          const path =
+            kind === "agent"
+              ? "/library/subagents/host?id="
+              : "/library/skills/host?id=";
+          try {
+            const res = await fetch(path + encodeURIComponent(hostId));
+            const full = await res.json().catch(() => null);
+            if (res.ok && full) {
+              body = String(full.body || full.instructions || "");
+            }
+          } catch {
+            /* /slug still injects on the server */
+          }
+        }
+        const lead =
+          kind === "agent"
+            ? t("attach.agentBody", { name: name })
+            : t("attach.skillBody", { name: name });
+        const desc = row.description ? "\n" + String(row.description) : "";
+        addAttachment({
+          kind: kind,
+          title: title,
+          skipInsert: skipInsert,
+          body: (lead + desc + (body ? "\n\n" + body : "")).slice(0, 48000),
+        });
+      }
       function mentionAt(text, caret) {
         const before = text.slice(0, caret);
         const match = before.match(/(^|[\s])@([^\s@]*)$/);
+        if (!match) return null;
+        return { start: before.length - match[2].length - 1, query: match[2] };
+      }
+      function slashAt(text, caret) {
+        const before = text.slice(0, caret);
+        const match = before.match(/(^|[\s])\/([A-Za-z0-9_.-]*)$/);
         if (!match) return null;
         return { start: before.length - match[2].length - 1, query: match[2] };
       }
@@ -3512,6 +3963,7 @@
         });
         const inside = bots.filter((bot) => taken.has(bot.id));
         const outside = bots.filter((bot) => !taken.has(bot.id));
+        const full = rosterFull(ch);
         return specials.concat(
           inside.map((bot) => ({
             kind: "bot",
@@ -3526,19 +3978,90 @@
             kind: "bot",
             insert: "@" + bot.handle,
             name: bot.name,
-            hint: "@" + bot.handle,
+            hint: full
+              ? t("members.full", { max: CHANNEL_ROSTER_CAP })
+              : "@" + bot.handle,
             glyph: initials(bot.name),
             color: hue(bot.handle),
             outside: true,
           })),
         );
       }
+      function mentionPop() {
+        return document.getElementById("mention-pop");
+      }
       function hideMention() {
         state.mention = null;
-        document.getElementById("mention-pop").hidden = true;
+        if (!state.slash) mentionPop().hidden = true;
+      }
+      function hideSlash() {
+        state.slash = null;
+        const pop = mentionPop();
+        pop.classList.remove("is-slash");
+        if (!state.mention) pop.hidden = true;
+      }
+      function pickerItemHtml(row, index, selected) {
+        const on = index === selected ? " on" : "";
+        const avStyle = row.color ? "background:" + row.color : "";
+        const badge = row.badge
+          ? '<span class="out">' + escapeHtml(row.badge) + "</span>"
+          : row.outside
+            ? '<span class="out">' + t("notInChannel") + "</span>"
+            : "";
+        return (
+          '<button type="button" class="mention-item' +
+          on +
+          '" data-mention="' +
+          index +
+          '"><span class="mention-glyph" style="' +
+          avStyle +
+          '">' +
+          escapeHtml(row.glyph) +
+          "</span><span><strong>" +
+          escapeHtml(row.name) +
+          "</strong><em>" +
+          escapeHtml(row.hint || "") +
+          "</em></span>" +
+          badge +
+          "</button>"
+        );
+      }
+      function renderPickerRows(rows, selected, opts) {
+        const pop = mentionPop();
+        const withSec = Boolean(opts && opts.sections);
+        pop.classList.toggle("is-slash", withSec);
+        pop.hidden = false;
+        let html = "";
+        if (opts && opts.loading && !rows.length) {
+          html +=
+            '<div class="mention-empty">' +
+            escapeHtml(t("slash.loading")) +
+            "</div>";
+        }
+        if (!rows.length && !(opts && opts.loading)) {
+          html +=
+            '<div class="mention-empty">' +
+            escapeHtml(t("slash.empty")) +
+            "</div>";
+        }
+        let lastSec = "";
+        rows.forEach((row, index) => {
+          if (withSec && row.section && row.section !== lastSec) {
+            lastSec = row.section;
+            html +=
+              '<div class="mention-sec">' +
+              escapeHtml(t("slash.sec." + row.section)) +
+              "</div>";
+          }
+          html += pickerItemHtml(row, index, selected);
+        });
+        document.getElementById("mention-results").innerHTML = html;
+        const active = pop.querySelector(".mention-item.on");
+        if (active && active.scrollIntoView) {
+          active.scrollIntoView({ block: "nearest" });
+        }
       }
       function renderMention() {
-        const pop = document.getElementById("mention-pop");
         const rows = state.mention ? mentionChoices(state.mention.query) : [];
         if (!rows.length) {
           hideMention();
@@ -3546,72 +4069,214 @@
         }
         if (state.mentionIndex >= rows.length) state.mentionIndex = 0;
         if (state.mentionIndex < 0) state.mentionIndex = rows.length - 1;
-        pop.hidden = false;
-        document.getElementById("mention-results").innerHTML = rows
-          .map((row, index) => {
-            const on = index === state.mentionIndex ? " on" : "";
-            const avStyle = row.color ? "background:" + row.color : "";
-            const out = row.outside
-              ? '<span class="out">' + t("notInChannel") + "</span>"
-              : "";
-            return (
-              '<button type="button" class="mention-item' +
-              on +
-              '" data-mention="' +
-              index +
-              '"><span class="mention-glyph" style="' +
-              avStyle +
-              '">' +
-              escapeHtml(row.glyph) +
-              "</span><span><strong>" +
-              escapeHtml(row.name) +
-              "</strong><em>" +
-              escapeHtml(row.hint) +
-              "</em></span>" +
-              out +
-              "</button>"
-            );
-          })
-          .join("");
-        const active = pop.querySelector(".mention-item.on");
-        if (active && active.scrollIntoView) {
-          active.scrollIntoView({ block: "nearest" });
-        }
+        renderPickerRows(rows, state.mentionIndex, { sections: false });
       }
-      function applyMention(row) {
+      function slashCommandRows() {
+        const rows = [
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "channel-md",
+            insert: "",
+            name: t("slash.editMd"),
+            hint: t("slash.editMdHint"),
+            glyph: "/",
+          },
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "rules",
+            insert: "",
+            name: t("slash.rules"),
+            hint: t("slash.rulesHint"),
+            glyph: "/",
+          },
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "git",
+            insert: "",
+            name: t("slash.git"),
+            hint: "status + diff",
+            glyph: "/",
+          },
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "here",
+            insert: "@all",
+            name: t("slash.here"),
+            hint: t("slash.hereHint"),
+            glyph: "/",
+          },
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "library",
+            insert: "",
+            name: t("slash.library"),
+            hint: "/library",
+            glyph: "/",
+          },
+        ];
+        if (state.kind !== "channel") {
+          return rows.filter(
+            (row) => row.cmdId !== "channel-md" && row.cmdId !== "here",
+          );
+        }
+        return rows;
+      }
+      function slashNeedleHit(item, needle) {
+        if (!needle) return true;
+        const blob = [
+          item.slug,
+          item.name,
+          item.description,
+          item.hostName,
+          item.insert,
+          item.hint,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return blob.indexOf(needle) >= 0;
+      }
+      function slashLibRow(item, kind) {
+        const slug = item.slug || item.name || "";
+        const host =
+          item.source === "host"
+            ? item.hostName || t("library.local")
+            : item.source === "catalog"
+              ? t("library.catalog")
+              : "";
+        return {
+          kind: kind,
+          section: kind,
+          id: item.id,
+          slug: slug,
+          insert: "/" + slug.replace(/^\/+/, ""),
+          name: item.name || slug,
+          hint: item.description || slug,
+          glyph: kind === "agent" ? "A" : "S",
+          color: kind === "agent" ? "#2ea887" : "#7c6af7",
+          badge: host,
+          body: item.body || "",
+          instructions: item.instructions || "",
+          description: item.description || "",
+          hostName: item.hostName || "",
+        };
+      }
+      function slashChoices(query) {
+        const needle = String(query || "").toLowerCase();
+        const catalog = state.slashCatalog || { skills: [], agents: [] };
+        const skillCap = needle ? 24 : 10;
+        const agentCap = needle ? 16 : 8;
+        const skills = (catalog.skills || [])
+          .filter((item) => slashNeedleHit(item, needle))
+          .slice(0, skillCap)
+          .map((item) => slashLibRow(item, "skill"));
+        const agents = (catalog.agents || [])
+          .filter((item) => slashNeedleHit(item, needle))
+          .slice(0, agentCap)
+          .map((item) => slashLibRow(item, "agent"));
+        const cmds = slashCommandRows().filter((row) =>
+          slashNeedleHit(row, needle),
+        );
+        return skills.concat(agents, cmds);
+      }
+      function renderSlash() {
+        const rows = slashChoices(state.slash ? state.slash.query : "");
+        if (state.slashIndex >= rows.length) state.slashIndex = 0;
+        if (state.slashIndex < 0) {
+          state.slashIndex = Math.max(0, rows.length - 1);
+        }
+        renderPickerRows(rows, state.slashIndex, {
+          sections: true,
+          loading: state.slashLoading && !state.slashCatalog,
+        });
+      }
+      function replaceComposerSpan(found, insert) {
         const draft = document.getElementById("draft");
-        if (!state.mention || !row) return;
+        if (!found || !draft) return;
         const text = draft.value;
-        const before = text.slice(0, state.mention.start);
+        const before = text.slice(0, found.start);
         const after = text.slice(draft.selectionStart);
-        const insert = row.insert + " ";
         draft.value = before + insert + after;
         const caret = (before + insert).length;
         draft.setSelectionRange(caret, caret);
-        hideMention();
         fitDraft();
         draft.focus();
       }
-      function syncMention() {
-        if (state.kind !== "channel") {
-          hideMention();
+      function applyMention(row) {
+        if (!state.mention || !row) return;
+        replaceComposerSpan(state.mention, row.insert + " ");
+        hideMention();
+      }
+      async function applySlash(row) {
+        if (!state.slash || !row) return;
+        const found = state.slash;
+        if (row.kind === "cmd") {
+          replaceComposerSpan(found, row.insert ? row.insert + " " : "");
+          hideSlash();
+          if (row.insert) return;
+          await pickSlash(row.cmdId);
           return;
         }
+        replaceComposerSpan(found, row.insert + " ");
+        hideSlash();
+        await attachLibraryPick(row.kind === "agent" ? "agent" : "skill", row, {
+          skipInsert: true,
+        });
+      }
+      function pickerKind() {
+        const pop = mentionPop();
+        if (pop.hidden) return "";
+        if (state.slash) return "slash";
+        if (state.mention) return "mention";
+        return "";
+      }
+      function pickerRows() {
+        if (state.slash) return slashChoices(state.slash.query);
+        if (state.mention) return mentionChoices(state.mention.query);
+        return [];
+      }
+      function syncComposerPickers() {
         const draft = document.getElementById("draft");
-        const found = mentionAt(draft.value, draft.selectionStart);
-        if (!found) {
-          hideMention();
+        const text = draft.value;
+        const caret = draft.selectionStart;
+        const mention =
+          state.kind === "channel" ? mentionAt(text, caret) : null;
+        if (mention) {
+          hideSlash();
+          if (!state.mention || state.mention.query !== mention.query) {
+            state.mentionIndex = 0;
+          }
+          state.mention = mention;
+          renderMention();
           return;
         }
-        if (!state.mention || state.mention.query !== found.query) {
-          state.mentionIndex = 0;
+        hideMention();
+        const slash = slashAt(text, caret);
+        if (slash) {
+          if (!state.slash || state.slash.query !== slash.query) {
+            state.slashIndex = 0;
+          }
+          state.slash = slash;
+          renderSlash();
+          loadSlashCatalog()
+            .then(() => {
+              if (state.slash) renderSlash();
+            })
+            .catch(() => {
+              if (state.slash) renderSlash();
+            });
+          return;
         }
-        state.mention = found;
-        renderMention();
+        hideSlash();
       }
       document.getElementById("draft").addEventListener("input", () => {
         fitDraft();
-        syncMention();
+        syncComposerPickers();
         syncSendButton();
       });
       document.getElementById("queue-chips").addEventListener("click", (event) => {
@@ -3620,48 +4285,74 @@
         const id = btn.getAttribute("data-queue-del");
         state.queue = (state.queue || []).filter((item) => item.id !== id);
         renderQueue();
+        renderThread();
       });
-      document.getElementById("draft").addEventListener("click", syncMention);
+      document.getElementById("draft").addEventListener("click", syncComposerPickers);
       document.getElementById("draft").addEventListener("keyup", (event) => {
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") syncMention();
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          syncComposerPickers();
+        }
       });
       document.getElementById("mention-results").addEventListener("mousedown", (event) => {
         const btn = event.target.closest("[data-mention]");
         if (!btn) return;
         event.preventDefault();
-        const rows = mentionChoices(state.mention ? state.mention.query : "");
-        applyMention(rows[Number(btn.getAttribute("data-mention"))]);
+        const rows = pickerRows();
+        const row = rows[Number(btn.getAttribute("data-mention"))];
+        if (state.slash) {
+          applySlash(row).catch((err) => alert(err.message));
+        } else {
+          applyMention(row);
+        }
       });
       document.getElementById("draft").addEventListener("keydown", (event) => {
         if (event.isComposing || event.keyCode === 229) return;
-        const open = Boolean(state.mention) && !document.getElementById("mention-pop").hidden;
-        if (open) {
-          const rows = mentionChoices(state.mention.query);
+        const kind = pickerKind();
+        if (kind) {
+          const rows = pickerRows();
           if (event.key === "ArrowDown") {
             event.preventDefault();
-            state.mentionIndex = (state.mentionIndex + 1) % rows.length;
-            renderMention();
+            if (!rows.length) return;
+            if (kind === "slash") {
+              state.slashIndex = (state.slashIndex + 1) % rows.length;
+              renderSlash();
+            } else {
+              state.mentionIndex = (state.mentionIndex + 1) % rows.length;
+              renderMention();
+            }
             return;
           }
           if (event.key === "ArrowUp") {
             event.preventDefault();
-            state.mentionIndex = (state.mentionIndex - 1 + rows.length) % rows.length;
-            renderMention();
+            if (!rows.length) return;
+            if (kind === "slash") {
+              state.slashIndex =
+                (state.slashIndex - 1 + rows.length) % rows.length;
+              renderSlash();
+            } else {
+              state.mentionIndex =
+                (state.mentionIndex - 1 + rows.length) % rows.length;
+              renderMention();
+            }
             return;
           }
           if (event.key === "Escape") {
             event.preventDefault();
-            hideMention();
+            if (kind === "slash") hideSlash();
+            else hideMention();
             return;
           }
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (
+            (event.key === "Enter" && !event.shiftKey) ||
+            event.key === "Tab"
+          ) {
             event.preventDefault();
-            applyMention(rows[state.mentionIndex] || rows[0]);
-            return;
-          }
-          if (event.key === "Tab") {
-            event.preventDefault();
-            applyMention(rows[state.mentionIndex] || rows[0]);
+            const row = rows[kind === "slash" ? state.slashIndex : state.mentionIndex] || rows[0];
+            if (kind === "slash") {
+              applySlash(row).catch((err) => alert(err.message));
+            } else {
+              applyMention(row);
+            }
             return;
           }
         }
@@ -3677,15 +4368,7 @@
             composerHasPayload() &&
             (event.metaKey || event.ctrlKey)
           ) {
-            const pending = takeComposerPending();
-            if (!pending) return;
-            sendSteer({
-              raw: pending.raw,
-              packed: pending.packed,
-              replyTo: pending.replyTo,
-              botIds: botsFromSend(pending.raw) || [],
-              assigneeId: "",
-            }).catch((err) => alert(err.message));
+            dispatchBusySend(true).catch((err) => alert(err.message));
             return;
           }
           document.getElementById("composer").requestSubmit();
@@ -4218,11 +4901,13 @@
         renderAttachChips();
         renderReplyBar();
         if (state.mention) renderMention();
+        if (state.slash) renderSlash();
         if (state.attachSheet) {
           const kind = state.attachSheet.kind;
           if (kind === "slash") openSlashSheet();
           else if (kind === "conv") openConvSheet();
           else if (kind === "skills") openSkillsSheet();
+          else if (kind === "agents") openAgentsSheet();
           else if (kind === "files" || kind === "dirs" || kind === "tree") {
             openFsSheet(kind).catch(() => {});
           } else {
@@ -4237,9 +4922,11 @@
         trajEl.hidden = true;
         openFromHash().catch((err) => alert(err.message));
       });
-      Promise.all([openFromHash(), loadModelPick()]).catch((err) => {
-        document.getElementById("thread").textContent = err.message;
-      });
+      Promise.all([openFromHash(), loadModelPick()])
+        .then(() => loadSlashCatalog().catch(() => {}))
+        .catch((err) => {
+          document.getElementById("thread").textContent = err.message;
+        });
     </script>
   </body>
 </html>

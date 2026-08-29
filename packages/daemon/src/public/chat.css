@@ -841,6 +841,12 @@ a.invite-btn:hover { text-decoration: none; }
   background: #243044;
   box-shadow: inset 0 0 0 1px #3a4d6a;
 }
+.msg.you.queued .bubble {
+  background: #2a2a2a;
+  box-shadow: inset 0 0 0 1px #4a4a4a;
+  opacity: 0.88;
+}
+.steer-tag.waiting { color: #c8b07a; }
 .msg.bot .bubble {
   width: fit-content;
   max-width: 100%;
@@ -1364,6 +1370,45 @@ a.invite-btn:hover { text-decoration: none; }
 .live-step.steer .live-name {
   color: var(--steel);
 }
+.turn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.turn-actions button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  background: #1c1c1c;
+  color: #ddd;
+  font: inherit;
+  font-size: 12px;
+  line-height: 28px;
+  cursor: pointer;
+}
+.turn-actions button:hover {
+  border-color: #555;
+  color: #fff;
+}
+.turn-actions .turn-stop {
+  color: #e8b4b4;
+}
+.turn-actions .turn-steer {
+  color: #b4c8e8;
+}
+body.grok .turn-actions button {
+  border-color: #3a3228;
+  background: #1c1814;
+  color: #ddd4c8;
+}
+body.grok .turn-actions button:hover {
+  border-color: #6a5a48;
+  color: #f2eadf;
+}
+body.grok .turn-actions .turn-stop { color: #d4a090; }
+body.grok .turn-actions .turn-steer { color: #c4b090; }
 .turn-status .clock {
   margin-left: 8px;
   font-size: 13px;
@@ -1543,6 +1588,32 @@ a.invite-btn:hover { text-decoration: none; }
   background: #161616;
   box-shadow: 0 8px 28px #0008;
 }
+.composer.drop-on .composer-card {
+  border-color: #6a8ab8;
+  box-shadow: 0 0 0 1px #6a8ab8, 0 8px 28px #0008;
+}
+.composer.drop-on .composer-card::after {
+  content: attr(data-drop-hint);
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  background: #161616e6;
+  color: #c8d4e8;
+  font-size: 14px;
+  pointer-events: none;
+}
+body.grok .composer.drop-on .composer-card {
+  border-color: #8a7a58;
+  box-shadow: 0 0 0 1px #8a7a58, 0 8px 28px #0008;
+}
+body.grok .composer.drop-on .composer-card::after {
+  background: #16100be6;
+  color: #e8dcc8;
+}
 .composer-reply {
   display: flex;
   align-items: center;
@@ -1596,6 +1667,23 @@ a.invite-btn:hover { text-decoration: none; }
   border-radius: 14px;
   box-shadow: 0 16px 40px #000c;
   z-index: 30;
+}
+.mention-pop.is-slash {
+  max-height: min(360px, 52vh);
+}
+.mention-sec {
+  padding: 0.55rem 0.85rem 0.2rem;
+  color: #8d8d8d;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mention-sec:first-child { padding-top: 0.4rem; }
+.mention-empty {
+  padding: 0.7rem 0.85rem 0.85rem;
+  color: #8d8d8d;
+  font-size: 0.82rem;
 }
 .mention-pop.on-edit {
   position: fixed;

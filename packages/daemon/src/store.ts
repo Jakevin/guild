@@ -37,6 +37,12 @@ const MARKDOWN: Record<LibraryKind, string> = {
 
 const GENERAL_CHANNEL_ID = "channel-general";
 const NAV_PREVIEW_CAP = 120;
+/** Project channels (not #general). Reuse seats first; human adds specialists. */
+export const CHANNEL_ROSTER_CAP = 6;
+
+export function isGeneralChannel(room: { id: string; name: string }): boolean {
+  return room.id === GENERAL_CHANNEL_ID || room.name === "general";
+}
 
 export function clipNavPreview(body: string): string {
   return String(body || "")
@@ -74,8 +80,12 @@ export type LiveTurn = {
 
 export class GuildStore {
   private readonly liveTurns = new Map<string, Map<string, LiveTurn>>();
-  private readonly pendingSteers = new Map<string, string[]>();
-  private readonly turnAborts = new Map<string, AbortController>();
+  private readonly pendingSteers = new Map<string, Map<string, string[]>>();
+  private readonly botAborts = new Map<string, Map<string, AbortController>>();
+  private readonly turnGroups = new Map<
+    AbortSignal,
+    { roomId: string; botIds: Set<string>; controller: AbortController }
+  >();
   private readonly db: GuildDb;
   private closed = false;
 
@@ -303,47 +313,139 @@ export class GuildStore {
     return out;
   }
 
-  beginTurn(roomId: string): AbortSignal {
-    const prev = this.turnAborts.get(roomId);
-    if (prev && !prev.signal.aborted) prev.abort();
+  private bindBotAbort(
+    roomId: string,
+    botId: string,
+    controller: AbortController,
+  ): void {
+    let room = this.botAborts.get(roomId);
+    if (!room) {
+      room = new Map();
+      this.botAborts.set(roomId, room);
+    }
+    const prev = room.get(botId);
+    if (prev && prev !== controller && !prev.signal.aborted) prev.abort();
+    room.set(botId, controller);
+  }
+
+  beginTurn(roomId: string, botIds: string[] = [""]): AbortSignal {
     const controller = new AbortController();
-    this.turnAborts.set(roomId, controller);
+    const ids = botIds.length ? botIds : [""];
+    for (const botId of ids) this.bindBotAbort(roomId, botId, controller);
+    this.turnGroups.set(controller.signal, {
+      roomId,
+      botIds: new Set(ids),
+      controller,
+    });
     return controller.signal;
   }
 
-  abortTurn(roomId: string): boolean {
-    const controller = this.turnAborts.get(roomId);
-    this.turnAborts.delete(roomId);
-    this.liveTurns.delete(roomId);
-    this.pendingSteers.delete(roomId);
-    if (controller && !controller.signal.aborted) {
-      controller.abort();
-      return true;
-    }
-    return Boolean(controller);
+  adoptTurn(roomId: string, botId: string, signal: AbortSignal): void {
+    const group = this.turnGroups.get(signal);
+    if (!group || group.roomId !== roomId) return;
+    this.bindBotAbort(roomId, botId, group.controller);
+    group.botIds.add(botId);
   }
 
-  endTurn(roomId: string): void {
-    this.turnAborts.delete(roomId);
+  abortTurn(roomId: string, botId?: string): boolean {
+    if (botId) {
+      const room = this.botAborts.get(roomId);
+      const controller = room?.get(botId);
+      if (!controller) return false;
+      const group = this.turnGroups.get(controller.signal);
+      const ids = group ? [...group.botIds] : [botId];
+      this.turnGroups.delete(controller.signal);
+      const live = this.liveTurns.get(roomId);
+      const steers = this.pendingSteers.get(roomId);
+      for (const id of ids) {
+        room?.delete(id);
+        live?.delete(id);
+        steers?.delete(id);
+      }
+      if (room && room.size === 0) this.botAborts.delete(roomId);
+      if (live && live.size === 0) this.liveTurns.delete(roomId);
+      if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
+      if (!controller.signal.aborted) controller.abort();
+      return true;
+    }
+    const room = this.botAborts.get(roomId);
+    this.botAborts.delete(roomId);
+    this.liveTurns.delete(roomId);
+    this.pendingSteers.delete(roomId);
+    let aborted = false;
+    const seen = new Set<AbortController>();
+    for (const controller of room?.values() ?? []) {
+      if (seen.has(controller)) continue;
+      seen.add(controller);
+      this.turnGroups.delete(controller.signal);
+      if (!controller.signal.aborted) {
+        controller.abort();
+        aborted = true;
+      }
+    }
+    return aborted || Boolean(room);
+  }
+
+  endTurn(roomId: string, signal?: AbortSignal): void {
+    const group = signal ? this.turnGroups.get(signal) : undefined;
+    if (group) {
+      this.turnGroups.delete(signal);
+      const room = this.botAborts.get(roomId);
+      const live = this.liveTurns.get(roomId);
+      const steers = this.pendingSteers.get(roomId);
+      for (const botId of group.botIds) {
+        if (room?.get(botId) === group.controller) room.delete(botId);
+        live?.delete(botId);
+        steers?.delete(botId);
+      }
+      if (room && room.size === 0) this.botAborts.delete(roomId);
+      if (live && live.size === 0) this.liveTurns.delete(roomId);
+      if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
+      return;
+    }
+    this.botAborts.delete(roomId);
     this.clearLiveTurn(roomId);
   }
 
-  pushSteer(roomId: string, text: string): void {
+  pushSteer(roomId: string, text: string, botId?: string): void {
     const body = text.trim();
     if (!body) return;
-    const list = this.pendingSteers.get(roomId) ?? [];
-    list.push(body);
-    this.pendingSteers.set(roomId, list);
+    let room = this.pendingSteers.get(roomId);
+    if (!room) {
+      room = new Map();
+      this.pendingSteers.set(roomId, room);
+    }
+    const ids = botId
+      ? [botId]
+      : this.listLiveRoomTurns(roomId).map((turn) => turn.botId).filter(Boolean);
+    const targets = ids.length ? ids : [""];
+    for (const id of targets) {
+      const list = room.get(id) ?? [];
+      list.push(body);
+      room.set(id, list);
+    }
   }
 
-  drainSteers(roomId: string): string[] {
-    const list = this.pendingSteers.get(roomId) ?? [];
+  drainSteers(roomId: string, botId?: string): string[] {
+    const room = this.pendingSteers.get(roomId);
+    if (!room) return [];
+    if (botId !== undefined) {
+      const list = room.get(botId) ?? (botId ? room.get("") ?? [] : []);
+      room.delete(botId);
+      if (botId) room.delete("");
+      if (room.size === 0) this.pendingSteers.delete(roomId);
+      return list;
+    }
+    const all = [...room.values()].flat();
     this.pendingSteers.delete(roomId);
-    return list;
+    return all;
   }
 
-  peekSteers(roomId: string): string[] {
-    return this.pendingSteers.get(roomId) ?? [];
+  peekSteers(roomId: string, botId?: string): string[] {
+    const room = this.pendingSteers.get(roomId);
+    if (!room) return [];
+    if (botId !== undefined) return room.get(botId) ?? [];
+    return [...room.values()].flat();
   }
 
   listBots(): Bot[] {
@@ -695,6 +797,15 @@ export class GuildStore {
     }
     if (!this.getBot(botId)) throw new StoreError(400, "bot not found");
     if (room.memberIds.includes(botId)) return room;
+    if (
+      !isGeneralChannel(room) &&
+      room.memberIds.length >= CHANNEL_ROSTER_CAP
+    ) {
+      throw new StoreError(
+        400,
+        `這個據點最多 ${CHANNEL_ROSTER_CAP} 席。先移出一位，或改 @ 現有編制。`,
+      );
+    }
     const next = { ...room, memberIds: [...room.memberIds, botId] };
     this.writeRoom(next);
     return next;

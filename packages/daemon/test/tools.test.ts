@@ -156,6 +156,7 @@ test("chat system lists staffed skills as a DSH-style catalog", () => {
     ],
   });
   assert.match(system, /<available_skills>/);
+  assert.match(system, /invoked with \/name/);
   assert.match(system, /`graphify`: Turn a codebase into a graph\./);
   assert.doesNotMatch(system, /SECRET_BODY/);
 });
@@ -181,6 +182,21 @@ test("chat system lists spawnable subagents", () => {
   assert.match(system, /`explorer` \(read-only\): Search the tree/);
   assert.doesNotMatch(system, /SECRET_INSTRUCTIONS/);
   assert.match(system, /spawn/);
+  assert.match(system, /\/name matching a subagent/);
+});
+
+test("chat system owns a seat and hands off with a spec", () => {
+  const system = buildChatSystem({
+    botName: "RD",
+    handle: "rd",
+    soul: "# Soul",
+    agent: "# Agent",
+    position: "# Position",
+  });
+  assert.match(system, /# Hall/);
+  assert.match(system, /written spec/);
+  assert.match(system, /Stay quiet/);
+  assert.match(system, /Do not @all/);
 });
 
 test("spawn without dataDir fails fast", async () => {

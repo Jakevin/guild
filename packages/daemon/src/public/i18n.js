@@ -45,8 +45,11 @@ var I18N_ROWS = [
   ["members.allIn", "編制裡的冒險者都在這個據點了。", "Everyone on the roster is already in this hall."],
   ["members.kick", "移出", "Remove"],
   ["members.add", "加入", "Add"],
+  ["members.addDisabled", "滿席", "Full"],
+  ["members.cap", "{used}/{max}", "{used}/{max}"],
+  ["members.full", "這個據點最多 {max} 席。先移出一位，或改 @ 現有編制。", "This hall is full (max {max} seats). Remove someone, or @ a bot already here."],
   ["invite.title", "拉冒險者進據點", "Add adventurers"],
-  ["invite.body", "勾選要待在這個據點的人。據點裡用 @handle 叫他們。", "Pick who stays in this hall. @handle them here to get a reply."],
+  ["invite.body", "先重用編制裡的人。一個據點最多 6 席，用 @handle 叫他們。", "Reuse the roster first. A hall holds 6 seats; @handle them here."],
   ["invite.save", "加入", "Add"],
   ["assign.title", "要誰做？", "Who should do this?"],
   ["assign.hint", "這則提到好幾個人。選一個去跑。", "Several people are named here. Pick one to run."],
@@ -72,10 +75,13 @@ var I18N_ROWS = [
   ["send", "送出", "Send"],
   ["stop", "停止", "Stop"],
   ["steer.hint", "Enter 排隊 · {mod}↩ 插入這輪", "Enter to queue · {mod}↩ to steer this turn"],
+  ["live.stop", "停止", "Stop"],
+  ["live.steer", "插入這輪", "Insert into turn"],
   ["steer.queue", "排隊", "Queue"],
   ["steer.insert", "插入引導", "Steer"],
   ["steer.remove", "取消排隊", "Remove from queue"],
   ["steer.tag", "已插入這輪", "Inserted into this turn"],
+  ["steer.waiting", "排隊中，這輪結束後送出", "Queued. Sends when this turn finishes."],
   ["steer.done", "已插入這輪，做完這步就會接著看", "Inserted. It will pick this up after the current step."],
   ["steer.live", "引導", "Steer"],
   ["busy", "忙碌中", "Busy"],
@@ -111,9 +117,11 @@ var I18N_ROWS = [
   ["askName", "Ask {name}", "Ask {name}"],
   ["add", "加入", "Add"],
   ["attach.upload", "上傳檔案", "Upload file"],
+  ["attach.drop", "放到這裡", "Drop files here"],
   ["attach.files", "檔案", "Files"],
   ["attach.dirs", "資料夾", "Folders"],
   ["attach.skills", "技能", "Skills"],
+  ["attach.agents", "子代理", "Subagents"],
   ["attach.conv", "對話", "Chats"],
   ["attach.git", "Git", "Git"],
   ["attach.rules", "規則", "Rules"],
@@ -169,6 +177,7 @@ var I18N_ROWS = [
   ["attach.gitBody", "Git 狀態：", "Git status:"],
   ["attach.convBody", "對話摘錄 {title}：", "Chat excerpt {title}:"],
   ["attach.skillBody", "請使用 skill `{name}`。", "Use skill `{name}`."],
+  ["attach.agentBody", "請 spawn 子代理 `{name}`。", "Spawn subagent `{name}`."],
   ["attach.imageBody", "使用者附上圖片 `{name}`（{type}, {size} bytes）。以 {token} 引用。", "User attached image `{name}` ({type}, {size} bytes). Refer to it as {token}."],
   ["attach.uploadNoPath", "使用者上傳了檔案 `{name}`（{type}, {size} bytes）。瀏覽器沒有本機路徑，請改用「檔案」從磁碟選，或請我用 list/read 找。", "User uploaded `{name}` ({type}, {size} bytes). The browser has no host path — pick it from Files, or list/read for it."],
   ["attach.tooBig", "檔案 `{name}` 太大，沒有嵌進對話。請用「檔案」選本機路徑讓我 read。", "`{name}` is too large to embed. Pick it from Files so I can read the path."],
@@ -184,6 +193,11 @@ var I18N_ROWS = [
   ["slash.here", "叫所有人", "Ping everyone"],
   ["slash.hereHint", "通知這個據點上的所有冒險者。通常是錯的：出活仍點名一人。", "Notify every adventurer in this hall. Usually wrong: call one @handle."],
   ["slash.library", "開工坊", "Open workshop"],
+  ["slash.sec.skill", "技能", "Skills"],
+  ["slash.sec.agent", "子代理", "Subagents"],
+  ["slash.sec.cmd", "指令", "Commands"],
+  ["slash.loading", "讀取技能與子代理…", "Loading skills and subagents…"],
+  ["slash.empty", "沒有符合的技能或子代理。", "No matching skills or subagents."],
   ["mention.channel", "@所有人", "@everyone"],
   ["mention.channelHint", "通知這個據點上的所有冒險者。通常是錯的：出活仍點名一人。", "Notify every adventurer in this hall. Usually wrong: call one @handle."],
   ["mention.here", "@這裡", "@here"],
@@ -488,6 +502,9 @@ function applyI18n(root) {
   });
   scope.querySelectorAll("[data-i18n-aria]").forEach(function (el) {
     el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
+  });
+  scope.querySelectorAll("[data-i18n-drop]").forEach(function (el) {
+    el.setAttribute("data-drop-hint", t(el.getAttribute("data-i18n-drop")));
   });
   scope.querySelectorAll("[data-locale]").forEach(function (el) {
     el.classList.toggle("on", el.getAttribute("data-locale") === locale);

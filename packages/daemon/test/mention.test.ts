@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
 import { postUserMessage } from "../src/handlers.ts";
-import { GuildStore } from "../src/store.ts";
+import { CHANNEL_ROSTER_CAP, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 import {
   summonedHandles,
@@ -232,6 +232,7 @@ test("article @handles do not dispatch every named bot", async () => {
 
 test("chat composer lists @ mentions including outsiders", () => {
   const html = readFileSync(CHAT_HTML, "utf8");
+  assert.match(html, new RegExp(`CHANNEL_ROSTER_CAP = ${CHANNEL_ROSTER_CAP}`));
   assert.match(html, /mention-pop/);
   assert.match(html, /t\("mention.channel"\)/);
   assert.match(html, /t\("notInChannel"\)/);
@@ -243,6 +244,33 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
   assert.match(html, /assigneeId/);
+});
+
+test("chat composer / picker lists guild and host skills and subagents", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  assert.match(html, /function slashAt/);
+  assert.match(html, /function slashChoices/);
+  assert.match(html, /function loadSlashCatalog/);
+  assert.match(html, /function attachLibraryPick/);
+  assert.match(html, /\/library\/skills\/host\?body=0/);
+  assert.match(html, /\/library\/subagents\/host\?body=0/);
+  assert.match(html, /skipInsert/);
+  assert.match(html, /data-attach="agents"/);
+  assert.match(html, /t\("slash.sec\." \+ row.section\)/);
+  assert.match(css, /\.mention-pop\.is-slash/);
+  assert.match(css, /\.mention-sec/);
+});
+
+test("composer ingests dropped files and pasted clipboard images", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  assert.match(html, /function ingestFiles/);
+  assert.match(html, /function filesFromClipboard/);
+  assert.match(html, /bindComposerDrop/);
+  assert.match(html, /clipboardData/);
+  assert.match(html, /data-i18n-drop="attach.drop"/);
+  assert.match(css, /\.composer\.drop-on/);
 });
 
 test("chat page bubbles bot text and has a reply composer", () => {
@@ -351,6 +379,345 @@ test("replyTo a bot message in a channel asks that bot without @", async () => {
   } finally {
     await closeServer(server);
   }
+});
+
+function staffBot(store: GuildStore, handle: string) {
+  const skill = store.listLibrary("skills")[0];
+  assert.ok(skill);
+  return store.createBot({
+    name: handle,
+    handle,
+    skillIds: [skill.id],
+    soul: { name: handle, body: "# soul" },
+    agent: { name: handle, body: "# agent" },
+    position: { name: handle, body: "# pos" },
+  });
+}
+
+function stubTurn(
+  reply: (input: { handle: string; userMessage: string }) => string,
+) {
+  return async (input: { handle: string; userMessage: string }) => ({
+    body: reply(input),
+    parts: [],
+    source: "local" as const,
+    system: "",
+  });
+}
+
+test("project channel roster caps at 6; #general does not", () => {
+  const store = new GuildStore(tempHome());
+  staffBot(store, "qa");
+  const seventh = staffBot(store, "legal");
+  const room = store.createChannel("quest");
+  const six = store.listBots().filter((bot) => bot.id !== seventh.id);
+  assert.equal(six.length, CHANNEL_ROSTER_CAP);
+  for (const bot of six) store.addMember(room.id, bot.id);
+  assert.equal(store.getRoom(room.id)?.memberIds.length, CHANNEL_ROSTER_CAP);
+  assert.throws(
+    () => store.addMember(room.id, seventh.id),
+    /最多 6 席/,
+  );
+  const general = store.listChannels().find((ch) => ch.name === "general");
+  assert.ok(general?.memberIds.includes(seventh.id));
+});
+
+test("bot @handle spec hands off once to that member", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("spec");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  assert.ok(pm && rd && design);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, rd.id);
+  store.addMember(room.id, design.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@pm 拆給工程",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(`${input.handle}:${input.userMessage}`);
+        if (input.handle === "pm") {
+          return "@rd\nGoal: 登入\nDone when: 測試綠\nConstraints: 不要改行銷\nFiles: auth.ts";
+        }
+        return "收到 spec";
+      }),
+    },
+  );
+  assert.equal(posted.replies.length, 2);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.equal(posted.replies[1].author, rd.id);
+  assert.match(posted.replies[1].body, /收到 spec/);
+  assert.ok(
+    asked.some((row) => row.startsWith("rd:") && /交棒/.test(row)),
+  );
+  assert.ok(!posted.replies.some((row) => row.author === design.id));
+});
+
+test("bot @outsider does not grow the roster; @all in a bot reply stays quiet", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("tight");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  assert.ok(pm && rd && design);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, design.id);
+  const outsider = await postUserMessage(
+    store,
+    room.id,
+    "@pm 叫工程",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) =>
+        input.handle === "pm" ? "@rd 進來幫忙" : "不該輪到我",
+      ),
+    },
+  );
+  assert.equal(outsider.replies.length, 1);
+  assert.equal(outsider.replies[0].author, pm.id);
+  assert.ok(!store.getRoom(room.id)?.memberIds.includes(rd.id));
+
+  const blast = await postUserMessage(
+    store,
+    room.id,
+    "@pm 通知大家",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) =>
+        input.handle === "pm" ? "@all 全員開工" : "不該輪到我",
+      ),
+    },
+  );
+  assert.equal(blast.replies.length, 1);
+  assert.equal(blast.replies[0].author, pm.id);
+});
+
+test("@handle cannot exceed the quest roster cap", async () => {
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir, {});
+  try {
+    const created = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "full" }),
+    });
+    const channelId = created.body.id as string;
+    const skills = await json(origin, "/library/skills");
+    const skillId = (skills.body as { id: string }[])[0]?.id;
+    assert.ok(skillId);
+    const seed = async (handle: string) => {
+      const made = await json(origin, "/bots", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: handle,
+          handle,
+          skillIds: [skillId],
+          soul: { name: handle, body: "# soul" },
+          agent: { name: handle, body: "# agent" },
+          position: { name: handle, body: "# pos" },
+        }),
+      });
+      assert.equal(made.status, 201);
+      return made.body as { id: string; handle: string };
+    };
+    await seed("qa");
+    const seventh = await seed("legal");
+    const space = (await json(origin, "/workspace")).body as {
+      bots: { id: string; handle: string }[];
+    };
+    const six = space.bots.filter((bot) => bot.id !== seventh.id);
+    assert.equal(six.length, CHANNEL_ROSTER_CAP);
+    for (const bot of six) {
+      const added = await json(origin, `/channels/${channelId}/members`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ botId: bot.id }),
+      });
+      assert.equal(added.status, 200);
+    }
+    const posted = await json(origin, `/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: `@${seventh.handle} 請進來` }),
+    });
+    assert.equal(posted.status, 400);
+    assert.match(String(posted.body.error || ""), /最多 6 席/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("a second bot can start while another is still live", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("para");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  assert.ok(infra && marketing);
+  store.addMember(room.id, infra.id);
+  store.addMember(room.id, marketing.id);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const first = postUserMessage(
+    store,
+    room.id,
+    "@infra 慢慢來",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.handle === "infra") await gate;
+        return {
+          body: `${input.handle} done`,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 80; i++) {
+    if (store.getLiveBotTurn(room.id, infra.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(store.getLiveBotTurn(room.id, infra.id));
+  const second = await postUserMessage(
+    store,
+    room.id,
+    "@marketing 同時做",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => ({
+        body: `${input.handle} done`,
+        parts: [],
+        source: "local",
+        system: "",
+      }),
+    },
+  );
+  assert.equal(second.replies.length, 1);
+  assert.equal(second.replies[0].author, marketing.id);
+  assert.ok(store.getLiveBotTurn(room.id, infra.id));
+  release();
+  const infraDone = await first;
+  assert.equal(infraDone.replies[0].author, infra.id);
+});
+
+test("aborting one live bot leaves the other running", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("abort-one");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  assert.ok(infra && marketing);
+  store.addMember(room.id, infra.id);
+  store.addMember(room.id, marketing.id);
+  let releaseInfra!: () => void;
+  const infraGate = new Promise<void>((resolve) => {
+    releaseInfra = resolve;
+  });
+  const first = postUserMessage(
+    store,
+    room.id,
+    "@infra 慢慢來",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.handle === "infra") await infraGate;
+        return {
+          body: `${input.handle} done`,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 80; i++) {
+    if (store.getLiveBotTurn(room.id, infra.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  let releaseMkt!: () => void;
+  const mktGate = new Promise<void>((resolve) => {
+    releaseMkt = resolve;
+  });
+  const second = postUserMessage(
+    store,
+    room.id,
+    "@marketing 同時做",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.handle === "marketing") await mktGate;
+        if (input.signal && input.signal.aborted) {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          throw err;
+        }
+        return {
+          body: `${input.handle} done`,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 80; i++) {
+    if (store.getLiveBotTurn(room.id, marketing.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(store.getLiveBotTurn(room.id, marketing.id));
+  assert.equal(store.abortTurn(room.id, marketing.id), true);
+  assert.ok(store.getLiveBotTurn(room.id, infra.id));
+  assert.equal(store.getLiveBotTurn(room.id, marketing.id), null);
+  releaseMkt();
+  const mkt = await second;
+  assert.equal(mkt.replies.length, 0);
+  releaseInfra();
+  const infraDone = await first;
+  assert.equal(infraDone.replies[0].author, infra.id);
 });
 
 test("chat attachments persist as [Image #1] tokens", async () => {
