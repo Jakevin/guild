@@ -93,6 +93,8 @@ test("every public page loads i18n.js", () => {
   assert.match(studio, /href="\/studio"/);
   assert.match(studio, /id="side-roster"/);
   assert.match(studio, /id="side-hire"/);
+  assert.match(studio, /roster-bot/);
+  assert.match(studio, /bot\.name \|\| bot\.handle/);
   const mcpAdd = readFileSync(MCP_ADD, "utf8");
   assert.match(mcpAdd, /class="host-list"/);
   assert.match(mcpAdd, /class="host-row"/);

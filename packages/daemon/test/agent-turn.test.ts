@@ -106,6 +106,9 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /function traceSummary/);
   assert.match(html, /live-steps/);
   assert.match(html, /function liveBot/);
+  assert.match(html, /function roomLiveTurns/);
+  assert.match(html, /function sameRoom/);
+  assert.match(html, /row.room/);
   assert.match(html, /msg bot live/);
   assert.match(html, /function pollLive/);
   assert.match(html, /function refreshTraj/);
@@ -114,9 +117,20 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /event.live/);
   assert.match(html, /resumeCurrentLive/);
   assert.match(html, /stopTurn/);
+  assert.match(html, /function stopTurn\(botId\)/);
+  assert.match(html, /setBusy\(false, botId \? \[botId\] : \[\], \{ room: room \}\)/);
   assert.match(html, /data-live-stop/);
   assert.match(html, /data-live-steer/);
   assert.match(html, /insertIntoBotTurn/);
+  assert.match(html, /if \(currentRoomBusy\(\)\) \{/);
+  assert.match(html, /await dispatchBusySend\(false\)/);
+  assert.doesNotMatch(
+    html.slice(
+      html.indexOf('getElementById("composer").addEventListener("submit"'),
+      html.indexOf('getElementById("composer").addEventListener("submit"') + 900,
+    ),
+    /if \(state\.busy\) return;/,
+  );
   assert.match(html, /slice\(-5\)/);
   assert.match(html, /live\.steer/);
   assert.match(html, /enqueuePending/);

@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
-import { postUserMessage } from "../src/handlers.ts";
+import { parseAttachments, postUserMessage } from "../src/handlers.ts";
 import { CHANNEL_ROSTER_CAP, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 import {
   summonedHandles,
   mentionedHandles,
+  assignmentFor,
   isBroadcastMention,
 } from "../src/mention.ts";
 
@@ -40,8 +41,8 @@ async function json(
   return { status: response.status, body };
 }
 
-test("prose @handles are references; only the leading group or the first @handle summons", () => {
-  const handles = ["pm", "rd", "marketing"];
+test("prose @handles are references; line-start @handles all summon", () => {
+  const handles = ["pm", "rd", "marketing", "design", "infra"];
   assert.deepEqual(summonedHandles("@pm 照 @marketing 的方案", handles), ["pm"]);
   assert.deepEqual(summonedHandles("@pm @rd 一起看 @marketing", handles), [
     "pm",
@@ -63,6 +64,17 @@ test("prose @handles are references; only the leading group or the first @handle
   );
   assert.deepEqual(summonedHandles("請 @pm 看 @rd 的 PR", handles), ["pm"]);
   assert.deepEqual(summonedHandles("沒有人 ` @pm ` 在 code 裡", handles), []);
+  assert.deepEqual(
+    summonedHandles("@design\nGoal: 圖\n@infra\nGoal: 上版", handles),
+    ["design", "infra"],
+  );
+  assert.deepEqual(
+    summonedHandles(
+      "圖過了才改字。\n@design\n畫四張圖\n@infra\n上版",
+      handles,
+    ),
+    ["design", "infra"],
+  );
   assert.equal(isBroadcastMention("@here 全員"), true);
   assert.equal(isBroadcastMention("@channel 全員"), true);
   assert.equal(isBroadcastMention("@quest 全員"), true);
@@ -75,6 +87,16 @@ test("prose @handles are references; only the leading group or the first @handle
     ),
     ["pm", "marketing", "rd"],
   );
+  const spec =
+    "我這輪不改 README。\n@design\nGoal: 四張圖\nFiles: docs/a.png\n@infra\nGoal: push\nFiles: README.md";
+  const designAsk = assignmentFor(spec, "design", handles);
+  const infraAsk = assignmentFor(spec, "infra", handles);
+  assert.match(designAsk, /不改 README/);
+  assert.match(designAsk, /四張圖/);
+  assert.doesNotMatch(designAsk, /push/);
+  assert.match(infraAsk, /不改 README/);
+  assert.match(infraAsk, /push/);
+  assert.doesNotMatch(infraAsk, /四張圖/);
 });
 
 test("@all starts every channel member at once", async () => {
@@ -240,6 +262,7 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /mentionScanText/);
   assert.match(html, /assignCandidates/);
   assert.match(html, /function lastBotAuthor/);
+  assert.match(html, /function summonedBotIds/);
   assert.match(html, /if \(ids\.length\) \{/);
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
@@ -273,12 +296,31 @@ test("composer ingests dropped files and pasted clipboard images", () => {
   assert.match(css, /\.composer\.drop-on/);
 });
 
+test("composer and thread hover a small image preview", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  assert.match(html, /id="img-preview"/);
+  assert.match(html, /function imagePreviewUrl/);
+  assert.match(html, /function bindImagePreview/);
+  assert.match(html, /data-preview/);
+  assert.match(html, /attach-thumb/);
+  assert.match(html, /msg-imgs/);
+  assert.match(html, /att-inline/);
+  assert.match(html, /wireAttachment/);
+  assert.match(css, /\.img-preview/);
+  assert.match(css, /\.attach-thumb/);
+  assert.match(css, /\.msg-img/);
+  assert.match(css, /\.att-inline/);
+});
+
 test("chat page bubbles bot text and has a reply composer", () => {
   const html = readFileSync(CHAT_HTML, "utf8");
   const css = readFileSync(CHAT_CSS, "utf8");
   assert.match(html, /composer-reply/);
   assert.match(html, /t\("replying"\)/);
   assert.match(html, /data-reply/);
+  assert.match(html, /data-msg-del/);
+  assert.match(html, /function deleteChatMessage/);
   assert.match(html, /setReply/);
   assert.match(html, /class="bubble"/);
   assert.match(css, /\.msg\.bot \.bubble/);
@@ -420,6 +462,76 @@ test("project channel roster caps at 6; #general does not", () => {
   );
   const general = store.listChannels().find((ch) => ch.name === "general");
   assert.ok(general?.memberIds.includes(seventh.id));
+});
+
+test("bot line-start specs hand off to each named seat in parallel", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("sortie");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(marketing && design && infra);
+  store.addMember(room.id, marketing.id);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, infra.id);
+  const asked: string[] = [];
+  const starts: number[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@marketing 把圖和上版拆給兩席",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        asked.push(`${input.handle}:${input.userMessage}`);
+        starts.push(Date.now());
+        if (input.handle === "marketing") {
+          return {
+            body: [
+              "我這輪不改 README。圖落地再說。",
+              "@design",
+              "Goal: 四張圖",
+              "Files: docs/readme-hall-2026-08-29.png",
+              "@infra",
+              "Goal: 圖過了才上版",
+              "Files: README.md",
+            ].join("\n"),
+            parts: [],
+            source: "local" as const,
+            system: "",
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return {
+          body: "收到 " + input.handle,
+          parts: [],
+          source: "local" as const,
+          system: "",
+        };
+      },
+    },
+  );
+  assert.equal(posted.replies.length, 3);
+  const authors = posted.replies.map((row) => row.author);
+  assert.equal(authors[0], marketing.id);
+  assert.ok(authors.includes(design.id));
+  assert.ok(authors.includes(infra.id));
+  const designAsk = asked.find((row) => row.startsWith("design:"));
+  const infraAsk = asked.find((row) => row.startsWith("infra:"));
+  assert.ok(designAsk && /交棒給 @design/.test(designAsk));
+  assert.ok(infraAsk && /交棒給 @infra/.test(infraAsk));
+  assert.match(designAsk, /四張圖/);
+  assert.doesNotMatch(designAsk, /上版/);
+  assert.match(infraAsk, /上版/);
+  assert.doesNotMatch(infraAsk, /四張圖/);
+  const hopStarts = starts.slice(1);
+  assert.equal(hopStarts.length, 2);
+  assert.ok(Math.max(...hopStarts) - Math.min(...hopStarts) < 80);
 });
 
 test("bot @handle spec hands off once to that member", async () => {
@@ -635,6 +747,22 @@ test("a second bot can start while another is still live", async () => {
   assert.equal(infraDone.replies[0].author, infra.id);
 });
 
+test("abortTurn clears a leftover live row even without a controller", () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("orphan-live");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(infra);
+  store.setLiveTurn(room.id, {
+    botId: infra.id,
+    thinking: "",
+    steps: [],
+    startedAt: new Date().toISOString(),
+  });
+  assert.ok(store.getLiveBotTurn(room.id, infra.id));
+  assert.equal(store.abortTurn(room.id, infra.id), true);
+  assert.equal(store.getLiveBotTurn(room.id, infra.id), null);
+});
+
 test("aborting one live bot leaves the other running", async () => {
   const store = new GuildStore(tempHome());
   const room = store.createChannel("abort-one");
@@ -760,4 +888,64 @@ test("chat attachments persist as [Image #1] tokens", async () => {
   } finally {
     await closeServer(server);
   }
+});
+
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+test("image preview is stored on the message and kept out of the model prompt", async () => {
+  const parsed = parseAttachments([
+    {
+      token: "[Image #1]",
+      title: "shot.png",
+      body: "a screenshot",
+      preview: TINY_PNG,
+    },
+    {
+      token: "[Image #2]",
+      title: "bad.png",
+      body: "nope",
+      preview: "javascript:alert(1)",
+    },
+  ]);
+  assert.equal(parsed?.[0]?.preview, TINY_PNG);
+  assert.equal(parsed?.[1]?.preview, undefined);
+  assert.equal(
+    parseAttachments([
+      {
+        token: "[Image #1]",
+        title: "huge.png",
+        body: "x",
+        preview: `data:image/png;base64,${"A".repeat(100_001)}`,
+      },
+    ])?.[0]?.preview,
+    undefined,
+  );
+
+  const store = new GuildStore(tempHome());
+  writeModelsFile(store.dataDir, { default: null, providers: {} });
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  assert.ok(pm);
+  const dm = store.openDm(pm.id);
+  let seen = "";
+  const posted = await postUserMessage(
+    store,
+    dm.id,
+    "[Image #1] look",
+    process.env,
+    undefined,
+    parsed,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        seen = input.userMessage;
+        return "ok";
+      }),
+    },
+  );
+  assert.equal(posted.message.attachments?.[0]?.preview, TINY_PNG);
+  assert.match(seen, /shot.png/);
+  assert.doesNotMatch(seen, /data:image/);
 });

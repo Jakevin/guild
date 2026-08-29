@@ -351,7 +351,15 @@ export class GuildStore {
     if (botId) {
       const room = this.botAborts.get(roomId);
       const controller = room?.get(botId);
-      if (!controller) return false;
+      if (!controller) {
+        const live = this.liveTurns.get(roomId);
+        const steers = this.pendingSteers.get(roomId);
+        const hadLive = Boolean(live?.delete(botId));
+        steers?.delete(botId);
+        if (live && live.size === 0) this.liveTurns.delete(roomId);
+        if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
+        return hadLive;
+      }
       const group = this.turnGroups.get(controller.signal);
       const ids = group ? [...group.botIds] : [botId];
       this.turnGroups.delete(controller.signal);
@@ -727,17 +735,26 @@ export class GuildStore {
   }
 
   createChannel(name: string): Room {
-    const slug = slugify(name.replace(/^#/, ""));
-    if (!slug || slug === "item") {
+    const trimmed = name.replace(/^#/, "").trim();
+    if (!trimmed) {
       throw new StoreError(400, "channel name is required");
     }
-    if (this.listChannels().some((room) => room.name === slug)) {
-      throw new StoreError(409, `channel already exists: ${slug}`);
+    if (trimmed === "general") {
+      throw new StoreError(400, "cannot create #general");
     }
+    if (this.listChannels().some((room) => room.name === trimmed)) {
+      throw new StoreError(409, `channel already exists: ${trimmed}`);
+    }
+    const slug = slugify(trimmed);
+    const existingIds = this.listChannels().map((room) => room.id);
+    const baseId =
+      slug && slug !== "item" && slug !== "general"
+        ? `channel-${slug}`
+        : `channel-${randomUUID().slice(0, 8)}`;
     const room: Room = {
-      id: `channel-${slug}`,
+      id: uniqueSlug(baseId, existingIds),
       kind: "channel",
-      name: slug,
+      name: trimmed,
       memberIds: [],
       createdAt: new Date().toISOString(),
     };
@@ -921,6 +938,25 @@ export class GuildStore {
     });
     if (!next) throw new StoreError(404, "message not found");
     return next;
+  }
+
+  deleteMessage(roomId: string, messageId: string): ChatMessage {
+    if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
+    const messages = this.listMessages(roomId);
+    const current = messages.find((item) => item.id === messageId);
+    if (!current) throw new StoreError(404, "message not found");
+    if (current.author !== "you") {
+      this.abortTurn(roomId, current.author);
+    } else {
+      const laterYou = messages.some(
+        (item, index) =>
+          index > messages.indexOf(current) && item.author === "you",
+      );
+      if (!laterYou) this.abortTurn(roomId);
+    }
+    const removed = this.db.deleteMessage(roomId, messageId);
+    if (!removed) throw new StoreError(404, "message not found");
+    return removed;
   }
 
   truncateAfter(roomId: string, messageId: string): ChatMessage[] {

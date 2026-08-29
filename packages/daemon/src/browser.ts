@@ -24,7 +24,7 @@ import type { ToolOutcome } from "./tools.ts";
  * Real-profile browsing follows Hermes (nousresearch/hermes-agent
  * hermes_cli/browser_connect.py): never CDP the live profile (Chrome 136+).
  * Snapshot last_used auth into ~/.guild/browser-profile/chrome, drive the copy.
- * Off unless GUILD_BROWSER_REAL_PROFILE=1; turning off deletes the snapshot.
+ * On by default (GUILD_BROWSER_REAL_PROFILE=1). Set 0 for throwaway; turning off deletes the snapshot.
  */
 export const SNAPSHOT_DONE_MARKER = ".guild-snapshot-complete";
 
@@ -87,8 +87,9 @@ type Session = {
 let session: Session | null = null;
 
 export function realProfileEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = (env.GUILD_BROWSER_REAL_PROFILE ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  const raw = (env.GUILD_BROWSER_REAL_PROFILE ?? "1").trim().toLowerCase();
+  if (!raw) return true;
+  return raw !== "0" && raw !== "false" && raw !== "no" && raw !== "off";
 }
 
 export function chromeUserDataDir(home = homedir(), platform = process.platform): string {
@@ -292,7 +293,7 @@ export function syncRealProfile(
   }
   if (profileIsLocked(userData, leaf)) {
     throw new Error(
-      "Chrome is running and has its profile locked, so login data can't be copied. Fully quit the browser (including any background/tray instance) and retry, or unset GUILD_BROWSER_REAL_PROFILE.",
+      "Chrome is running and has its profile locked, so login data can't be copied. Fully quit the browser (including any background/tray instance) and retry, or set GUILD_BROWSER_REAL_PROFILE=0.",
     );
   }
   const root = snapshotDir(dataDir);
@@ -315,7 +316,7 @@ export function syncRealProfile(
   const failedDbs = copyAuthProfile(srcProfile, dest);
   if (failedDbs) {
     throw new Error(
-      `could not read the Chrome profile's login data (${failedDbs} database(s) locked). Close Chrome and retry, or unset GUILD_BROWSER_REAL_PROFILE.`,
+      `could not read the Chrome profile's login data (${failedDbs} database(s) locked). Close Chrome and retry, or set GUILD_BROWSER_REAL_PROFILE=0.`,
     );
   }
   for (const leftover of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
@@ -568,11 +569,24 @@ function parseRef(raw: string): string {
 
 export async function runBrowser(
   args: Record<string, unknown>,
-  input: { dataDir?: string; env?: NodeJS.ProcessEnv } = {},
+  input: {
+    dataDir?: string;
+    env?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<ToolOutcome> {
+  if (input.signal?.aborted) {
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  }
   const env = input.env ?? process.env;
   const dataDir = input.dataDir ?? defaultDataDir(env);
   const action = String(args.action || args.command || "snapshot").trim().toLowerCase() as BrowserAction;
+  const onAbort = () => {
+    closeBrowser().catch(() => {});
+  };
+  input.signal?.addEventListener("abort", onAbort, { once: true });
   try {
     if (action === "close") {
       await closeBrowser();
@@ -641,8 +655,11 @@ export async function runBrowser(
     }
     return { text: `unknown browser action: ${action}`, isError: true };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     const text = error instanceof Error ? error.message : String(error);
     return { text, isError: true };
+  } finally {
+    input.signal?.removeEventListener("abort", onAbort);
   }
 }
 

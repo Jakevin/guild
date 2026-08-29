@@ -947,6 +947,18 @@ export function formatOAuthError(provider: string, message?: string): string {
   return text ? `模型請求失敗：${text}` : "模型請求失敗";
 }
 
+/** ChatGPT Codex and Copilot reasoning/Auto reject `temperature`. */
+export function oauthOmitsTemperature(input: {
+  provider: string;
+  modelReasoning?: boolean;
+  copilotSession?: boolean;
+}): boolean {
+  if (input.copilotSession) return true;
+  if (input.provider === "openai-codex") return true;
+  if (input.provider === "github-copilot" && input.modelReasoning) return true;
+  return false;
+}
+
 export async function completeOAuth(input: {
   dataDir: string;
   pickerId: string;
@@ -1003,21 +1015,25 @@ export async function completeOAuth(input: {
       : stubAssistant(model, item.content, now),
   );
   const useTools = Boolean(input.tools);
-  const dropCopilotTemperature = Boolean(
-    copilotSessionToken || (sub.id === "github-copilot" && model.reasoning),
-  );
+  const omitTemperature = oauthOmitsTemperature({
+    provider: sub.id,
+    modelReasoning: Boolean(model.reasoning),
+    copilotSession: Boolean(copilotSessionToken),
+  });
   const options: {
     temperature?: number;
     reasoning?: "minimal" | "low" | "medium" | "high";
     timeoutMs: number;
+    signal?: AbortSignal;
     transformHeaders?: (
       headers: Record<string, string | null>,
     ) => Record<string, string | null>;
     onPayload?: (payload: unknown) => unknown;
   } = {
-    temperature: dropCopilotTemperature ? undefined : (input.temperature ?? 0.4),
+    temperature: omitTemperature ? undefined : (input.temperature ?? 0.4),
     reasoning: input.reasoning,
     timeoutMs: LLM_ROUND_TIMEOUT_MS,
+    signal: input.toolCtx?.signal,
   };
   if (sub.id === "xai" || sub.id === "github-copilot") {
     options.transformHeaders = (headers) => ({
@@ -1028,7 +1044,7 @@ export async function completeOAuth(input: {
         : {}),
     });
   }
-  if (dropCopilotTemperature) {
+  if (omitTemperature) {
     options.onPayload = (payload) => {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return payload;
@@ -1096,7 +1112,12 @@ export async function completeOAuth(input: {
         },
         options,
       );
-      if (result.stopReason === "error" || result.stopReason === "aborted") {
+      if (result.stopReason === "aborted" || input.toolCtx?.signal?.aborted) {
+        const err = new Error("aborted");
+        err.name = "AbortError";
+        throw err;
+      }
+      if (result.stopReason === "error") {
         throw new Error(
           formatOAuthError(sub.id, result.errorMessage) ||
             `${sub.id} request failed`,

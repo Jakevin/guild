@@ -87,7 +87,7 @@ pnpm dev
 
 **MCP 會以你的身分 spawn 本機 process** — Guild 的 `mcp.json` **以及** 本機 Claude / Cursor / Codex 設定，沒有匯入、沒有同意步驟。env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
 
-**瀏覽器預設沒登入。** `browser` 開的是拋棄式 Chrome profile。設 `GUILD_BROWSER_REAL_PROFILE=1` 才會把你**正在用的** Chrome profile（`last_used`）快照到 `~/.guild/browser-profile/chrome`（對齊 Hermes 原始碼：sqlite backup，不開你正在跑的那個）。細節：[SECURITY.md](./SECURITY.md)。
+**瀏覽器預設帶你的 Chrome 登入。** `browser` 把你**正在用的** Chrome profile（`last_used`）快照到 `~/.guild/browser-profile/chrome` 再操作那份複本（對齊 Hermes：不開你正在跑的那個）。設 `GUILD_BROWSER_REAL_PROFILE=0` 才用拋棄式空 profile。細節：[SECURITY.md](./SECURITY.md)。
 
 也還沒做：Tauri app、staffing、approvals、每 bot 一份 `CODEX_HOME`、HTTP MCP。`docs/` 裡的設計文件是之後的形狀——不是 changelog。
 

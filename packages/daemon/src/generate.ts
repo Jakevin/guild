@@ -148,14 +148,198 @@ ${bodyHint} name is a short title. Language: follow the user's prompt.`;
   return { name: parsed.name, body: parsed.body, source: "llm" };
 }
 
+export type SkillPickItem = {
+  id: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  slug?: string;
+};
+
+export type SkillPickInput = {
+  name?: string;
+  handle?: string;
+  oneLiner?: string;
+  soul?: string;
+  agent?: string;
+  position?: string;
+  skills: SkillPickItem[];
+};
+
+export type SkillPickResult = {
+  skillIds: string[];
+  source: "llm" | "local";
+};
+
+const PICK_MAX = 8;
+const PICK_CATALOG_MAX = 200;
+const PICK_DESC_CAP = 180;
+const PICK_MD_CAP = 1600;
+
+export async function pickSkills(
+  input: SkillPickInput,
+  env: NodeJS.ProcessEnv = process.env,
+  dataDir?: string,
+): Promise<SkillPickResult> {
+  const catalog = normalizePickCatalog(input.skills);
+  if (!catalog.length) {
+    throw new StoreError(400, "skills catalog is required");
+  }
+  const brief = seatBrief(input);
+  if (!brief.trim()) {
+    throw new StoreError(400, "markdown is required");
+  }
+  if (dataDir) {
+    const llm = await tryLlmPick(brief, catalog, env, dataDir);
+    if (llm?.skillIds.length) return llm;
+  }
+  return localPick(brief, catalog);
+}
+
+function normalizePickCatalog(skills: SkillPickItem[]): SkillPickItem[] {
+  const out: SkillPickItem[] = [];
+  const seen = new Set<string>();
+  for (const item of skills || []) {
+    const id = String(item?.id || "").trim();
+    const name = String(item?.name || "").trim();
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name,
+      slug: String(item.slug || "").trim(),
+      description: String(item.description || "").slice(0, PICK_DESC_CAP),
+      tags: Array.isArray(item.tags)
+        ? item.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 8)
+        : [],
+    });
+    if (out.length >= PICK_CATALOG_MAX) break;
+  }
+  return out;
+}
+
+function seatBrief(input: SkillPickInput): string {
+  const clip = (value: string, cap: number) => value.trim().slice(0, cap);
+  const parts = [
+    input.name?.trim() ? `Name: ${clip(input.name, 80)}` : "",
+    input.handle?.trim() ? `Handle: ${clip(input.handle, 40)}` : "",
+    input.oneLiner?.trim() ? `One-liner: ${clip(input.oneLiner, 240)}` : "",
+    input.soul?.trim() ? `SOUL.md\n${clip(input.soul, PICK_MD_CAP)}` : "",
+    input.agent?.trim() ? `AGENTS.md\n${clip(input.agent, PICK_MD_CAP)}` : "",
+    input.position?.trim() ? `POSITION.md\n${clip(input.position, PICK_MD_CAP)}` : "",
+  ];
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function filterPickIds(ids: string[], catalog: SkillPickItem[]): string[] {
+  const allowed = new Set(catalog.map((item) => item.id));
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = String(raw || "").trim();
+    if (!id || !allowed.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= PICK_MAX) break;
+  }
+  return out;
+}
+
+async function tryLlmPick(
+  brief: string,
+  catalog: SkillPickItem[],
+  env: NodeJS.ProcessEnv,
+  dataDir: string,
+): Promise<SkillPickResult | null> {
+  const compact = catalog.map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description || "",
+    tags: item.tags || [],
+  }));
+  const system = `You staff skills onto one AI bot seat.
+Return JSON only: {"skillIds": string[]}.
+Pick 3-8 ids from the catalog this seat actually needs, matching Soul / Agent / Position.
+Prefer specific skills over generic ones. Do not invent ids. Do not pick everything.`;
+  const result = await llmComplete({
+    dataDir,
+    env,
+    system,
+    messages: [
+      {
+        role: "user",
+        content: `${brief}\n\nCatalog:\n${JSON.stringify(compact)}`,
+      },
+    ],
+    temperature: 0.2,
+    role: "skills",
+  });
+  if (!result) return null;
+  const ids = extractSkillIds(result.text);
+  if (!ids) return null;
+  const skillIds = filterPickIds(ids, catalog);
+  if (!skillIds.length) return null;
+  return { skillIds, source: "llm" };
+}
+
+function localPick(brief: string, catalog: SkillPickItem[]): SkillPickResult {
+  const toks = pickTokens(brief);
+  const ranked = catalog
+    .map((item) => ({ id: item.id, n: pickScore(item, toks) }))
+    .filter((item) => item.n > 0)
+    .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
+  return {
+    skillIds: ranked.slice(0, PICK_MAX).map((item) => item.id),
+    source: "local",
+  };
+}
+
+function pickTokens(text: string): string[] {
+  const lower = text.toLowerCase();
+  const out = new Set<string>();
+  for (const word of lower.match(/[a-z][a-z0-9-]{1,}|[0-9]{2,}/g) || []) {
+    out.add(word);
+  }
+  const cjk = lower.match(/[\u3400-\u9fff]+/g) || [];
+  for (const run of cjk) {
+    if (run.length === 1) out.add(run);
+    for (let i = 0; i < run.length - 1; i++) out.add(run.slice(i, i + 2));
+  }
+  return [...out];
+}
+
+function pickScore(item: SkillPickItem, toks: string[]): number {
+  const hay = (
+    `${item.name} ${item.slug || ""} ${item.description || ""} ${(item.tags || []).join(" ")}`
+  ).toLowerCase();
+  let n = 0;
+  for (const tok of toks) {
+    if (hay.includes(tok)) n += tok.length > 3 ? 2 : 1;
+  }
+  return n;
+}
+
+function extractSkillIds(content: string): string[] | null {
+  const fenced = content.match(/\{[\s\S]*\}/);
+  if (!fenced) return null;
+  try {
+    const value = JSON.parse(fenced[0]) as { skillIds?: unknown };
+    if (!Array.isArray(value.skillIds)) return null;
+    return value.skillIds.filter((id): id is string => typeof id === "string");
+  } catch {
+    return null;
+  }
+}
+
 /** Seat exclusivity, spec handoffs, quiet unless blocked. */
 export const HALL_RULES = `# Hall
 Own this seat. Do not do another staffed bot's job.
-When work belongs to someone else, @handle them with a written spec, not a suggestion:
+When work belongs to someone else, put @handle at the start of a line with a written spec, not a suggestion in prose:
 - Goal (one sentence)
 - Done when
 - Constraints / out of scope
 - Files or evidence
+Each line-start @handle on this quest starts that seat. Mentions in the middle of a sentence do not dispatch.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster (max ${CHANNEL_ROSTER_CAP} on a quest).
 Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.`;
 

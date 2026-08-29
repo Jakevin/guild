@@ -88,7 +88,10 @@
           <input name="oneLiner" placeholder="這名冒險者在編制裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
           <div class="card-foot">
             <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">請這名冒險者離席</button>
-            <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
+            <div class="save-row">
+              <p class="block-flash" hidden></p>
+              <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
+            </div>
           </div>
         </section>
 
@@ -97,11 +100,17 @@
           <p class="muted" data-i18n="studio.soulHint">性格、聲音、邊界。</p>
           <label data-i18n="studio.desc">描述</label>
           <input class="prompt" placeholder="謹慎、少廢話的資深工程師" data-i18n-placeholder="studio.soulPh" />
-          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <div class="gen-row">
+            <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+            <p class="block-flash" hidden></p>
+          </div>
           <label>SOUL.md</label>
           <textarea class="body" name="soulBody" required placeholder="# Soul"></textarea>
           <input type="hidden" class="gen-name" name="soulName" />
-          <button type="button" class="save-md" data-save="soul" hidden>儲存 SOUL.md</button>
+          <div class="save-row">
+            <p class="block-flash" hidden></p>
+            <button type="button" class="save-md" data-save="soul" hidden>儲存 SOUL.md</button>
+          </div>
         </section>
 
         <section class="card markdown-block" data-kind="agent">
@@ -109,11 +118,17 @@
           <p class="muted" data-i18n="studio.agentHint">怎麼做事的 SOP。</p>
           <label data-i18n="studio.desc">描述</label>
           <input class="prompt" placeholder="先寫測試，再改最小程式" data-i18n-placeholder="studio.agentPh" />
-          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <div class="gen-row">
+            <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+            <p class="block-flash" hidden></p>
+          </div>
           <label>AGENTS.md</label>
           <textarea class="body" name="agentBody" required placeholder="# Agent"></textarea>
           <input type="hidden" class="gen-name" name="agentName" />
-          <button type="button" class="save-md" data-save="agent" hidden>儲存 AGENTS.md</button>
+          <div class="save-row">
+            <p class="block-flash" hidden></p>
+            <button type="button" class="save-md" data-save="agent" hidden>儲存 AGENTS.md</button>
+          </div>
         </section>
 
         <section class="card markdown-block" data-kind="position">
@@ -121,11 +136,17 @@
           <p class="muted" data-i18n="studio.posHint">職位職責與完成定義。</p>
           <label data-i18n="studio.desc">描述</label>
           <input class="prompt" placeholder="這個專案的 Engineer" data-i18n-placeholder="studio.posPh" />
-          <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+          <div class="gen-row">
+            <button type="button" class="secondary generate" data-i18n="studio.genMd">用 AI 生成 Markdown</button>
+            <p class="block-flash" hidden></p>
+          </div>
           <label>POSITION.md</label>
           <textarea class="body" name="positionBody" required placeholder="# Position"></textarea>
           <input type="hidden" class="gen-name" name="positionName" />
-          <button type="button" class="save-md" data-save="position" hidden>儲存 POSITION.md</button>
+          <div class="save-row">
+            <p class="block-flash" hidden></p>
+            <button type="button" class="save-md" data-save="position" hidden>儲存 POSITION.md</button>
+          </div>
         </section>
 
         <section class="skill-picker">
@@ -139,7 +160,9 @@
               </svg>
               <input id="skill-search" type="search" placeholder="搜尋技能庫" data-i18n-placeholder="studio.searchSkills" />
             </div>
+            <button type="button" class="secondary" id="skill-pick" data-i18n="studio.pickSkills">用 AI 挑選</button>
           </div>
+          <p id="skill-pick-flash" class="block-flash" hidden></p>
           <div id="tag-row" class="chips tag-row"></div>
           <p class="section-label" id="skill-summary">尚未勾選</p>
           <div id="skill-grid" class="skill-grid"></div>
@@ -202,6 +225,22 @@
       function setFlash(kind, text) {
         flash.className = kind;
         flash.textContent = text;
+      }
+      function setNodeFlash(el, kind, text) {
+        if (!el) {
+          setFlash(kind, text);
+          return;
+        }
+        el.hidden = !text;
+        el.className = "block-flash" + (kind ? " " + kind : "");
+        el.textContent = text || "";
+      }
+      function setBlockFlash(block, kind, text) {
+        setNodeFlash(block && block.querySelector(".gen-row .block-flash"), kind, text);
+      }
+      function saveFlashEl(kind) {
+        const btn = document.querySelector('.save-md[data-save="' + kind + '"]');
+        return btn && btn.parentElement ? btn.parentElement.querySelector(".block-flash") : null;
       }
       function hue(key) {
         let n = 0;
@@ -480,6 +519,88 @@
         window.scrollTo(0, y);
       }
 
+      function uniquePickIds(ids) {
+        const seen = new Set();
+        const out = [];
+        for (const id of ids) {
+          const skill = allSkills.find((item) => item.id === id);
+          if (!skill) continue;
+          const key = skillKeyOf(skill);
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          out.push(id);
+        }
+        return out;
+      }
+      document.getElementById("skill-pick").addEventListener("click", async () => {
+        const button = document.getElementById("skill-pick");
+        const flashEl = document.getElementById("skill-pick-flash");
+        const soul = form.soulBody.value.trim();
+        const agent = form.agentBody.value.trim();
+        const position = form.positionBody.value.trim();
+        const oneLiner = form.oneLiner.value.trim();
+        if (!soul && !agent && !position && !oneLiner) {
+          setNodeFlash(flashEl, "error", t("studio.needMdForPick"));
+          return;
+        }
+        if (!allSkills.length) {
+          setNodeFlash(flashEl, "error", t("studio.emptyLib"));
+          return;
+        }
+        button.disabled = true;
+        button.textContent = t("studio.picking");
+        try {
+          const response = await fetch("/generate/skills", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: form.name.value,
+              handle: form.handle.value,
+              oneLiner: oneLiner,
+              soul: soul,
+              agent: agent,
+              position: position,
+              skills: allSkills.map((skill) => ({
+                id: skill.id,
+                name: skill.name,
+                slug: skill.slug || "",
+                description: String(skill.description || "").slice(0, 180),
+                tags: skill.tags || [],
+              })),
+            }),
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            setNodeFlash(flashEl, "error", body.error || "pick failed");
+            return;
+          }
+          const ids = uniquePickIds(Array.isArray(body.skillIds) ? body.skillIds : []);
+          if (!ids.length) {
+            setNodeFlash(flashEl, "error", t("studio.pickNone"));
+            return;
+          }
+          selected = new Set(ids);
+          activeTags = new Set([PICKED]);
+          showAllSkills = false;
+          render();
+          if (EDIT_ID) {
+            const saved = await saveSkills(flashEl);
+            if (!saved) return;
+          }
+          setNodeFlash(
+            flashEl,
+            "health",
+            t("studio.pickedDone", {
+              n: allSkills.filter((skill) => isChecked(skill)).length,
+            }),
+          );
+        } catch (err) {
+          setNodeFlash(flashEl, "error", err.message);
+        } finally {
+          button.disabled = false;
+          button.textContent = t("studio.pickSkills");
+        }
+      });
       document.getElementById("skill-search").addEventListener("input", () => {
         showAllSkills = false;
         render();
@@ -564,7 +685,7 @@
           const kind = block.getAttribute("data-kind");
           const prompt = block.querySelector(".prompt").value.trim();
           if (!prompt) {
-            setFlash("error", t("studio.needPrompt", { kind: kind }));
+            setBlockFlash(block, "error", t("studio.needPrompt", { kind: kind }));
             return;
           }
           button.disabled = true;
@@ -577,19 +698,36 @@
             });
             const body = await response.json();
             if (!response.ok) {
-              setFlash("error", body.error || "generate failed");
+              setBlockFlash(block, "error", body.error || "generate failed");
               return;
             }
             block.querySelector(".body").value = body.body;
             block.querySelector(".gen-name").value = body.name;
-            setFlash(
-              "health",
-              body.source === "llm"
-                ? t("studio.generated", { kind: kind })
-                : t("studio.generatedLocal", { kind: kind }),
-            );
+            if (EDIT_ID) {
+              const saved = await saveMarkdown(
+                kind,
+                block.querySelector(".gen-row .block-flash"),
+              );
+              if (saved) {
+                setBlockFlash(
+                  block,
+                  "health",
+                  body.source === "llm"
+                    ? t("studio.generatedSaved", { file: mdFile(kind) })
+                    : t("studio.generatedSavedLocal", { file: mdFile(kind) }),
+                );
+              }
+            } else {
+              setBlockFlash(
+                block,
+                "health",
+                body.source === "llm"
+                  ? t("studio.generated", { kind: kind })
+                  : t("studio.generatedLocal", { kind: kind }),
+              );
+            }
           } catch (err) {
-            setFlash("error", err.message);
+            setBlockFlash(block, "error", err.message);
           } finally {
             button.disabled = false;
             button.textContent = t("studio.genMd");
@@ -612,7 +750,7 @@
           block.querySelector(".prompt").value;
         return { name: name, body: body };
       }
-      async function patchBot(payload, okText) {
+      async function patchBot(payload, okText, flashEl) {
         const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID), {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -620,31 +758,32 @@
         });
         const body = await response.json();
         if (!response.ok) {
-          setFlash("error", body.error || "save failed");
+          setNodeFlash(flashEl, "error", body.error || "save failed");
           return null;
         }
-        setFlash("health", okText);
+        setNodeFlash(flashEl, "health", okText);
         return body;
       }
-      async function saveMarkdown(kind) {
-        if (!EDIT_ID) return;
+      async function saveMarkdown(kind, flashEl) {
+        if (!EDIT_ID) return null;
+        const el = flashEl || saveFlashEl(kind);
         if (kind === "identity") {
-          await patchBot(
+          return patchBot(
             {
               name: form.name.value,
               handle: form.handle.value,
               oneLiner: form.oneLiner.value,
             },
             t("studio.savedIdentity"),
+            el,
           );
-          return;
         }
         const draft = mdDraft(kind);
         if (!draft || !String(draft.body || "").trim()) {
-          setFlash("error", t("studio.needPrompt", { kind: kind }));
-          return;
+          setNodeFlash(el, "error", t("studio.needPrompt", { kind: kind }));
+          return null;
         }
-        await patchBot({ [kind]: draft }, t("studio.savedMd", { file: mdFile(kind) }));
+        return patchBot({ [kind]: draft }, t("studio.savedMd", { file: mdFile(kind) }), el);
       }
       document.querySelectorAll(".save-md").forEach((button) => {
         button.addEventListener("click", () => {
@@ -653,11 +792,11 @@
       });
 
       let skillSaveSeq = 0;
-      async function saveSkills() {
+      async function saveSkills(flashEl) {
         const ids = [...checkedIds()];
         if (ids.length === 0) {
-          setFlash("error", t("studio.needSkill"));
-          return;
+          setNodeFlash(flashEl, "error", t("studio.needSkill"));
+          return false;
         }
         const seq = ++skillSaveSeq;
         try {
@@ -667,10 +806,10 @@
             body: JSON.stringify({ skillIds: ids }),
           });
           const body = await response.json();
-          if (seq !== skillSaveSeq) return;
+          if (seq !== skillSaveSeq) return false;
           if (!response.ok) {
-            setFlash("error", body.error || "save failed");
-            return;
+            setNodeFlash(flashEl, "error", body.error || "save failed");
+            return false;
           }
           if (Array.isArray(body.skillIds)) {
             const guild = await fetch("/library/skills")
@@ -680,11 +819,13 @@
             allSkills = mergeSkills(Array.isArray(guild) ? guild : [], host);
             selected = new Set(body.skillIds);
           }
-          setFlash("health", t("studio.skillsSaved"));
+          if (!flashEl) setFlash("health", t("studio.skillsSaved"));
           syncCardChecks();
+          return true;
         } catch (err) {
-          if (seq !== skillSaveSeq) return;
-          setFlash("error", err.message);
+          if (seq !== skillSaveSeq) return false;
+          setNodeFlash(flashEl, "error", err.message);
+          return false;
         }
       }
 
@@ -843,13 +984,15 @@
           .map((bot) => {
             const on = EDIT_ID === bot.id ? " on" : "";
             return (
-              '<a class="side-sub' +
+              '<a class="side-sub roster-bot' +
               on +
               '" href="/edit/' +
               encodeURIComponent(bot.id) +
-              '">@' +
+              '"><strong>' +
+              esc(bot.name || bot.handle) +
+              "</strong><em>@" +
               esc(bot.handle) +
-              "</a>"
+              "</em></a>"
             );
           })
           .join("");

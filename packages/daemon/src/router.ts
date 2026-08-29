@@ -17,6 +17,7 @@ import {
   getChannelMemory,
   setChannelMemory,
   generateKind,
+  pickBotSkills,
   getBotDetail,
   getLiveTurn,
   abortLiveTurn,
@@ -31,6 +32,7 @@ import {
   createMcpServer,
   importMcpServer,
   deleteMcpServer,
+  deleteRoomMessage,
   listRoomMessages,
   listRoomTrajectory,
   openDm,
@@ -176,6 +178,35 @@ function strList(record: Record<string, unknown>, key: string): string[] {
   }
   if (typeof value === "string" && value) return [value];
   return [];
+}
+
+function skillPickCatalog(
+  record: Record<string, unknown>,
+): { id: string; name: string; description?: string; tags?: string[]; slug?: string }[] {
+  const raw = record.skills;
+  if (!Array.isArray(raw)) return [];
+  const out: {
+    id: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    slug?: string;
+  }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const rec = item as Record<string, unknown>;
+    const id = str(rec, "id").trim();
+    const name = str(rec, "name").trim();
+    if (!id || !name) continue;
+    out.push({
+      id,
+      name,
+      description: str(rec, "description"),
+      slug: str(rec, "slug"),
+      tags: strList(rec, "tags"),
+    });
+  }
+  return out;
 }
 
 function draft(
@@ -563,6 +594,25 @@ export async function handleRequest(
       return;
     }
 
+    const channelMessageOne = path.match(
+      /^\/channels\/([^/]+)\/messages\/([^/]+)$/,
+    );
+    if (channelMessageOne && method === "DELETE") {
+      json(
+        res,
+        200,
+        deleteRoomMessage(store, channelMessageOne[1], channelMessageOne[2]),
+      );
+      return;
+    }
+
+    const dmMessageOne = path.match(/^\/dms\/([^/]+)\/messages\/([^/]+)$/);
+    if (dmMessageOne && method === "DELETE") {
+      const room = openDm(store, dmMessageOne[1]);
+      json(res, 200, deleteRoomMessage(store, room.id, dmMessageOne[2]));
+      return;
+    }
+
     const channelMessages = path.match(/^\/channels\/([^/]+)\/messages$/);
     if (channelMessages && method === "GET") {
       json(res, 200, listRoomMessages(store, channelMessages[1]));
@@ -728,6 +778,21 @@ export async function handleRequest(
         str(body, "prompt"),
       );
       json(res, 200, generated);
+      return;
+    }
+
+    if (method === "POST" && path === "/generate/skills") {
+      const body = asRecord(await readJson(req));
+      const picked = await pickBotSkills(store, {
+        name: str(body, "name"),
+        handle: str(body, "handle"),
+        oneLiner: str(body, "oneLiner"),
+        soul: str(body, "soul"),
+        agent: str(body, "agent"),
+        position: str(body, "position"),
+        skills: skillPickCatalog(body),
+      });
+      json(res, 200, picked);
       return;
     }
 

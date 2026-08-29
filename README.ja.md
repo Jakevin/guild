@@ -87,7 +87,7 @@ pnpm dev
 
 **MCP はあなたとしてローカルプロセスを spawn する** — Guild の `mcp.json` **および** ホスト側 Claude / Cursor / Codex の設定。import も同意プロンプトも無い。env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
 
-**ブラウザは既定で未ログイン。** `browser` は捨てる Chrome プロファイルを使う。`GUILD_BROWSER_REAL_PROFILE=1` で、今使っている Chrome の `last_used` プロファイルを `~/.guild/browser-profile/chrome` にスナップショットする（Hermes と同じ：稼働中のプロファイルは開かない）。詳細：[SECURITY.md](./SECURITY.md)。
+**ブラウザは既定で Chrome のログインをスナップショットする。** `browser` は今使っている Chrome の `last_used` プロファイルを `~/.guild/browser-profile/chrome` にコピーし、その複製を操作する（Hermes と同じ：稼働中のプロファイルは開かない）。捨てる空プロファイルは `GUILD_BROWSER_REAL_PROFILE=0`。詳細：[SECURITY.md](./SECURITY.md)。
 
 まだ無いもの：Tauri アプリ、staffing、approvals、bot ごとの `CODEX_HOME`、HTTP MCP。`docs/` の設計文書は後の形——changelog ではない。
 

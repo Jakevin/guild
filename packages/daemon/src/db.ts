@@ -334,6 +334,18 @@ export class GuildDb {
     return this.getMessage(roomId, messageId);
   }
 
+  deleteMessage(roomId: string, messageId: string): ChatMessage | null {
+    const existing = this.getMessage(roomId, messageId);
+    if (!existing) return null;
+    this.sqlite
+      .prepare("DELETE FROM messages WHERE room_id = ? AND id = ?")
+      .run(roomId, messageId);
+    this.sqlite
+      .prepare("DELETE FROM trajectory WHERE room_id = ? AND turn_id = ?")
+      .run(roomId, messageId);
+    return existing;
+  }
+
   truncateAfter(roomId: string, messageId: string): ChatMessage[] | null {
     const row = this.sqlite
       .prepare("SELECT seq FROM messages WHERE room_id = ? AND id = ?")

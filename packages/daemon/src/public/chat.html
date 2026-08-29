@@ -249,6 +249,9 @@
         <button type="button" id="invite-save" data-i18n="invite.save">加入</button>
       </div>
     </dialog>
+    <div class="img-preview" id="img-preview" hidden>
+      <img alt="" />
+    </div>
     <script>
       const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
       const CHANNEL_ROSTER_CAP = 6;
@@ -870,34 +873,51 @@
         state.unread.delete(roomKey(state.kind, state.id));
         saveUnread();
       }
+      function currentRoomRef() {
+        return { kind: state.kind, id: state.id };
+      }
+      function sameRoom(a, b) {
+        return Boolean(a && b && a.kind === b.kind && a.id === b.id);
+      }
+      function roomLiveTurns(room) {
+        const r = room || currentRoomRef();
+        return (state.lives || []).filter((row) => {
+          if (!row || !row.botId) return false;
+          if (!row.room) return sameRoom(state.busyRoom, r);
+          return sameRoom(row.room, r);
+        });
+      }
       function currentRoomBusy() {
-        return Boolean(
-          state.busy &&
-            state.busyRoom &&
-            state.busyRoom.kind === state.kind &&
-            state.busyRoom.id === state.id,
+        return (
+          roomLiveTurns().length > 0 || roomInFlightIds().length > 0
         );
       }
       function canStopHere() {
-        if (!state.busy || !state.abort) return false;
-        if (currentRoomBusy()) return true;
-        return Boolean(state.kind === "dm" && state.busyBots[state.id]);
+        if (!currentRoomBusy()) return false;
+        if (state.abort) return true;
+        return Boolean(state.kind === "dm" && roomInFlightIds().length);
       }
-      function inFlightBotIds() {
+      function roomInFlightIds(room) {
+        const r = room || currentRoomRef();
         const ids = [];
         (state.aborts || []).forEach((item) => {
+          if (item.room && !sameRoom(item.room, r)) return;
           (item.botIds || []).forEach((id) => {
             if (id && ids.indexOf(id) < 0) ids.push(id);
           });
         });
         return ids;
       }
-      function liveBotIds() {
+      function inFlightBotIds() {
+        return roomInFlightIds();
+      }
+      function liveBotIds(room) {
+        const r = room || currentRoomRef();
         const ids = [];
-        (state.lives || []).forEach((row) => {
-          if (row && row.botId && ids.indexOf(row.botId) < 0) ids.push(row.botId);
+        roomLiveTurns(r).forEach((row) => {
+          if (row.botId && ids.indexOf(row.botId) < 0) ids.push(row.botId);
         });
-        inFlightBotIds().forEach((id) => {
+        roomInFlightIds(r).forEach((id) => {
           if (ids.indexOf(id) < 0) ids.push(id);
         });
         return ids;
@@ -982,6 +1002,36 @@
         }
         return out;
       }
+      function summonedBotIds(text) {
+        const raw = String(text || "");
+        const known = new Map(
+          (state.bots || []).map((bot) => [String(bot.handle).toLowerCase(), bot.id]),
+        );
+        const out = [];
+        const push = (id) => {
+          if (id && !out.includes(id)) out.push(id);
+        };
+        let fence = false;
+        const lines = raw.split(/\r?\n/);
+        const lead = /^[ \t]*((?:@[A-Za-z0-9_-]+[\s,、]*)+)/;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmed = line.trim();
+          if (trimmed.indexOf("```") === 0) {
+            fence = !fence;
+            continue;
+          }
+          if (fence) continue;
+          const m = line.match(lead);
+          if (!m) continue;
+          const names = m[1].match(/@([A-Za-z0-9_-]+)/g) || [];
+          for (let n = 0; n < names.length; n++) {
+            push(known.get(names[n].slice(1).toLowerCase()));
+          }
+        }
+        if (out.length) return out;
+        return mentionedBotIds(raw).slice(0, 1);
+      }
       function lastBotAuthor() {
         const msgs = state.messages || [];
         for (let i = msgs.length - 1; i >= 0; i--) {
@@ -997,7 +1047,7 @@
           const ch = currentChannel();
           return (ch && ch.memberIds) || [];
         }
-        const ids = mentionedBotIds(text);
+        const ids = summonedBotIds(text);
         if (ids.length) return ids;
         if (
           state.replyTo &&
@@ -1469,14 +1519,16 @@
         );
       }
       function liveTurns() {
-        if (Array.isArray(state.lives) && state.lives.length) return state.lives;
-        if (state.live && state.live.botId) return [state.live];
-        return Object.keys(state.busyBots || {}).map((id) => ({
-          botId: id,
-          thinking: "",
-          steps: [],
-          startedAt: "",
-        }));
+        const here = roomLiveTurns();
+        if (here.length) return here;
+        if (
+          state.live &&
+          state.live.botId &&
+          (!state.live.room || sameRoom(state.live.room, currentRoomRef()))
+        ) {
+          return [state.live];
+        }
+        return [];
       }
       function liveTurnsFrom(body) {
         const rows =
@@ -1494,16 +1546,37 @@
             startedAt: row.startedAt || "",
           }));
       }
-      function applyLiveTurns(lives) {
-        state.lives = lives || [];
-        state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
+      function rebuildBusyBots() {
         const next = {};
-        liveBotIds().forEach((id) => {
-          next[id] = true;
+        (state.lives || []).forEach((row) => {
+          if (row && row.botId) next[row.botId] = true;
+        });
+        (state.aborts || []).forEach((item) => {
+          (item.botIds || []).forEach((id) => {
+            if (id) next[id] = true;
+          });
         });
         state.busyBots = next;
-        state.busy = liveBotIds().length > 0;
+        state.busy = Object.keys(next).length > 0;
         if (!state.busy) state.busyRoom = null;
+      }
+      function applyLiveTurns(lives, room) {
+        const r = room || currentRoomRef();
+        const others = (state.lives || []).filter(
+          (row) => row.room && !sameRoom(row.room, r),
+        );
+        const tagged = (lives || [])
+          .filter((row) => row && row.botId)
+          .map((row) => ({
+            botId: row.botId,
+            thinking: row.thinking || "",
+            steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
+            startedAt: row.startedAt || "",
+            room: { kind: r.kind, id: r.id },
+          }));
+        state.lives = others.concat(tagged);
+        state.live = roomLiveTurns()[0] || { botId: "", thinking: "", steps: [] };
+        rebuildBusyBots();
       }
       function liveBot() {
         const id =
@@ -1577,12 +1650,12 @@
       function turnStatusHtml() {
         if (!currentRoomBusy()) return "";
         const lives = liveTurns();
-        if (!lives.length) return turnStatusInnerHtml(state.live);
+        if (!lives.length) return "";
         return lives
           .map((live) => {
             const bot = botById(live.botId);
             const inner = turnStatusInnerHtml(live);
-            if (!bot) return inner;
+            if (!bot) return "";
             const actor = liveActorHtml(bot);
             return (
               '<article class="msg bot live" data-bot-id="' +
@@ -1598,7 +1671,9 @@
           .join("");
       }
       function liveUrl(room) {
-        const r = room || state.busyRoom;
+        const r =
+          room ||
+          (currentRoomBusy() ? currentRoomRef() : state.busyRoom);
         if (!r) return "";
         return r.kind === "dm"
           ? "/dms/" + encodeURIComponent(r.id) + "/live"
@@ -1640,7 +1715,11 @@
             return;
           }
           if (existing) existing.outerHTML = html;
-          else block.insertAdjacentHTML("beforeend", html);
+          else {
+            const actions = block.querySelector(".turn-actions");
+            if (actions) actions.insertAdjacentHTML("beforebegin", html);
+            else block.insertAdjacentHTML("beforeend", html);
+          }
         });
         const thread = document.getElementById("thread");
         if (!thread) return;
@@ -1649,7 +1728,8 @@
         if (nearBottom) thread.scrollTop = thread.scrollHeight;
       }
       async function pollLive(gen) {
-        const url = liveUrl();
+        const room = currentRoomBusy() ? currentRoomRef() : state.busyRoom;
+        const url = liveUrl(room);
         if (!url || !state.busy || state.liveGen !== gen) return;
         try {
           const res = await fetch(url);
@@ -1657,15 +1737,20 @@
           if (!res.ok || state.liveGen !== gen) return;
           const lives = liveTurnsFrom(body);
           if (!lives.length) {
-            if (state.inFlight > 0 || state.posting) return;
             mergeLiveTraj(body);
-            if (currentRoomBusy()) {
-              setBusy(false);
+            applyLiveTurns([], room);
+            if (!roomLiveTurns(room).length) {
+              setBusy(false, [], { room: room });
+            }
+            if (
+              sameRoom(room, currentRoomRef()) &&
+              !roomInFlightIds(room).length
+            ) {
               await loadMessages({ resume: false }).catch(() => {});
             }
             return;
           }
-          applyLiveTurns(lives);
+          applyLiveTurns(lives, room);
           const firstStart = lives
             .map((row) => Date.parse(row.startedAt || ""))
             .find((at) => Number.isFinite(at));
@@ -1730,7 +1815,7 @@
                         ? '<p class="steer-tag">' + t("steer.tag") + "</p>"
                         : "") +
                     '<p class="bubble">' +
-                    formatYouBody(msg.body) +
+                    formatYouBody(msg.body, msg.attachments) +
                     "</p>"
                   : renderAssistant(msg);
               const actions = editing
@@ -1770,7 +1855,15 @@
                     escapeHtml(msg.id) +
                     '">' +
                     t("retry") +
-                    "</button></div>";
+                    "</button>" +
+                  (msg.queued
+                    ? ""
+                    : '<button type="button" class="danger" data-msg-del="' +
+                      escapeHtml(msg.id) +
+                      '">' +
+                      t("delete") +
+                      "</button>") +
+                  "</div>";
               if (you) {
                 return (
                   rule +
@@ -1918,8 +2011,9 @@
           : "/channels/" + encodeURIComponent(r.id) + "/abort";
       }
       function stopTurn(botId) {
-        const room = state.busyRoom || { kind: state.kind, id: state.id };
+        const room = currentRoomRef();
         (state.aborts || []).forEach((item) => {
+          if (item.room && !sameRoom(item.room, room)) return;
           const controller = item && item.abort ? item : item && item.controller;
           const ids = item && item.botIds;
           if (botId && ids && ids.length && ids.indexOf(botId) < 0) return;
@@ -1929,18 +2023,17 @@
             /* ignore */
           }
         });
-        if (!botId) {
-          try {
-            state.abort && state.abort.abort();
-          } catch {
-            /* ignore */
-          }
+        try {
+          state.abort && state.abort.abort();
+        } catch {
+          /* ignore */
         }
         fetch(abortUrl(room), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(botId ? { botId: botId } : {}),
         }).catch(() => {});
+        setBusy(false, botId ? [botId] : [], { room: room });
       }
       async function insertIntoBotTurn(botId) {
         if (!composerHasPayload()) {
@@ -2045,29 +2138,55 @@
         const res = await fetch(url);
         const body = await res.json().catch(() => ({}));
         const lives = liveTurnsFrom(body);
+        const here = currentRoomRef();
         if (!res.ok || !lives.length) {
-          if (currentRoomBusy() && !state.posting) setBusy(false);
+          if (currentRoomBusy() && !state.posting) {
+            setBusy(false, [], { room: here });
+          }
           return;
         }
-        applyLiveTurns(lives);
+        applyLiveTurns(lives, here);
         state.abort = {
           abort: function () {
-            fetch(abortUrl({ kind: state.kind, id: state.id }), {
+            fetch(abortUrl(here), {
               method: "POST",
             }).catch(function () {});
           },
         };
         setBusy(true, lives.map((row) => row.botId), {
           keepLive: true,
+          room: here,
           startedAt: lives[0] && lives[0].startedAt,
         });
+      }
+      async function deleteChatMessage(id) {
+        if (!id) return;
+        if (!confirm(t("msg.deleteConfirm"))) return;
+        if (String(id).indexOf("pending-") === 0) {
+          state.messages = state.messages.filter((item) => item.id !== id);
+          if (state.replyTo && state.replyTo.id === id) clearReply();
+          if (state.editingId === id) state.editingId = null;
+          renderThread();
+          return;
+        }
+        const res = await fetch(messagesUrl(id), { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+        state.messages = state.messages.filter((item) => item.id !== id);
+        if (state.replyTo && state.replyTo.id === id) clearReply();
+        if (state.editingId === id) state.editingId = null;
+        if (state.statsId === id) state.statsId = null;
+        const last = state.messages[state.messages.length - 1];
+        if (last) touchNavTime(state.kind, state.id, last.createdAt, last);
+        renderThread();
+        renderNav();
       }
       async function retryMessage(id, body) {
         if (canStopHere()) {
           stopTurn();
           return;
         }
-        if (state.busy) return;
+        if (currentRoomBusy()) return;
         state.editingId = null;
         const text = body || "";
         await postChat(
@@ -2238,6 +2357,12 @@
           if (retry) {
             retry.disabled = true;
             await retryMessage(retry.getAttribute("data-retry"));
+            return;
+          }
+          const del = event.target.closest("[data-msg-del]");
+          if (del) {
+            event.preventDefault();
+            await deleteChatMessage(del.getAttribute("data-msg-del"));
           }
         } catch (err) {
           alert(err.message);
@@ -2835,13 +2960,43 @@
         }
         insertDraft(token + " ");
       }
+      function isPreviewUrl(src) {
+        return /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(
+          String(src || "").trim(),
+        );
+      }
+      function previewAttr(src) {
+        if (!isPreviewUrl(src)) return "";
+        return ' data-preview="' + escapeHtml(src) + '"';
+      }
+      function previewThumb(src) {
+        if (!isPreviewUrl(src)) return "";
+        return (
+          '<img class="attach-thumb" alt="" src="' + escapeHtml(src) + '">'
+        );
+      }
+      function wireAttachment(att) {
+        const row = {
+          token: att.token,
+          title: att.title,
+          body: att.body || "",
+        };
+        if (isPreviewUrl(att.preview)) row.preview = att.preview;
+        return row;
+      }
       function renderAttachChips() {
         const root = document.getElementById("attach-chips");
         root.hidden = !state.attachments.length;
         root.innerHTML = state.attachments
           .map(
             (att) =>
-              '<span class="attach-chip"><button type="button" class="attach-chip-name" data-chip-insert="' +
+              '<span class="attach-chip' +
+              (isPreviewUrl(att.preview) ? " has-preview" : "") +
+              '"' +
+              previewAttr(att.preview) +
+              ">" +
+              previewThumb(att.preview) +
+              '<button type="button" class="attach-chip-name" data-chip-insert="' +
               escapeHtml(att.id) +
               '" title="' +
               escapeHtml(t("insert", { name: att.token })) +
@@ -2865,6 +3020,7 @@
           body: att.body || "",
           image: Boolean(att.image),
           mime: att.mime || "",
+          preview: isPreviewUrl(att.preview) ? att.preview : "",
           token: "",
         };
         item.token = nextAttachToken(attachPrefix(item));
@@ -2936,6 +3092,7 @@
             image: true,
             mime: file.type,
             size: file.size,
+            preview: await imagePreviewUrl(file),
           });
           return;
         }
@@ -2989,28 +3146,203 @@
       function youAttachHtml(msg) {
         const atts = msg.attachments || [];
         if (!atts.length) return "";
-        return (
+        const images = atts.filter((att) => isPreviewUrl(att.preview));
+        const imgs = images.length
+          ? '<div class="msg-imgs">' +
+            images
+              .map((att) => {
+                const src = att.preview;
+                return (
+                  '<button type="button" class="msg-img" data-chip-insert-token="' +
+                  escapeHtml(att.token) +
+                  '" title="' +
+                  escapeHtml(t("insert", { name: att.token })) +
+                  '"><img alt="' +
+                  escapeHtml(att.title || att.token) +
+                  '" src="' +
+                  escapeHtml(src) +
+                  '"></button>'
+                );
+              })
+              .join("") +
+            "</div>"
+          : "";
+        const chips =
           '<div class="msg-atts">' +
           atts
-            .map(
-              (att) =>
-                '<button type="button" class="attach-chip" data-chip-insert-token="' +
+            .map((att) => {
+              const preview = att.preview || "";
+              const showThumb = isPreviewUrl(preview) && !images.length;
+              return (
+                '<button type="button" class="attach-chip' +
+                (showThumb ? " has-preview" : "") +
+                '" data-chip-insert-token="' +
                 escapeHtml(att.token) +
-                '" title="' +
+                '"' +
+                previewAttr(preview) +
+                ' title="' +
                 escapeHtml(t("insert", { name: att.token })) +
-                '"><span>' +
+                '">' +
+                (showThumb ? previewThumb(preview) : "") +
+                "<span>" +
                 escapeHtml(att.title) +
-                "</span></button>",
-            )
+                "</span></button>"
+              );
+            })
             .join("") +
-          "</div>"
-        );
+          "</div>";
+        return imgs + chips;
       }
-      function formatYouBody(text) {
-        return escapeHtml(text).replace(
-          /\[([A-Za-z]+ #\d+)\]/g,
-          '<code class="att-token">[$1]</code>',
+      function formatYouBody(text, atts) {
+        const previews = {};
+        (atts || []).forEach((att) => {
+          if (att && att.token && isPreviewUrl(att.preview)) {
+            previews[att.token] = att.preview;
+          }
+        });
+        return escapeHtml(text).replace(/\[([A-Za-z]+ #\d+)\]/g, (_m, inner) => {
+          const token = "[" + inner + "]";
+          const src = previews[token];
+          const thumb = src
+            ? '<img class="att-inline" alt="" src="' + escapeHtml(src) + '">'
+            : "";
+          return (
+            '<code class="att-token' +
+            (src ? " has-preview" : "") +
+            '"' +
+            previewAttr(src) +
+            ">" +
+            thumb +
+            "[" +
+            inner +
+            "]</code>"
+          );
+        });
+      }
+      async function imagePreviewUrl(file) {
+        const MAX = 360;
+        const CAP = 100000;
+        const raster = async (draw, w, h) => {
+          if (!w || !h) return "";
+          const scale = Math.min(1, MAX / Math.max(w, h));
+          const dw = Math.max(1, Math.round(w * scale));
+          const dh = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = dw;
+          canvas.height = dh;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return "";
+          draw(ctx, dw, dh);
+          for (const q of [0.72, 0.52, 0.36]) {
+            const out = canvas.toDataURL("image/jpeg", q);
+            if (out.length <= CAP) return out;
+          }
+          return "";
+        };
+        try {
+          if (typeof createImageBitmap === "function") {
+            const bmp = await createImageBitmap(file);
+            try {
+              return await raster(
+                (ctx, dw, dh) => ctx.drawImage(bmp, 0, 0, dw, dh),
+                bmp.width,
+                bmp.height,
+              );
+            } finally {
+              if (bmp.close) bmp.close();
+            }
+          }
+        } catch {
+          /* FileReader fallback */
+        }
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          if (!/^data:image\//i.test(dataUrl)) return "";
+          const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error("preview"));
+            el.src = dataUrl;
+          });
+          return await raster(
+            (ctx, dw, dh) => ctx.drawImage(img, 0, 0, dw, dh),
+            img.naturalWidth || img.width,
+            img.naturalHeight || img.height,
+          );
+        } catch {
+          return "";
+        }
+      }
+      function bindImagePreview() {
+        const pop = document.getElementById("img-preview");
+        if (!pop) return;
+        const img = pop.querySelector("img");
+        let hideTimer = 0;
+        let anchor = null;
+        const place = () => {
+          if (!anchor || pop.hidden) return;
+          const r = anchor.getBoundingClientRect();
+          const w = pop.offsetWidth;
+          const h = pop.offsetHeight;
+          let left = r.left;
+          let top = r.top - h - 10;
+          if (anchor.closest(".msg.you")) left = r.right - w;
+          if (top < 8) top = r.bottom + 10;
+          if (left + w > window.innerWidth - 8) {
+            left = window.innerWidth - 8 - w;
+          }
+          if (left < 8) left = 8;
+          if (top + h > window.innerHeight - 8) {
+            top = Math.max(8, window.innerHeight - 8 - h);
+          }
+          pop.style.left = Math.round(left) + "px";
+          pop.style.top = Math.round(top) + "px";
+        };
+        const hide = () => {
+          clearTimeout(hideTimer);
+          hideTimer = setTimeout(() => {
+            pop.hidden = true;
+            img.removeAttribute("src");
+            img.alt = "";
+            anchor = null;
+          }, 60);
+        };
+        const show = (el) => {
+          if (el.classList.contains("msg-img") || el.closest(".msg-img")) return;
+          const src = el.getAttribute("data-preview") || "";
+          if (!isPreviewUrl(src)) return;
+          clearTimeout(hideTimer);
+          anchor = el;
+          img.alt = t("attach.preview", {
+            name: el.textContent || el.getAttribute("title") || "",
+          });
+          if (img.getAttribute("src") !== src) img.src = src;
+          pop.hidden = false;
+          place();
+        };
+        img.addEventListener("load", place);
+        document.addEventListener("pointerover", (event) => {
+          const el = event.target.closest("[data-preview]");
+          if (el) show(el);
+        });
+        document.addEventListener("pointerout", (event) => {
+          const el = event.target.closest("[data-preview]");
+          if (!el) return;
+          const next = event.relatedTarget;
+          if (next && el.contains(next)) return;
+          hide();
+        });
+        document.getElementById("thread").addEventListener(
+          "scroll",
+          hide,
+          { passive: true },
         );
+        window.addEventListener("scroll", hide, true);
       }
       function attachCwd() {
         return state.attachCwd || sessionStorage.getItem("guild-cwd") || "~";
@@ -3414,6 +3746,7 @@
       }
       function setBusy(on, botIds, opts) {
         const ids = (botIds || []).filter(Boolean);
+        const room = (opts && opts.room) || currentRoomRef();
         if (on) {
           const wasBusy = state.busy;
           ids.forEach((id) => {
@@ -3421,30 +3754,32 @@
           });
           state.busy = true;
           const started = opts && opts.startedAt ? Date.parse(opts.startedAt) : NaN;
+          const here = sameRoom(room, currentRoomRef());
           if (!wasBusy) {
             state.busySince = Number.isFinite(started) ? started : Date.now();
-            state.busyRoom = { kind: state.kind, id: state.id };
+            state.busyRoom = room;
           } else if (Number.isFinite(started) && started < state.busySince) {
             state.busySince = started;
           }
-          if (!state.busyRoom) state.busyRoom = { kind: state.kind, id: state.id };
+          if (!state.busyRoom || here) state.busyRoom = room;
           if (!opts || !opts.keepLive) {
-            const have = new Set((state.lives || []).map((row) => row.botId));
             ids.forEach((id) => {
-              if (!have.has(id)) {
+              const have = (state.lives || []).some(
+                (row) => row.botId === id && row.room && sameRoom(row.room, room),
+              );
+              if (!have) {
                 state.lives.push({
                   botId: id,
                   thinking: "",
                   steps: [],
                   startedAt: "",
+                  room: { kind: room.kind, id: room.id },
                 });
-                have.add(id);
               }
             });
-            if (!state.live || !state.live.botId) {
-              state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
-            }
           }
+          state.live = roomLiveTurns()[0] || { botId: "", thinking: "", steps: [] };
+          rebuildBusyBots();
           syncSendButton();
           renderThread();
           renderNav();
@@ -3456,16 +3791,18 @@
           return;
         }
         if (ids.length) {
-          ids.forEach((id) => {
-            delete state.busyBots[id];
+          state.lives = (state.lives || []).filter((row) => {
+            if (ids.indexOf(row.botId) < 0) return true;
+            if (row.room && !sameRoom(row.room, room)) return true;
+            return false;
           });
-          state.lives = (state.lives || []).filter((row) => ids.indexOf(row.botId) < 0);
         } else {
-          state.busyBots = {};
-          state.lives = [];
+          state.lives = (state.lives || []).filter(
+            (row) => row.room && !sameRoom(row.room, room),
+          );
         }
-        state.live = state.lives[0] || { botId: "", thinking: "", steps: [] };
-        state.busy = liveBotIds().length > 0;
+        state.live = roomLiveTurns()[0] || { botId: "", thinking: "", steps: [] };
+        rebuildBusyBots();
         if (!state.busy) {
           state.busyRoom = null;
           state.liveGen += 1;
@@ -3474,6 +3811,9 @@
           if (trajOpen && !trajOpen.hidden) {
             refreshTraj({ silent: true }).catch(function () {});
           }
+        } else if (state.busyRoom && sameRoom(state.busyRoom, room)) {
+          const leftover = (state.lives || [])[0];
+          state.busyRoom = leftover && leftover.room ? leftover.room : state.busyRoom;
         }
         syncSendButton();
         renderThread();
@@ -3483,11 +3823,15 @@
         const controller = new AbortController();
         state.abort = controller;
         state.aborts = (state.aborts || []).concat([
-          { controller: controller, botIds: botIds || [] },
+          {
+            controller: controller,
+            botIds: botIds || [],
+            room: { kind: sent.kind, id: sent.id },
+          },
         ]);
         state.inFlight = (state.inFlight || 0) + 1;
         state.posting = true;
-        setBusy(true, botIds);
+        setBusy(true, botIds, { room: sent });
         let ok = false;
         try {
           const res = await fetch(path, {
@@ -3503,7 +3847,7 @@
             state.kind === sent.kind && state.id === sent.id;
           if (here) {
             await loadMessages({ resume: false });
-            if (liveBotIds().filter((id) => (botIds || []).indexOf(id) < 0).length) {
+            if (liveBotIds(sent).filter((id) => (botIds || []).indexOf(id) < 0).length) {
               resumeCurrentLive().catch(() => {});
             }
           } else {
@@ -3541,12 +3885,12 @@
           if (state.abort === controller) {
             state.abort = (state.aborts[0] && state.aborts[0].controller) || null;
           }
-          setBusy(false, botIds);
+          setBusy(false, botIds, { room: sent });
         }
         if (ok) await flushQueued(sent);
       }
       async function flushQueued(sent) {
-        const live = liveBotIds();
+        const live = liveBotIds(sent);
         const idx = (state.queue || []).findIndex((item) => {
           if (item.room.kind !== sent.kind || item.room.id !== sent.id) return false;
           const ids = item.botIds || [];
@@ -3567,11 +3911,7 @@
         );
       }
       async function sendSteer(pending) {
-        const attachments = pending.packed.map((att) => ({
-          token: att.token,
-          title: att.title,
-          body: att.body || "",
-        }));
+        const attachments = pending.packed.map(wireAttachment);
         const text = composeSendBody(pending.raw);
         const payload = { body: text };
         if (attachments.length) payload.attachments = attachments;
@@ -3633,7 +3973,38 @@
         const raw = draft.value.trim();
         const packed = state.attachments.slice();
         const replyTo = state.replyTo ? state.replyTo.id : "";
+        const summoned = summonedBotIds(raw);
         const cands = assignCandidates(raw);
+        if (summoned.length > 1) {
+          const pending = takeComposerPending();
+          if (!pending) return;
+          const split = splitSendTargets(summoned);
+          if (split.fresh.length) {
+            await flushSend(
+              pending.raw,
+              pending.packed,
+              pending.replyTo,
+              split.fresh,
+              split.fresh.length === 1 ? split.fresh[0] : "",
+            );
+          }
+          const rest = split.same.length
+            ? split.same
+            : split.fresh.length
+              ? []
+              : split.live;
+          if (!rest.length) return;
+          const next = {
+            raw: pending.raw,
+            packed: pending.packed,
+            replyTo: pending.replyTo,
+            botIds: rest,
+            assigneeId: rest.length === 1 ? rest[0] : "",
+          };
+          if (steerNow) await sendSteer(next);
+          else enqueuePending(next);
+          return;
+        }
         if (cands.length > 1) {
           openAssign(cands, {
             raw: raw,
@@ -3680,11 +4051,7 @@
       async function flushSend(raw, packed, replyTo, botIds, assigneeId, dest) {
         const draft = document.getElementById("draft");
         const text = composeSendBody(raw);
-        const attachments = packed.map((att) => ({
-          token: att.token,
-          title: att.title,
-          body: att.body || "",
-        }));
+        const attachments = packed.map(wireAttachment);
         const room = dest || { kind: state.kind, id: state.id };
         const here = state.kind === room.kind && state.id === room.id;
         if (here) {
@@ -3797,14 +4164,18 @@
           await dispatchBusySend(false);
           return;
         }
-        if (state.busy) return;
         const draft = document.getElementById("draft");
         const raw = draft.value.trim();
         const packed = state.attachments.slice();
         const text = composeSendBody(raw);
         if (!text) return;
         const replyTo = state.replyTo ? state.replyTo.id : "";
+        const summoned = summonedBotIds(raw);
         const cands = assignCandidates(raw);
+        if (summoned.length > 1) {
+          await flushSend(raw, packed, replyTo, summoned, "");
+          return;
+        }
         if (cands.length > 1) {
           openAssign(cands, { raw: raw, packed: packed, replyTo: replyTo });
           return;
@@ -4166,19 +4537,30 @@
           hostName: item.hostName || "",
         };
       }
+      function takeSlashMixed(items, needle, filteredCap, emptyEach) {
+        const hit = (items || []).filter((item) => slashNeedleHit(item, needle));
+        if (needle) return hit.slice(0, filteredCap);
+        const buckets = { user: [], catalog: [], host: [] };
+        for (const item of hit) {
+          const bucket =
+            item.source === "host"
+              ? "host"
+              : item.source === "catalog"
+                ? "catalog"
+                : "user";
+          if (buckets[bucket].length < emptyEach) buckets[bucket].push(item);
+        }
+        return buckets.user.concat(buckets.catalog, buckets.host);
+      }
       function slashChoices(query) {
         const needle = String(query || "").toLowerCase();
         const catalog = state.slashCatalog || { skills: [], agents: [] };
-        const skillCap = needle ? 24 : 10;
-        const agentCap = needle ? 16 : 8;
-        const skills = (catalog.skills || [])
-          .filter((item) => slashNeedleHit(item, needle))
-          .slice(0, skillCap)
-          .map((item) => slashLibRow(item, "skill"));
-        const agents = (catalog.agents || [])
-          .filter((item) => slashNeedleHit(item, needle))
-          .slice(0, agentCap)
-          .map((item) => slashLibRow(item, "agent"));
+        const skills = takeSlashMixed(catalog.skills, needle, 24, 5).map((item) =>
+          slashLibRow(item, "skill"),
+        );
+        const agents = takeSlashMixed(catalog.agents, needle, 16, 4).map((item) =>
+          slashLibRow(item, "agent"),
+        );
         const cmds = slashCommandRows().filter((row) =>
           slashNeedleHit(row, needle),
         );
@@ -4375,6 +4757,7 @@
         }
       });
       fitDraft();
+      bindImagePreview();
 
       let modelCfg = {
         default: null,

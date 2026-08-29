@@ -11,8 +11,10 @@ import {
   chatReply,
   generateMarkdown,
   localGenerate,
+  pickSkills,
   type ChatReply,
   type GenerateKind,
+  type SkillPickInput,
 } from "./generate.ts";
 import {
   liveTrajectoryEvents,
@@ -33,7 +35,11 @@ import {
   removeGuildMcp,
   upsertGuildMcp,
 } from "./mcp.ts";
-import { isBroadcastMention, summonedHandles } from "./mention.ts";
+import {
+  assignmentFor,
+  isBroadcastMention,
+  summonedHandles,
+} from "./mention.ts";
 import { slashNames } from "./slash.ts";
 import { toHistoryItem, type HistoryItem } from "./compact.ts";
 import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
@@ -291,6 +297,10 @@ export async function generateKind(
   return generateMarkdown(kind as GenerateKind, prompt, process.env, store.dataDir);
 }
 
+export async function pickBotSkills(store: GuildStore, input: SkillPickInput) {
+  return pickSkills(input, process.env, store.dataDir);
+}
+
 function byUpdatedAtDesc<T extends { updatedAt?: string }>(a: T, b: T): number {
   const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
   const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
@@ -378,6 +388,15 @@ export function listRoomMessages(store: GuildStore, roomId: string) {
   return store.listMessages(roomId);
 }
 
+export function deleteRoomMessage(
+  store: GuildStore,
+  roomId: string,
+  messageId: string,
+) {
+  const removed = store.deleteMessage(roomId, messageId);
+  return { ok: true, id: removed.id };
+}
+
 export function openDm(store: GuildStore, botId: string) {
   return store.openDm(botId);
 }
@@ -399,7 +418,6 @@ function handoffTargets(
     const names = summonedHandles(reply.body, handles);
     if (!names.length) continue;
     const from = bots.find((bot) => bot.id === reply.author);
-    const spec = `（@${from?.handle || reply.author} 交棒）\n${reply.body}`;
     const hopHistory = history.concat(
       { author: "you", body: asked },
       { author: reply.author, body: reply.body },
@@ -410,7 +428,12 @@ function handoffTargets(
       if (bot.id === reply.author) continue;
       if (spoke.has(bot.id) || queued.has(bot.id)) continue;
       queued.add(bot.id);
-      hops.push({ botId: bot.id, asked: spec, history: hopHistory });
+      const spec = assignmentFor(reply.body, bot.handle, handles);
+      hops.push({
+        botId: bot.id,
+        asked: `（@${from?.handle || reply.author} 交棒給 @${bot.handle}）\n${spec}`,
+        history: hopHistory,
+      });
     }
   }
   return hops;
@@ -454,6 +477,16 @@ function turnUserMessage(
 }
 
 const ATTACH_TOKEN = /^\[[A-Za-z]+ #\d+\]$/;
+const PREVIEW_RE = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i;
+const PREVIEW_CAP = 100_000;
+
+function parsePreview(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const value = raw.trim();
+  if (!value || value.length > PREVIEW_CAP) return undefined;
+  if (!PREVIEW_RE.test(value)) return undefined;
+  return value;
+}
 
 export function parseAttachments(raw: unknown): ChatAttachment[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -465,7 +498,13 @@ export function parseAttachments(raw: unknown): ChatAttachment[] | undefined {
     const title = typeof rec.title === "string" ? rec.title.trim() : "";
     const body = typeof rec.body === "string" ? rec.body : "";
     if (!ATTACH_TOKEN.test(token) || !title) continue;
-    out.push({ token, title, body: body.slice(0, 48_000) });
+    const preview = parsePreview(rec.preview);
+    out.push({
+      token,
+      title,
+      body: body.slice(0, 48_000),
+      ...(preview ? { preview } : {}),
+    });
   }
   return out.length ? out : undefined;
 }
@@ -950,7 +989,18 @@ async function generateReplies(
     }
   };
   try {
-    await Promise.all(targets.map((botId) => speak(botId, asked, history)));
+    const handleList = store.listBots().map((bot) => bot.handle);
+    await Promise.all(
+      targets.map((botId) => {
+        const handle = store.getBot(botId)?.handle || "";
+        const body = assignmentFor(userMessage.body, handle, handleList);
+        const turnAsked = askedText(store, parent, {
+          body,
+          attachments: userMessage.attachments,
+        });
+        return speak(botId, turnAsked, history);
+      }),
+    );
     const hops = handoffTargets(store, memberIds, replies, asked, history);
     if (hops.length && !signal.aborted) {
       for (const hop of hops) store.adoptTurn(roomId, hop.botId, signal);

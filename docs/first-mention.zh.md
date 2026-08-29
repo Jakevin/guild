@@ -99,7 +99,7 @@ Most important thing: @mention the person you want. Do not start a new feature.
 
 - **`run` / `write` 是你的 shell。** 預設 `full_access`。`run` 的 cwd 是 `$HOME`。可選 Position `sandbox:` 或 `GUILD_SANDBOX` 是 tool gate，不是 OS jail。
 - **MCP 免匯入、直接 spawn。** Guild 的 `mcp.json`，以及這台機 Claude / Cursor / Codex 已配的 stdio MCP（`~/.claude.json`、`~/.cursor/mcp.json`、`~/.codex/config.toml`）。沒有同意步驟。env 會繼承。不要的 server：從 host 檔拿掉，或把 `packages/daemon/cordis.yml` 的 `id: mcp` 設成 `disabled: true`。
-- **瀏覽器預設沒登入。** `browser` 開拋棄式 Chrome profile。
+- **瀏覽器預設帶你的 Chrome 登入。** 設 `GUILD_BROWSER_REAL_PROFILE=0` 才用拋棄式空 profile。
 
 不要把祕密貼進頻道再 `@mention`。評估時可用丟棄的 `GUILD_HOME`。
 

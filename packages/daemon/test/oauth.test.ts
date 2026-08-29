@@ -9,6 +9,7 @@ import {
   isCopilotAutoOnlySku,
   listSubscriptions,
   oauthCredentialFromUnknown,
+  oauthOmitsTemperature,
   parseCopilotPickerIds,
   xaiFromGrokAuthFile,
 } from "../src/oauth.ts";
@@ -47,6 +48,23 @@ test("oauthCredentialFromUnknown reads ISO expires_at", () => {
     assert.equal(cred.access, "tok");
     assert.ok(Math.abs(cred.expires - Date.parse(exp)) < 1000);
   }
+});
+
+test("ChatGPT Codex and Copilot reasoning omit temperature", () => {
+  assert.equal(oauthOmitsTemperature({ provider: "openai-codex" }), true);
+  assert.equal(
+    oauthOmitsTemperature({ provider: "github-copilot", copilotSession: true }),
+    true,
+  );
+  assert.equal(
+    oauthOmitsTemperature({ provider: "github-copilot", modelReasoning: true }),
+    true,
+  );
+  assert.equal(
+    oauthOmitsTemperature({ provider: "github-copilot", modelReasoning: false }),
+    false,
+  );
+  assert.equal(oauthOmitsTemperature({ provider: "xai" }), false);
 });
 
 test("formatOAuthError does not call a timeout a dead subscription", () => {

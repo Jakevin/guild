@@ -73,6 +73,8 @@ export type ChatAttachment = {
   token: string;
   title: string;
   body: string;
+  /** Small data-URL thumbnail for hover preview. Not sent to the model. */
+  preview?: string;
 };
 
 /** Per-turn LLM accounting, shown in the message stats panel. */

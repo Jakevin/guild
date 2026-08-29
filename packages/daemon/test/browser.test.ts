@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import {
@@ -30,11 +31,33 @@ function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "guild-browser-"));
 }
 
-test("realProfileEnabled is off unless GUILD_BROWSER_REAL_PROFILE is set", () => {
-  assert.equal(realProfileEnabled({}), false);
-  assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "0" }), false);
+test("realProfileEnabled defaults on; 0/false/off disable it", () => {
+  assert.equal(realProfileEnabled({}), true);
+  assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "" }), true);
   assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "1" }), true);
   assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "true" }), true);
+  assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "0" }), false);
+  assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "false" }), false);
+  assert.equal(realProfileEnabled({ GUILD_BROWSER_REAL_PROFILE: "off" }), false);
+});
+
+test("docs say browser snapshots Chrome logins by default", () => {
+  const root = fileURLToPath(new URL("../../..", import.meta.url));
+  const readme = readFileSync(join(root, "README.md"), "utf8");
+  const zh = readFileSync(join(root, "README.zh.md"), "utf8");
+  const ja = readFileSync(join(root, "README.ja.md"), "utf8");
+  const security = readFileSync(join(root, "SECURITY.md"), "utf8");
+  const first = readFileSync(join(root, "docs/first-mention.md"), "utf8");
+  const firstZh = readFileSync(join(root, "docs/first-mention.zh.md"), "utf8");
+  assert.match(readme, /snapshots your Chrome logins by default/);
+  assert.doesNotMatch(readme, /off-login by default/);
+  assert.match(zh, /預設帶你的 Chrome 登入/);
+  assert.doesNotMatch(zh, /預設沒登入/);
+  assert.match(ja, /既定で Chrome のログインをスナップショット/);
+  assert.doesNotMatch(ja, /既定で未ログイン/);
+  assert.match(security, /Default \(`GUILD_BROWSER_REAL_PROFILE=1`\)/);
+  assert.match(first, /snapshots your Chrome logins by default/);
+  assert.match(firstZh, /預設帶你的 Chrome 登入/);
 });
 
 test("lastUsedProfile reads Local State", () => {

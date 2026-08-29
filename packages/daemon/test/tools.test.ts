@@ -195,6 +195,7 @@ test("chat system owns a seat and hands off with a spec", () => {
   });
   assert.match(system, /# Hall/);
   assert.match(system, /written spec/);
+  assert.match(system, /start of a line/);
   assert.match(system, /Stay quiet/);
   assert.match(system, /Do not @all/);
 });

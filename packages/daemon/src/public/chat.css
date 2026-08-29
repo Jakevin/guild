@@ -374,9 +374,9 @@ body.grok .sidebar {
   --board: #16100B;
   --board-slot: #0C0907;
   --board-edge: #3A2A1C;
-  --notice: #EDE6D6;
+  --notice: #B8A888;
   --notice-ink: #1A1612;
-  --notice-mute: #6A5E50;
+  --notice-mute: #4E4438;
   color: #E8DCC8;
   height: 100%;
   max-height: 100vh;
@@ -493,7 +493,7 @@ body.grok #channels a.nav-row::after {
 }
 body.grok #channels a.nav-row:hover,
 body.grok #channels a.nav-row.on {
-  background: #F3EFE6;
+  background: #C9BBA0;
   transform: none;
 }
 body.grok #channels .nav-top strong,
@@ -524,7 +524,7 @@ body.grok #channels .notice-party .members-stack .avatar {
 }
 body.grok #channels a.nav-row.on .notice-party .members-stack .avatar,
 body.grok #channels a.nav-row:hover .notice-party .members-stack .avatar {
-  border-color: #F3EFE6;
+  border-color: #C9BBA0;
 }
 body.grok #channels .notice-party .members-count {
   color: var(--notice-mute);
@@ -1446,6 +1446,7 @@ body.grok .turn-actions .turn-steer { color: #c4b090; }
   cursor: pointer;
 }
 .msg-actions button:hover { background: #1c1c1c; color: var(--text); }
+.msg-actions button.danger:hover { color: #f0a8a8; }
 .toast {
   position: fixed;
   left: calc(var(--sidebar-w, 292px) + (100vw - var(--sidebar-w, 292px)) / 2);
@@ -1923,6 +1924,74 @@ body.grok .composer.drop-on .composer-card::after {
 }
 .attach-chip:hover { background: #2a2a2a; }
 .attach-chip-x:hover { color: #fff; }
+.attach-chip.has-preview { padding-left: 3px; }
+.attach-thumb {
+  width: 22px;
+  height: 22px;
+  margin: 3px 0 3px 3px;
+  object-fit: cover;
+  border-radius: 50%;
+  flex: none;
+  background: #111;
+}
+.img-preview {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  padding: 4px;
+  background: #141414;
+  border: 1px solid #333;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px #000c;
+}
+.img-preview[hidden] { display: none; }
+.img-preview img {
+  display: block;
+  max-width: min(240px, 70vw);
+  max-height: min(180px, 40vh);
+  border-radius: 8px;
+}
+.att-token[data-preview] {
+  cursor: zoom-in;
+}
+.att-token.has-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.12em 0.4em 0.12em 0.18em;
+}
+.att-inline {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: none;
+  background: #111;
+}
+.msg.you .msg-imgs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: var(--you-max);
+  margin: 0 0 6px;
+}
+.msg-img {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #2c2c2c;
+  border-radius: 14px;
+  background: #111;
+  overflow: hidden;
+  cursor: pointer;
+}
+.msg-img img {
+  display: block;
+  max-width: min(280px, 72vw);
+  max-height: 220px;
+  object-fit: contain;
+}
 .msg.you .msg-atts {
   display: flex;
   flex-wrap: wrap;

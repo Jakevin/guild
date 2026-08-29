@@ -137,7 +137,7 @@ const BASE_TOOLS: Tool[] = [
   {
     name: "browser",
     description:
-      "Drive a local Chromium-family browser via CDP. Default is a throwaway profile (logged into nothing). Set GUILD_BROWSER_REAL_PROFILE=1 to snapshot the user's active Chrome profile (Local State last_used; cookies/logins via sqlite backup) into ~/.guild/browser-profile/chrome and drive that copy — never the live profile. Off deletes the snapshot. Actions: open, snapshot, click, type, press, screenshot, close.",
+      "Drive a local Chromium-family browser via CDP. Default snapshots the user's active Chrome profile (Local State last_used; cookies/logins via sqlite backup) into ~/.guild/browser-profile/chrome and drives that copy — never the live profile. Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway profile (logged into nothing); off deletes the snapshot. Actions: open, snapshot, click, type, press, screenshot, close.",
     parameters: Type.Object({
       action: Type.String({
         description: "open | snapshot | click | type | press | screenshot | close",
@@ -345,6 +345,7 @@ export async function executeTool(
     }
     return await builtinExecute(name, args, ctx);
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     return {
       text: error instanceof Error ? error.message : String(error),
       isError: true,
@@ -403,7 +404,11 @@ export async function builtinExecute(
     }
     if (name === "browser") {
       const { runBrowser } = await import("./browser.ts");
-      return runBrowser(args, { dataDir: ctx.dataDir, env: ctx.env });
+      return runBrowser(args, {
+        dataDir: ctx.dataDir,
+        env: ctx.env,
+        signal: ctx.signal,
+      });
     }
     if (name.startsWith("mcp__")) {
       const { callMcpTool } = await import("./mcp.ts");
@@ -412,6 +417,7 @@ export async function builtinExecute(
     }
     return { text: `unknown tool: ${name}`, isError: true };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     return {
       text: error instanceof Error ? error.message : String(error),
       isError: true,
@@ -467,6 +473,7 @@ export async function executeToolTraced(
   traces: ToolTrace[],
   thinking = "",
 ): Promise<ToolOutcome> {
+  throwIfAborted(ctx);
   const row: ToolTrace = {
     name,
     args,
@@ -719,7 +726,7 @@ You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
-To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default profile is empty. The user must set GUILD_BROWSER_REAL_PROFILE=1 for their Chrome logins (Hermes-shaped snapshot of last_used, never the live profile).
+To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default is a Hermes-shaped snapshot of the user's last_used Chrome profile (never the live profile). Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway empty profile.
 To delegate a bounded slice (explore, review, implement) to a specialist with its own context, call spawn. Pass a self-contained prompt. The subagent returns a summary. Subagents cannot spawn children.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.
 To follow a staffed skill, call skill with its exact name (or slug) before applying it. Relative paths in a skill resolve against that skill's base directory.

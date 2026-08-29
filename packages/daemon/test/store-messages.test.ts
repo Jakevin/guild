@@ -39,6 +39,26 @@ test("appendMessage persists in sqlite across reopen", () => {
   again.close();
 });
 
+test("deleteMessage removes one row and leaves the rest", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  store.appendMessage("channel-general", "you", "one");
+  const two = store.appendMessage("channel-general", "you", "two");
+  store.appendMessage("channel-general", "you", "three");
+  const removed = store.deleteMessage("channel-general", two.id);
+  assert.equal(removed.body, "two");
+  assert.deepEqual(
+    store.listMessages("channel-general").map((item) => item.body),
+    ["one", "three"],
+  );
+  assert.equal(store.lastMessagePreview("channel-general")?.body, "three");
+  assert.throws(
+    () => store.deleteMessage("channel-general", two.id),
+    /message not found/,
+  );
+  store.close();
+});
+
 test("legacy jsonl and json import into sqlite then drop files", () => {
   const home = tempHome();
   const dir = join(home, "rooms", "channel-general");

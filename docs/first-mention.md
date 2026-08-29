@@ -72,7 +72,7 @@ Treat this as a workshop. Do not point it at untrusted prompts, untrusted repos,
 
 - **`run` / `write` are your shell.** Default `full_access`. `run` cwd is `$HOME`. Optional Position `sandbox:` / `GUILD_SANDBOX` is a tool gate, not an OS jail.
 - **MCP spawns as you, with no import / consent.** Guild `mcp.json` **and** host Claude / Cursor / Codex configs. Env is inherited. To keep a host server out: remove it from the host file, or set `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml`.
-- **Browser is off-login by default.**
+- **Browser snapshots your Chrome logins by default.** Set `GUILD_BROWSER_REAL_PROFILE=0` for a throwaway empty profile.
 
 Do not paste secrets into a channel and then `@mention` someone. Prefer a throwaway `GUILD_HOME` if you are evaluating.
 

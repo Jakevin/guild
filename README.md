@@ -87,7 +87,7 @@ If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a comman
 
 **MCP spawns a local process as you** — Guild `mcp.json` **and** host Claude / Cursor / Codex configs, with no import / consent prompt. Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
 
-**Browser is off-login by default.** `browser` drives a throwaway Chrome profile. Set `GUILD_BROWSER_REAL_PROFILE=1` to snapshot your **active** Chrome profile (`last_used`) into `~/.guild/browser-profile/chrome` (Hermes-shaped copy — never the live profile). Details: [SECURITY.md](./SECURITY.md).
+**Browser snapshots your Chrome logins by default.** `browser` copies the **active** Chrome profile (`last_used`) into `~/.guild/browser-profile/chrome` and drives that copy (Hermes-shaped — never the live profile). Set `GUILD_BROWSER_REAL_PROFILE=0` for a throwaway empty profile. Details: [SECURITY.md](./SECURITY.md).
 
 Also not built: Tauri app, staffing, approvals, per-bot `CODEX_HOME`, HTTP MCP. Design docs under `docs/` describe a later shape — they are not a changelog.
 

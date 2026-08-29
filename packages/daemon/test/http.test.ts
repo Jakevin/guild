@@ -455,6 +455,59 @@ test("generate turns a prompt into markdown", async () => {
   }
 });
 
+test("pick skills from markdown matches the catalog", async () => {
+  const { server, origin } = await listen(tempHome());
+  try {
+    const listed = await getJson(origin, "/library/skills");
+    assert.equal(listed.status, 200);
+    const skills = listed.body as {
+      id: string;
+      name: string;
+      slug: string;
+      description?: string;
+      tags?: string[];
+    }[];
+    const tdd = skills.find((item) => item.slug === "tdd");
+    assert.ok(tdd);
+    const empty = await postJson(origin, "/generate/skills", {
+      agent: "先寫失敗測試，再寫最小實作",
+      skills: [],
+    });
+    assert.equal(empty.status, 400);
+    const noMd = await postJson(origin, "/generate/skills", {
+      skills: skills.map((item) => ({
+        id: item.id,
+        name: item.name,
+        slug: item.slug,
+        description: item.description,
+        tags: item.tags,
+      })),
+    });
+    assert.equal(noMd.status, 400);
+    const picked = await postJson(origin, "/generate/skills", {
+      name: "Ada",
+      agent: "先寫失敗測試，再寫最小實作，最後重構。",
+      skills: skills.map((item) => ({
+        id: item.id,
+        name: item.name,
+        slug: item.slug,
+        description: item.description,
+        tags: item.tags,
+      })),
+    });
+    assert.equal(picked.status, 200);
+    const body = picked.body as { skillIds: string[]; source: string };
+    assert.equal(body.source, "local");
+    assert.ok(body.skillIds.includes(tdd.id));
+    assert.ok(body.skillIds.length >= 1 && body.skillIds.length <= 8);
+    for (const id of body.skillIds) {
+      assert.ok(skills.some((item) => item.id === id));
+    }
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test("create bot from markdown drafts and catalog skills", async () => {
   const { server, origin } = await listen(tempHome());
   try {
@@ -505,6 +558,8 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /function liveTurnsFrom/);
   assert.match(home, /body.bots/);
   assert.match(home, /showToast\(t\("copied"\)\)/);
+  assert.match(home, /data-msg-del/);
+  assert.match(home, /function deleteChatMessage/);
   const chatCss = readFileSync(
     fileURLToPath(new URL("../src/public/chat.css", import.meta.url)),
     "utf8",
@@ -598,6 +653,8 @@ test("home is chat and studio is the roster", () => {
   const library = readFileSync(LIBRARY_HTML, "utf8");
   const studio = readFileSync(STUDIO_HTML, "utf8");
   assert.match(studio, /id="delete-bot"/);
+  assert.match(studio, /roster-bot/);
+  assert.match(studio, /bot\.name \|\| bot\.handle/);
   assert.match(library, /技能庫/);
   assert.match(library, /class="app library-page"/);
   assert.match(library, /side-nav/);
@@ -660,7 +717,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(studio, /data-check/);
   assert.match(studio, /lib-body/);
   assert.match(studio, /用 AI 生成 Markdown/);
+  assert.match(studio, /用 AI 挑選/);
+  assert.match(studio, /id="skill-pick"/);
+  assert.match(studio, /\/generate\/skills/);
   assert.match(studio, /\/generate/);
+  assert.match(studio, /await saveMarkdown\(/);
+  assert.match(studio, /studio\.generatedSaved/);
   assert.match(studio, /\/skills\/add/);
   assert.match(studio, /\/library\/skills\/host\?body=0/);
   assert.match(studio, /mergeSkills/);
@@ -834,6 +896,49 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
       .body as { id: string }[];
     assert.equal(afterRetry.length, 2);
     assert.equal(afterRetry[1].id, afterEdit[1].id);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("DELETE removes one chat message", async () => {
+  const dataDir = tempHome();
+  const store = new GuildStore(dataDir);
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  assert.ok(rd);
+  const dm = store.openDm(rd.id);
+  store.appendMessage(dm.id, "you", "keep me");
+  const gone = store.appendMessage(dm.id, "you", "delete me");
+  const channel = store.createChannel("scrap");
+  const chGone = store.appendMessage(channel.id, "you", "channel scrap");
+  store.close();
+  const { server, origin } = await listen(dataDir);
+  try {
+    const deleted = await deleteJson(origin, `/dms/${rd.id}/messages/${gone.id}`);
+    assert.equal(deleted.status, 200);
+    assert.equal((deleted.body as { ok: boolean; id: string }).id, gone.id);
+    const listed = (await getJson(origin, `/dms/${rd.id}/messages`)).body as {
+      body: string;
+    }[];
+    assert.deepEqual(
+      listed.map((item) => item.body),
+      ["keep me"],
+    );
+    const missing = await deleteJson(
+      origin,
+      `/dms/${rd.id}/messages/${gone.id}`,
+    );
+    assert.equal(missing.status, 404);
+    const chDel = await deleteJson(
+      origin,
+      `/channels/${channel.id}/messages/${chGone.id}`,
+    );
+    assert.equal(chDel.status, 200);
+    const chListed = (await getJson(
+      origin,
+      `/channels/${channel.id}/messages`,
+    )).body as unknown[];
+    assert.equal(chListed.length, 0);
   } finally {
     await closeServer(server);
   }

@@ -196,6 +196,49 @@ test("chat page has a Channel.md editor for channels", () => {
   assert.match(html, /id="channel-md-name"/);
 });
 
+test("POST /channels keeps CJK and mixed names instead of slugifying them away", async () => {
+  const { server, origin } = await listen(tempHome(), {});
+  try {
+    const zh = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "  產品  " }),
+    });
+    assert.equal(zh.status, 201);
+    assert.equal(zh.body.name, "產品");
+    assert.match(String(zh.body.id), /^channel-/);
+    assert.notEqual(zh.body.id, "channel-item");
+    assert.notEqual(zh.body.id, "channel-general");
+
+    const mixed = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Honda 雨刷" }),
+    });
+    assert.equal(mixed.status, 201);
+    assert.equal(mixed.body.name, "Honda 雨刷");
+    assert.equal(mixed.body.id, "channel-honda");
+
+    const again = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "產品" }),
+    });
+    assert.equal(again.status, 409);
+
+    const en = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "emergency" }),
+    });
+    assert.equal(en.status, 201);
+    assert.equal(en.body.name, "emergency");
+    assert.equal(en.body.id, "channel-emergency");
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test("PATCH /channels/:id renames a channel and leaves the id", async () => {
   const { server, origin } = await listen(tempHome());
   try {
