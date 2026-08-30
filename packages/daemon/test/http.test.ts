@@ -583,6 +583,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /--plaque:\s*var\(--notice\)/);
   assert.match(chatCss, /--board-edge:\s*#6B4228/);
   assert.match(chatCss, /repeating-linear-gradient\(\s*90deg/);
+  assert.match(chatCss, /\.members-stack \.avatar \+ \.avatar/);
+  assert.match(chatCss, /\.notice-party \.members-stack \.avatar \+ \.avatar/);
+  assert.doesNotMatch(
+    chatCss,
+    /\.notice-party \.members-stack \.avatar \{[^}]*margin-left:\s*-/,
+  );
   assert.doesNotMatch(chatCss, /Guild hall/);
   assert.match(chatCss, /\.nav-top strong[\s\S]*white-space:\s*nowrap/);
   assert.match(chatCss, /\.nav-top strong[\s\S]*text-wrap:\s*nowrap/);

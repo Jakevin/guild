@@ -625,16 +625,19 @@ body.grok #channels .notice-party {
   gap: 0.4rem;
   margin-top: 0.08rem;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 body.grok #channels .notice-party .members-stack .avatar {
   width: 22px;
   height: 22px;
   font-size: 11px;
   letter-spacing: 0;
-  margin-left: -7px;
+  margin-left: 0;
   border: 2px solid var(--notice);
   box-shadow: none;
+}
+body.grok #channels .notice-party .members-stack .avatar + .avatar {
+  margin-left: -7px;
 }
 body.grok #channels a.nav-row.on .notice-party .members-stack .avatar,
 body.grok #channels a.nav-row:hover .notice-party .members-stack .avatar {
@@ -772,7 +775,7 @@ body.grok .sidebar .side-foot a:hover { color: #F7F1E4; }
   align-items: center;
   gap: 0.4rem;
   margin: 0;
-  padding: 0.15rem 0.55rem 0.15rem 0.2rem;
+  padding: 0.15rem 0.55rem 0.15rem 0.4rem;
   border: 0;
   border-radius: 999px;
   background: var(--fill);
@@ -780,6 +783,7 @@ body.grok .sidebar .side-foot a:hover { color: #F7F1E4; }
   font: inherit;
   font-size: 0.82rem;
   cursor: pointer;
+  overflow: visible;
 }
 .members-btn:hover { background: var(--lift); }
 .members-stack { display: flex; align-items: center; }
@@ -791,10 +795,10 @@ body.grok .sidebar .side-foot a:hover { color: #F7F1E4; }
   line-height: 1;
   overflow: hidden;
   white-space: nowrap;
-  margin-left: -8px;
+  margin-left: 0;
   border: 2px solid var(--bg);
 }
-.members-stack .avatar:first-child { margin-left: 0; }
+.members-stack .avatar + .avatar { margin-left: -8px; }
 .members-count { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .members-pop {
   position: absolute;
