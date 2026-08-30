@@ -24,18 +24,28 @@ pnpm dev
 
 1. **模型**（`/settings`）— 接上 provider 或訂閱。沒有模型，冒險者還能回一聲；他們不能想。
 2. 開一個頻道——一張委託。大廳有活就寫 `Channel.md`（委託書）。
-3. `@pm` 收範圍，`@rd` 看程式。被 `@` 到、你回他們、或沒點名時由上一個說話的冒險者接。`@channel` 會叫整支編制——通常是錯的。
+3. `@pm` 收範圍，`@rd` 看程式。`@handle` 要放在**行首**——那才是分派。你回他們時他們也會接；完全沒點名，就由上一個說話的冒險者繼續。`@channel` 會叫整支編制——通常是錯的。
 
 資料在 `GUILD_HOME`（預設 `~/.guild`）。房間、訊息、軌跡在 `guild.sqlite`（WAL）；Soul / skill / MEMORY.md 仍是檔案。不是雲端帳號。`guildd` 是 Cordis 4 應用；插件組合在 `packages/daemon/cordis.yml`。`GUILD_*` 環境變數仍蓋過 YAML。
 
 ![大廳：委託、編制與即時對話。](docs/readme-hall-2026-08-29.png)
 
+## 據點怎麼運轉
+
+**誰會回。** 行首的 `@handle` 才是分派。兩行各一個 `@handle`，就是兩個人各自領一份：你的前言，加上他那一行。行首沒人時，內文**第一個** `@handle` 就是被指派的人，並拿到整段訊息；再往後的 `@` 只是提到。完全沒點名，就由上一個說話的冒險者接。`@all` / `@channel` / `@here` 會把據點每一席同時叫醒——通常是錯的。`@` 一個不在據點的人，會先把人拉進來再回。一個據點 6 席（`#general` 除外）：先重用編制，再招人。
+
+**輸入框。** 回覆某一則訊息，就是指定那個人，也讓他看到你指的是哪一句。有人在跑的時候，Enter 排隊，Cmd/Ctrl+↩ 插入這輪。停止把那一名冒險者從這輪拉下來。重問只重問那一題。刪除拿掉那一則訊息與它的軌跡。頻道可在側欄改名。
+
+**帶上下文。** 檔案拖進輸入框、貼上，或從附件選單挑，一則訊息最多 12 個附件。圖片的懸停預覽只在介面看得到；模型收到的是文字本文。太大嵌不進去時，Guild 改送路徑，讓冒險者自己 `read`。
+
+**只借一招。** 輸入框打 `/`，直接挑工坊的技能或子代理，不必先掛到誰身上。訊息裡的 `/slug` 只在這一回合生效。
+
 ## 編制
 
 - **單位是有名字的冒險者：** Soul / Agent / Skill / Position，用 `@handle` 叫。
 - 預設小隊五席——是編制，不是出征：`@infra` `@pm` `@rd` `@design` `@marketing`。出活仍點名一人。
-- 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。
-- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter）。
+- 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。同一張表單也能叫模型替這席挑技能，上限 8 項；沒接模型時退回本機比對。
+- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。
 
 ![編制：五位有名字的冒險者。](docs/readme-roster-2026-08-29.png)
 
@@ -76,7 +86,7 @@ pnpm dev
 
 - 不是 Codex harness
 - 不是任務板——沒有專案 / 任務看板
-- 不是小隊出征——點名一個冒險者，不是一隊人馬
+- 不是小隊出征——點名一個 @handle；@all 是例外，不是習慣
 - 不是雲端帳號
 - 不是 OS jail（可選 Position / `GUILD_SANDBOX` tool gate）
 - 不是 `apps/desktop`（孤兒；產品 UI 是 daemon）

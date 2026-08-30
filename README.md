@@ -24,18 +24,28 @@ Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 
 1. **Models** (`/settings`) — wire a provider or a subscription. Without a model, adventurers can still ack; they cannot think.
 2. Open a channel — a contract. Write `Channel.md` if the hall has a job.
-3. `@pm` to scope, `@rd` to look at code. They reply when `@mentioned`, when you reply to them, or — if you name nobody — the last adventurer who spoke. `@channel` pings the whole roster — usually the wrong move.
+3. `@pm` to scope, `@rd` to look at code. Put the `@handle` at the **start of a line** — that is the assignment. They also answer when you reply to them; name nobody and the last adventurer who spoke continues. `@channel` pings the whole roster — usually the wrong move.
 
 Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in `guild.sqlite` (WAL). Souls / skills / MEMORY.md stay files. Not a cloud account. `guildd` is a Cordis 4 app; plugin composition lives in `packages/daemon/cordis.yml`. `GUILD_*` env vars still win over YAML.
 
 ![The hall: channels, roster, and a live thread.](docs/readme-hall-2026-08-29.png)
 
+## Run the hall
+
+**Who answers.** A `@handle` at the **start of a line** is the assignment. Two lines, two handles — two adventurers, each getting your preamble plus their own line. With nothing at a line start, the **first** `@handle` in the body is the assignee and gets the whole message; a later one is only a mention. Name nobody and the last adventurer who spoke continues. `@all` / `@channel` / `@here` wake every seat in the hall in parallel — usually the wrong move. `@` someone who is not in the hall and they are pulled in before they answer. A hall holds 6 seats (`#general` aside): reuse the roster before you hire.
+
+**The composer.** Reply to one message to aim at that adventurer and show which line you mean. While a turn is running, Enter queues your next line; Cmd/Ctrl+↩ inserts it into the live turn. Stop pulls that one adventurer out of the turn. Retry re-asks one question. Delete removes one message and its trajectory. Rename a channel from the sidebar.
+
+**Bring context.** Drag files into the composer, paste them, or pick them from the attachment menu — up to 12 per message. An image gets a hover preview; the preview is UI only, the model gets the text body. Too big to embed and Guild sends the path so the adventurer can `read` it.
+
+**Borrow one skill.** Type `/` in the composer to pick a Workshop skill or subagent without staffing it onto anyone first. `/slug` inside a message applies to that turn only.
+
 ## The roster
 
 - **The unit is a named adventurer:** Soul / Agent / Skill / Position, invoked with `@handle`.
 - Default roster of five: `@infra` `@pm` `@rd` `@design` `@marketing`. A roster, not a sortie — work still goes to one `@handle` at a time.
-- Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI.
-- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter).
+- Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI. On the same form, ask the model to pick up to 8 skills for that seat; with no model wired it falls back to a local match.
+- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius).
 
 ![Roster of five named adventurers.](docs/readme-roster-2026-08-29.png)
 
@@ -76,7 +86,7 @@ If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a comman
 
 - Not a Codex harness
 - Not a quest board — no project / task board
-- Not a party sortie — you call one adventurer, not a squad
+- Not a party sortie — you assign one @handle; @all is the exception, not the habit
 - Not a cloud account
 - Not an OS jail (optional Position / `GUILD_SANDBOX` tool gate only)
 - Not `apps/desktop` (orphan; the product UI is the daemon)
