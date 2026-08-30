@@ -552,8 +552,16 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /Ask anything/);
   assert.match(home, /\/i18n\.js/);
   assert.match(home, /sidebar-resizer/);
+  assert.match(home, /id="nav-toggle"/);
+  assert.match(home, /id="nav-scrim"/);
+  assert.match(home, /function setNavOpen/);
   assert.match(home, /function partyStackHtml/);
+  assert.match(home, /Array.from\(String\(name\)\.replace/);
+  assert.match(home, /letters\.length === 2/);
+  assert.doesNotMatch(home, /return String\(name\)\.slice\(0, 2\)/);
   assert.match(home, /id="toast"/);
+  assert.match(home, /id="jump-bottom"/);
+  assert.match(home, /id="prompt-rail"/);
   assert.match(home, /function showToast/);
   assert.match(home, /function liveTurnsFrom/);
   assert.match(home, /body.bots/);
@@ -565,8 +573,25 @@ test("home is chat and studio is the roster", () => {
     "utf8",
   );
   assert.match(chatCss, /body\.grok \.sidebar/);
-  assert.match(chatCss, /#EDE6D6/);
+  assert.match(chatCss, /body\.nav-open \.sidebar/);
+  assert.match(chatCss, /max-width: 760px/);
+  assert.match(chatCss, /--bg:\s*#0B0E12/);
+  assert.match(chatCss, /--signal:\s*#C9A227/);
+  assert.match(chatCss, /:focus-visible/);
+  assert.match(chatCss, /Quest board/);
   assert.match(chatCss, /#16100B/);
+  assert.match(chatCss, /--plaque:\s*var\(--notice\)/);
+  assert.match(chatCss, /--board-edge:\s*#6B4228/);
+  assert.match(chatCss, /repeating-linear-gradient\(\s*90deg/);
+  assert.doesNotMatch(chatCss, /Guild hall/);
+  assert.match(chatCss, /\.nav-top strong[\s\S]*white-space:\s*nowrap/);
+  assert.match(chatCss, /\.nav-top strong[\s\S]*text-wrap:\s*nowrap/);
+  assert.match(chatCss, /#channels a\.nav-row[\s\S]*min-width:\s*0/);
+  assert.match(chatCss, /notice-party \.members-stack \.avatar[\s\S]*font-size:\s*11px/);
+  assert.match(chatCss, /\.nav-av \.avatar \{ font-size:\s*15px/);
+  assert.match(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n\}/);
+  assert.doesNotMatch(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n  font: inherit;/);
+  assert.doesNotMatch(chatCss, /html \{ text-wrap: pretty/);
   assert.doesNotMatch(home, /locale-switch/);
   assert.match(home, /t\("deepDiving"\)/);
   assert.match(home, /t\("think"\)/);
@@ -627,6 +652,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /function pollLive/);
   assert.match(home, /function refreshTraj/);
   assert.match(home, /function mergeLiveTraj/);
+  assert.match(home, /if \(!url \|\| !currentRoomBusy\(\)\) return;/);
   assert.match(home, /trajFollow/);
   assert.match(home, /resumeCurrentLive/);
   assert.match(home, /function stopTurn/);
@@ -649,6 +675,8 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /function replyAuthorId/);
   assert.match(home, /payload.replyTo = pending.replyTo/);
   assert.match(home, /steer\.waiting/);
+  assert.match(home, /function queueTargetLabel/);
+  assert.match(home, /steer\.waitingTo/);
   assert.doesNotMatch(home, /\.disabled = stop/);
   const library = readFileSync(LIBRARY_HTML, "utf8");
   const studio = readFileSync(STUDIO_HTML, "utf8");
@@ -1130,6 +1158,8 @@ test("models.json can add a Pi-style provider", async () => {
     assert.ok(picker.subscriptions.some((s) => s.id === "anthropic"));
     assert.ok(picker.subscriptions.some((s) => s.id === "github-copilot"));
     assert.ok(picker.subscriptions.some((s) => s.id === "openrouter"));
+    assert.ok(picker.subscriptions.some((s) => s.id === "kimi-coding"));
+    assert.ok(picker.subscriptions.some((s) => s.id === "radius"));
     assert.ok(picker.auxRoles.some((r) => r.id === "vision"));
     assert.ok(picker.auxRoles.some((r) => r.id === "web"));
     assert.ok(picker.auxRoles.some((r) => r.id === "compression"));
@@ -1418,13 +1448,21 @@ test("POST steer injects into a live turn and 409s when idle", async () => {
     const steered = await postJson(origin, "/channels/channel-general/steer", {
       body: "use the other file",
       replyTo: parent.id,
+      botId: "bot-x",
     });
     assert.equal(steered.status, 201);
     const message = (steered.body as {
-      message: { author: string; body: string; steer?: boolean; replyTo?: string };
+      message: {
+        author: string;
+        body: string;
+        steer?: boolean;
+        steerBotId?: string;
+        replyTo?: string;
+      };
     }).message;
     assert.equal(message.author, "you");
     assert.equal(message.steer, true);
+    assert.equal(message.steerBotId, "bot-x");
     assert.equal(message.replyTo, parent.id);
     assert.match(message.body, /other file/);
     const live = await getJson(origin, "/channels/channel-general/live");

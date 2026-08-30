@@ -17,12 +17,14 @@ import {
   type CredentialInfo,
   type CredentialStore,
   type Message,
+  type Model,
   type MutableModels,
   type OAuthCredential,
 } from "@earendil-works/pi-ai";
 import {
+  emitProgress,
   guildTools,
-  LLM_ROUND_TIMEOUT_MS,
+  roundSignal,
   TOOL_LOOP_EXHAUSTED,
   TOOL_LOOP_WRAP,
   type SkillRef,
@@ -90,6 +92,20 @@ export const SUBSCRIPTIONS: SubscriptionDef[] = [
     name: "OpenRouter",
     hint: "OpenRouter OAuth 會換成你帳號下的 API key，從點數扣款。",
     flow: "pkce",
+  },
+  {
+    id: "kimi-coding",
+    pickerId: "kimi-coding-oauth",
+    name: "Kimi Code",
+    hint: "Kimi Code 訂閱。裝置碼登入 kimi.com，不必貼 API key。",
+    flow: "device",
+  },
+  {
+    id: "radius",
+    pickerId: "radius-oauth",
+    name: "Pi Radius",
+    hint: "Pi 的 Radius 閘道（預設 radius.pi.dev）。裝置碼登入，模型清單登入後從閘道拉取。",
+    flow: "device",
   },
 ];
 
@@ -438,9 +454,36 @@ function copilotAllowedIds(dataDir: string): string[] | undefined {
   return cred.availableModelIds.filter((item) => typeof item === "string");
 }
 
+function storedModelIds(dataDir: string, id: string): string[] | undefined {
+  const cred = getStore(dataDir).peek(id);
+  if (cred?.type !== "oauth" || !Array.isArray(cred.availableModelIds)) {
+    return undefined;
+  }
+  return cred.availableModelIds.filter((item) => typeof item === "string");
+}
+
 function catalogModels(id: string, dataDir: string): ModelEntryLite[] {
   if (id === "github-copilot" && copilotAutoOnly(dataDir)) {
     return [{ id: "auto", name: "Auto" }];
+  }
+  if (id === "radius") {
+    try {
+      const live = piModels(dataDir).getModels("radius");
+      if (live.length) {
+        return live.map((model) => ({
+          id: model.id,
+          name: model.name || model.id,
+        }));
+      }
+    } catch {
+      /* catalog not ready */
+    }
+    const stored = storedModelIds(dataDir, "radius");
+    if (stored?.length) {
+      return stored.map((modelId) => ({ id: modelId, name: modelId }));
+    }
+    if (oauthUsable(dataDir, "radius")) void refreshRadiusCatalog(dataDir);
+    return [];
   }
   try {
     const models = piModels(dataDir).getModels(id);
@@ -582,6 +625,48 @@ export async function refreshCopilotCatalog(dataDir: string): Promise<void> {
       return { ...current, availableModelIds: ids };
     });
     copilotCatalogAt.set(dataDir, Date.now());
+  } catch {
+    /* keep the last stored list */
+  }
+}
+
+const radiusCatalogAt = new Map<string, number>();
+const RADIUS_CATALOG_TTL_MS = 60_000;
+
+async function refreshRadiusCatalog(
+  dataDir: string,
+  force = false,
+): Promise<void> {
+  const store = getStore(dataDir);
+  const cred = store.peek("radius");
+  if (cred?.type !== "oauth") return;
+  const prev = radiusCatalogAt.get(dataDir) ?? 0;
+  const live = piModels(dataDir).getModels("radius");
+  if (
+    !force &&
+    Date.now() - prev < RADIUS_CATALOG_TTL_MS &&
+    live.length
+  ) {
+    return;
+  }
+  try {
+    const models = piModels(dataDir);
+    await models.refresh({
+      providers: ["radius"],
+      allowNetwork: true,
+      force: true,
+    });
+    const ids = models
+      .getModels("radius")
+      .map((model) => model.id)
+      .filter((item) => item.length > 0);
+    if (ids.length) {
+      await store.modify("radius", async (current) => {
+        if (current?.type !== "oauth") return current;
+        return { ...current, availableModelIds: ids };
+      });
+    }
+    radiusCatalogAt.set(dataDir, Date.now());
   } catch {
     /* keep the last stored list */
   }
@@ -850,7 +935,8 @@ export async function startLogin(dataDir: string, id: string): Promise<OAuthStat
   };
 
   const finished = models.login(id, "oauth", interaction).then(
-    () => {
+    async () => {
+      if (id === "radius") await refreshRadiusCatalog(dataDir, true);
       watch.status = "ok";
       watch.detail = `Logged in to ${id}`;
     },
@@ -959,6 +1045,68 @@ export function oauthOmitsTemperature(input: {
   return false;
 }
 
+function thinkingText(message: AssistantMessage | undefined): string {
+  if (!message) return "";
+  return message.content
+    .filter(
+      (part): part is Extract<typeof part, { type: "thinking" }> =>
+        part.type === "thinking",
+    )
+    .map((part) => part.thinking)
+    .join("\n")
+    .trim();
+}
+
+/** Pi streamSimple: Think chips only from thinking_delta, not a planted placeholder. */
+async function streamOAuthMessage(
+  models: MutableModels,
+  model: Model,
+  context: Parameters<MutableModels["streamSimple"]>[1],
+  options: Parameters<MutableModels["streamSimple"]>[2],
+  toolCtx: ToolContext,
+  traces: ToolTrace[],
+): Promise<AssistantMessage> {
+  const stream = models.streamSimple(model, context, options);
+  let lastEmit = 0;
+  const flush = (partial: AssistantMessage | undefined, force: boolean) => {
+    const think = thinkingText(partial);
+    if (!think) return;
+    const now = Date.now();
+    if (!force && now - lastEmit < 120) return;
+    lastEmit = now;
+    emitProgress(toolCtx, traces, think);
+  };
+  for await (const event of stream) {
+    if (event.type === "thinking_start" || event.type === "thinking_delta") {
+      flush(event.partial, event.type === "thinking_start");
+    } else if (event.type === "thinking_end") {
+      flush(event.partial, true);
+    } else if (event.type === "done") {
+      flush(event.message, true);
+      return event.message;
+    } else if (event.type === "error") {
+      return event.error;
+    }
+  }
+  return stream.result();
+}
+
+function abortWhen(signal?: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    const fail = () => {
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      reject(err);
+    };
+    if (!signal) return;
+    if (signal.aborted) {
+      fail();
+      return;
+    }
+    signal.addEventListener("abort", fail, { once: true });
+  });
+}
+
 export async function completeOAuth(input: {
   dataDir: string;
   pickerId: string;
@@ -983,6 +1131,9 @@ export async function completeOAuth(input: {
   const models = piModels(input.dataDir);
   let modelId = input.model;
   let copilotSessionToken = "";
+  if (sub.id === "radius") {
+    await refreshRadiusCatalog(input.dataDir, true);
+  }
   if (sub.id === "github-copilot") {
     await refreshCopilotCatalog(input.dataDir);
     const autoOnly = copilotAutoOnly(input.dataDir);
@@ -1023,7 +1174,6 @@ export async function completeOAuth(input: {
   const options: {
     temperature?: number;
     reasoning?: "minimal" | "low" | "medium" | "high";
-    timeoutMs: number;
     signal?: AbortSignal;
     transformHeaders?: (
       headers: Record<string, string | null>,
@@ -1032,8 +1182,6 @@ export async function completeOAuth(input: {
   } = {
     temperature: omitTemperature ? undefined : (input.temperature ?? 0.4),
     reasoning: input.reasoning,
-    timeoutMs: LLM_ROUND_TIMEOUT_MS,
-    signal: input.toolCtx?.signal,
   };
   if (sub.id === "xai" || sub.id === "github-copilot") {
     options.transformHeaders = (headers) => ({
@@ -1074,6 +1222,7 @@ export async function completeOAuth(input: {
     spawnDepth: 0,
     allowWrite: true,
   };
+  options.signal = roundSignal(toolCtx);
   const tools = guildTools(input.skills ?? [], toolCtx);
   let lastResult: AssistantMessage | null = null;
   const looped = await runAgentLoop({
@@ -1103,16 +1252,22 @@ export async function completeOAuth(input: {
       if (fitted.length < transcript.length) {
         transcript.splice(0, transcript.length, ...fitted);
       }
-      const result = await models.completeSimple(
-        model,
-        {
-          systemPrompt: input.system,
-          messages: transcript,
-          ...(useTools ? { tools } : {}),
-        },
-        options,
-      );
-      if (result.stopReason === "aborted" || input.toolCtx?.signal?.aborted) {
+      const result = await Promise.race([
+        streamOAuthMessage(
+          models,
+          model,
+          {
+            systemPrompt: input.system,
+            messages: transcript,
+            ...(useTools ? { tools } : {}),
+          },
+          options,
+          toolCtx,
+          traces,
+        ),
+        abortWhen(options.signal),
+      ]);
+      if (result.stopReason === "aborted" || toolCtx.signal?.aborted || options.signal?.aborted) {
         const err = new Error("aborted");
         err.name = "AbortError";
         throw err;
@@ -1125,14 +1280,7 @@ export async function completeOAuth(input: {
       }
       addUsage(usage, fromPiUsage(result.usage));
       lastResult = result;
-      const think = result.content
-        .filter(
-          (part): part is Extract<typeof part, { type: "thinking" }> =>
-            part.type === "thinking",
-        )
-        .map((part) => part.thinking)
-        .join("\n")
-        .trim();
+      const think = thinkingText(result);
       const calls =
         result.stopReason === "toolUse"
           ? result.content.filter(

@@ -3,15 +3,15 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildChatSystem } from "../src/generate.ts";
+import { buildChatSystem, localGenerate } from "../src/generate.ts";
 import { IMAGE_GEN_TIMEOUT_MS, isSafeGeneratedName } from "../src/image-gen.ts";
 import {
   executeTool,
   formatToolTranscript,
   hostContext,
-  LLM_ROUND_TIMEOUT_MS,
   MAX_TOOL_ROUNDS,
   nextToolRound,
+  roundSignal,
   takeSteers,
   TOOL_LOOP_EXHAUSTED,
   TOOL_SYSTEM,
@@ -113,9 +113,14 @@ test("generated file names reject traversal", () => {
   assert.equal(isSafeGeneratedName("a/b.jpg"), false);
 });
 
-test("timeouts match Codex stream idle 300s", () => {
+test("image_gen timeout is separate from the LLM round", () => {
   assert.equal(IMAGE_GEN_TIMEOUT_MS, 300_000);
-  assert.equal(LLM_ROUND_TIMEOUT_MS, 300_000);
+});
+
+test("roundSignal is user Stop only", () => {
+  const controller = new AbortController();
+  assert.equal(roundSignal({}), undefined);
+  assert.equal(roundSignal({ signal: controller.signal }), controller.signal);
 });
 
 test("skill tool loads staffed instructions", async () => {
@@ -198,6 +203,17 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /start of a line/);
   assert.match(system, /Stay quiet/);
   assert.match(system, /Do not @all/);
+  assert.match(system, /Channel.md is the task/);
+  assert.match(system, /catalog is availability/);
+});
+
+test("local agent markdown has Memory Plan Act Skills harness sections", () => {
+  const md = localGenerate("agent", "先寫測試");
+  assert.match(md.body, /## Memory/);
+  assert.match(md.body, /## Plan/);
+  assert.match(md.body, /## Act/);
+  assert.match(md.body, /## Skills/);
+  assert.match(md.body, /先寫測試/);
 });
 
 test("spawn without dataDir fails fast", async () => {

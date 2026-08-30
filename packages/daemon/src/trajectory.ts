@@ -9,6 +9,7 @@ export type TrajectoryKind =
   | "thinking"
   | "tool"
   | "skill"
+  | "spawn"
   | "assistant";
 
 export type TrajectoryEvent = {
@@ -139,6 +140,24 @@ export function turnTrajectoryEvents(input: {
       });
       continue;
     }
+    if (trace.name === "spawn") {
+      const agent = String(trace.args.name || "worker").trim() || "worker";
+      const label = String(trace.args.description || "").replace(/\s+/g, " ").trim();
+      const prompt = String(trace.args.prompt || "").replace(/\s+/g, " ").trim();
+      events.push({
+        ts,
+        turnId,
+        botId,
+        kind: "spawn",
+        summary: clip(
+          `${agent}${label ? " · " + label : ""}${prompt ? " — " + prompt : ""}${trace.running ? " …" : ""}`,
+        ),
+        payload: cap(trace.args),
+        result: String(cap(trace.text ?? "")),
+        isError: trace.isError,
+      });
+      continue;
+    }
     const detail =
       trace.name === "run"
         ? String(trace.args.command ?? "")
@@ -192,15 +211,6 @@ export function liveTrajectoryEvents(input: {
     traces,
     text: "",
   }).filter((event) => event.kind !== "assistant");
-  if (!events.length) {
-    events.push({
-      ts: input.startedAt || new Date().toISOString(),
-      turnId: `live-${input.botId}`,
-      botId: input.botId,
-      kind: "thinking",
-      summary: "…",
-    });
-  }
   return events.map((event) => ({ ...event, live: true }));
 }
 
@@ -256,8 +266,12 @@ export function synthesizeTrajectory(messages: ChatMessage[]): TrajectoryEvent[]
           ts,
           turnId,
           botId: msg.author,
-          kind: "tool",
-          summary: clip(`${part.name} ${part.detail}`),
+          kind: part.name === "spawn" ? "spawn" : "tool",
+          summary: clip(
+            part.name === "spawn"
+              ? part.detail || part.label || "spawn"
+              : `${part.name} ${part.detail}`,
+          ),
           payload: { name: part.name, detail: part.detail },
           result: part.output,
           isError: part.isError,

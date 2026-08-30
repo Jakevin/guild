@@ -12,7 +12,7 @@ Repo：https://github.com/Jakevin/guild · `v0.2.1`
 
 - [Node](https://nodejs.org) ≥ 22.19
 - [pnpm](https://pnpm.io) 10.x
-- 一個模型：Ollama 本機，或 OpenAI / Anthropic / OpenRouter 的 key，或 ChatGPT Codex / Claude Pro 那種訂閱
+- 一個模型：Ollama 本機，或 OpenAI / Anthropic / OpenRouter 的 key，或 ChatGPT Codex / Claude Pro / Kimi Code 那種訂閱
 
 沒有模型，冒險者還能回一聲；他們不能想。先把模型接上，再點名。
 
@@ -38,7 +38,7 @@ pnpm dev
 |---|---|
 | Ollama | 選本機模型 |
 | API key | 貼進對應 provider |
-| ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter | 走 OAuth |
+| ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter / Kimi Code / Pi Radius | 走 OAuth |
 
 存好。沒這步，下面的 `@pm` 只會點頭。
 

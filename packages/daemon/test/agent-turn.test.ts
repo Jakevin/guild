@@ -122,6 +122,11 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /data-live-stop/);
   assert.match(html, /data-live-steer/);
   assert.match(html, /insertIntoBotTurn/);
+  assert.match(html, /stopImmediatePropagation/);
+  assert.match(
+    html,
+    /\.avatar\[data-bot-id\], button\.name\[data-bot-id\]/,
+  );
   assert.match(html, /if \(currentRoomBusy\(\)\) \{/);
   assert.match(html, /await dispatchBusySend\(false\)/);
   assert.doesNotMatch(
@@ -147,6 +152,12 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(css, /\.live-steps/);
   assert.match(css, /tbody tr:nth-child\(even\) td \{ background: #303030/);
   assert.doesNotMatch(css, /tbody tr:nth-child\(even\) \{ background: #111/);
+});
+
+test("toLiveTurn omits Think when the model has not thought", () => {
+  const live = toLiveTurn("bot-1", { thinking: "", traces: [] });
+  assert.equal(live.steps.some((step) => step.name === "think"), false);
+  assert.equal(live.thinking, "");
 });
 
 test("live turn pins Think and keeps at most 5 rows", () => {

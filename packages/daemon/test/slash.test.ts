@@ -3,7 +3,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { chatTurnForBot, extraTurnSkills } from "../src/handlers.ts";
+import {
+  chatTurnForBot,
+  extraTurnSkills,
+  extraTurnSubagents,
+} from "../src/handlers.ts";
+import { listSpawnRefs } from "../src/subagent.ts";
 import { slashNames } from "../src/slash.ts";
 import { GuildStore } from "../src/store.ts";
 import { buildChatSystem } from "../src/generate.ts";
@@ -63,4 +68,26 @@ test("/slug injects an unstaffed guild skill into the turn catalog", () => {
 
   const without = chatTurnForBot(store, room.id, bot.id, [], "do the thing");
   assert.ok(!without.skills.some((item) => item.slug === "slash-only-skill"));
+});
+
+test("/explorer this turn tells the model to spawn that subagent", () => {
+  const store = new GuildStore(tempHome());
+  const bot = store.listBots()[0];
+  const room = store.listRooms().find((item) => item.kind === "channel");
+  assert.ok(bot && room);
+  const agents = listSpawnRefs(store.listLibrary("subagents"));
+  const want = extraTurnSubagents("/explorer 去找 README 缺口", agents);
+  assert.ok(want.some((item) => item.slug === "explorer"));
+  const turn = chatTurnForBot(
+    store,
+    room.id,
+    bot.id,
+    [],
+    "/explorer 去找 README 缺口",
+  );
+  assert.ok(turn.wantSpawn.some((item) => item.slug === "explorer"));
+  const system = buildChatSystem(turn);
+  assert.match(system, /available_subagents/);
+  assert.match(system, /\/explorer/);
+  assert.match(system, /Call spawn with that exact name first/);
 });

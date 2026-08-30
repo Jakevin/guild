@@ -601,15 +601,23 @@ export async function handleRequest(
       json(
         res,
         200,
-        deleteRoomMessage(store, channelMessageOne[1], channelMessageOne[2]),
+        deleteRoomMessage(
+          store,
+          decodeURIComponent(channelMessageOne[1]),
+          decodeURIComponent(channelMessageOne[2]),
+        ),
       );
       return;
     }
 
     const dmMessageOne = path.match(/^\/dms\/([^/]+)\/messages\/([^/]+)$/);
     if (dmMessageOne && method === "DELETE") {
-      const room = openDm(store, dmMessageOne[1]);
-      json(res, 200, deleteRoomMessage(store, room.id, dmMessageOne[2]));
+      const room = openDm(store, decodeURIComponent(dmMessageOne[1]));
+      json(
+        res,
+        200,
+        deleteRoomMessage(store, room.id, decodeURIComponent(dmMessageOne[2])),
+      );
       return;
     }
 

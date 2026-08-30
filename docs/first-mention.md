@@ -10,7 +10,7 @@ Repo: https://github.com/Jakevin/guild · `v0.2.1`
 
 ## You need
 
-Node ≥ 22.19, pnpm 10.x, and a model (Ollama, an API key, or a subscription: ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter). Without a model they can ack; they cannot think.
+Node ≥ 22.19, pnpm 10.x, and a model (Ollama, an API key, or a subscription: ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter / Kimi Code / Pi Radius). Without a model they can ack; they cannot think.
 
 ## 1. Open the hall
 

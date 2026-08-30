@@ -8,12 +8,13 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css" />
+    <link rel="stylesheet" href="/chat.css?v=quest-board" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
-    <aside class="sidebar">
+    <div class="nav-scrim" id="nav-scrim" hidden></div>
+    <aside class="sidebar" id="nav-drawer">
       <div class="side-top">
         <input class="search" id="filter" placeholder="搜尋" data-i18n-placeholder="search" />
       </div>
@@ -37,6 +38,9 @@
     </aside>
     <section class="pane">
       <header class="pane-head">
+        <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-drawer" data-i18n-aria="nav.menu" aria-label="選單">
+          <span class="nav-toggle-bars" aria-hidden="true"></span>
+        </button>
         <button type="button" class="head-id" id="head-id">
           <span class="avatar sm" id="head-av">G</span>
           <h1 id="title">general</h1>
@@ -58,7 +62,15 @@
         </div>
         </div>
       </header>
-      <div class="thread" id="thread"></div>
+      <div class="thread-wrap">
+        <div class="thread" id="thread"></div>
+        <nav class="prompt-rail" id="prompt-rail" hidden aria-label="你發過的位置" data-i18n-aria="promptRail"></nav>
+        <button type="button" class="jump-bottom" id="jump-bottom" hidden title="滾到最新" aria-label="滾到最新" data-i18n-title="jumpBottom" data-i18n-aria="jumpBottom">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6.5 8 10.5 12 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
       <form class="composer" id="composer">
         <div class="composer-card" data-drop-hint="放到這裡" data-i18n-drop="attach.drop">
           <div class="mention-pop" id="mention-pop" hidden>
@@ -316,9 +328,18 @@
       function initials(name) {
         const parts = String(name).replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/);
         if (parts[0] && /[A-Za-z]/.test(parts[0][0])) {
-          return parts.slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+          const letters = parts.slice(0, 2).map((p) => p[0]).filter(Boolean);
+          if (
+            letters.length === 2 &&
+            /[A-Za-z]/.test(letters[0]) &&
+            /[A-Za-z]/.test(letters[1])
+          ) {
+            return letters.join("").toUpperCase();
+          }
+          return letters[0].toUpperCase();
         }
-        return String(name).slice(0, 2);
+        const glyph = Array.from(String(name).replace(/\s+/g, ""))[0] || "?";
+        return glyph;
       }
       function escapeHtml(value) {
         return String(value)
@@ -972,8 +993,12 @@
         toastTimer = setTimeout(() => el.classList.remove("on"), ms || 1600);
       }
       let steerAckTimer = 0;
-      function flashSteerAck() {
-        showToast(t("steer.done"), 2200);
+      function flashSteerAck(botIds) {
+        const who = queueTargetLabel({ botIds: botIds || [] });
+        showToast(
+          who ? t("steer.tagTo", { who: who }) : t("steer.done"),
+          2200,
+        );
       }
       function syncSendButton() {
         const send = document.getElementById("send");
@@ -1487,6 +1512,7 @@
         if (name === "skill") return t("skill");
         if (name === "image_gen") return t("imageGen");
         if (name === "steer") return t("steer.live");
+        if (name === "handoff") return t("handoff");
         return toolTitle(name);
       }
       function liveStepsHtml(steps) {
@@ -1723,9 +1749,8 @@
         });
         const thread = document.getElementById("thread");
         if (!thread) return;
-        const nearBottom =
-          thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
-        if (nearBottom) thread.scrollTop = thread.scrollHeight;
+        if (threadNearBottom(thread)) thread.scrollTop = thread.scrollHeight;
+        syncThreadChrome();
       }
       async function pollLive(gen) {
         const room = currentRoomBusy() ? currentRoomRef() : state.busyRoom;
@@ -1737,6 +1762,7 @@
           if (!res.ok || state.liveGen !== gen) return;
           const lives = liveTurnsFrom(body);
           if (!lives.length) {
+            if (state.posting) return;
             mergeLiveTraj(body);
             applyLiveTurns([], room);
             if (!roomLiveTurns(room).length) {
@@ -1755,11 +1781,113 @@
             .map((row) => Date.parse(row.startedAt || ""))
             .find((at) => Number.isFinite(at));
           if (Number.isFinite(firstStart)) state.busySince = firstStart;
+          if (sameRoom(room, currentRoomRef())) {
+            await loadMessages({ resume: false, merge: true }).catch(() => {});
+          }
           paintLiveSteps();
           mergeLiveTraj(body);
         } catch {
           /* poll is best-effort while the POST is in flight */
         }
+      }
+      function threadNearBottom(el) {
+        const thread = el || document.getElementById("thread");
+        if (!thread) return true;
+        return thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
+      }
+      function scrollThreadBottom() {
+        const thread = document.getElementById("thread");
+        if (!thread) return;
+        thread.scrollTop = thread.scrollHeight;
+        syncThreadChrome();
+      }
+      function syncJumpBottom() {
+        const btn = document.getElementById("jump-bottom");
+        const thread = document.getElementById("thread");
+        if (!btn || !thread) return;
+        btn.hidden = threadNearBottom(thread);
+      }
+      function youPromptPreview(el) {
+        const bubble = el && el.querySelector(".bubble");
+        return String(bubble ? bubble.textContent : "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 72);
+      }
+      function markActivePrompt() {
+        const thread = document.getElementById("thread");
+        const rail = document.getElementById("prompt-rail");
+        if (!thread || !rail || rail.hidden) return;
+        const you = [...thread.querySelectorAll("article.msg.you[data-id]")];
+        if (!you.length) return;
+        const view = thread.scrollTop + thread.clientHeight * 0.35;
+        let active = you[0];
+        for (let i = 0; i < you.length; i++) {
+          if (you[i].offsetTop <= view) active = you[i];
+          else break;
+        }
+        const id = active ? active.getAttribute("data-id") : "";
+        rail.querySelectorAll(".prompt-tick").forEach((btn) => {
+          btn.classList.toggle("on", btn.getAttribute("data-prompt-jump") === id);
+        });
+      }
+      function syncPromptRail() {
+        const rail = document.getElementById("prompt-rail");
+        const thread = document.getElementById("thread");
+        if (!rail || !thread) return;
+        const you = [...thread.querySelectorAll("article.msg.you[data-id]")];
+        const overflow = thread.scrollHeight > thread.clientHeight + 24;
+        if (!overflow || !you.length) {
+          rail.hidden = true;
+          rail.innerHTML = "";
+          return;
+        }
+        rail.hidden = false;
+        const total = Math.max(1, thread.scrollHeight);
+        const track = Math.max(1, rail.clientHeight || thread.clientHeight);
+        rail.innerHTML = you
+          .map((el) => {
+            const id = el.getAttribute("data-id") || "";
+            const preview = youPromptPreview(el);
+            const top = Math.max(
+              6,
+              Math.min(track - 6, ((el.offsetTop + el.offsetHeight / 2) / total) * track),
+            );
+            return (
+              '<button type="button" class="prompt-tick" data-prompt-jump="' +
+              escapeHtml(id) +
+              '" style="top:' +
+              top +
+              'px"' +
+              (preview
+                ? ' data-preview="' + escapeHtml(preview) + '"'
+                : "") +
+              ' aria-label="' +
+              escapeHtml(t("promptJump") + (preview ? " · " + preview : "")) +
+              '"></button>'
+            );
+          })
+          .join("");
+        markActivePrompt();
+      }
+      function syncThreadChrome() {
+        syncJumpBottom();
+        syncPromptRail();
+      }
+      function jumpToYouMessage(id) {
+        const thread = document.getElementById("thread");
+        if (!thread || !id) return;
+        const el = thread.querySelector(
+          'article.msg.you[data-id="' + CSS.escape(id) + '"]',
+        );
+        if (!el) return;
+        thread.scrollTop = Math.max(0, el.offsetTop - 16);
+        thread.querySelectorAll("article.msg.you.is-jump").forEach((row) => {
+          row.classList.remove("is-jump");
+        });
+        el.classList.add("is-jump");
+        window.setTimeout(() => el.classList.remove("is-jump"), 900);
+        syncThreadChrome();
       }
       function threadMessages() {
         const queued = currentQueue().map((item) => ({
@@ -1768,16 +1896,24 @@
           body: composeSendBody(item.raw),
           replyTo: item.replyTo || undefined,
           queued: true,
+          botIds: item.botIds || [],
+          assigneeId: item.assigneeId || "",
           createdAt: item.createdAt,
         }));
         return (state.messages || []).concat(queued);
       }
-      function renderThread() {
+      function renderThread(opts) {
         const root = document.getElementById("thread");
+        const fromBottom = root ? root.scrollHeight - root.scrollTop : 0;
+        const pin =
+          Boolean(opts && opts.pinBottom) ||
+          !root ||
+          fromBottom <= root.clientHeight + 80;
         const rows = threadMessages();
         if (!rows.length && !currentRoomBusy()) {
           root.innerHTML =
             '<div class="empty-thread">' + t("noMessages") + "</div>";
+          syncThreadChrome();
           return;
         }
         root.innerHTML =
@@ -1809,11 +1945,7 @@
                 : you
                   ? replyQuoteHtml(msg) +
                     youAttachHtml(msg) +
-                    (msg.queued
-                      ? '<p class="steer-tag waiting">' + t("steer.waiting") + "</p>"
-                      : msg.steer
-                        ? '<p class="steer-tag">' + t("steer.tag") + "</p>"
-                        : "") +
+                    youSteerHtml(msg) +
                     '<p class="bubble">' +
                     formatYouBody(msg.body, msg.attachments) +
                     "</p>"
@@ -1922,9 +2054,12 @@
         if (editBox) {
           editBox.focus();
           editBox.setSelectionRange(editBox.value.length, editBox.value.length);
-        } else {
+        } else if (pin) {
           root.scrollTop = root.scrollHeight;
+        } else {
+          root.scrollTop = Math.max(0, root.scrollHeight - fromBottom);
         }
+        syncThreadChrome();
         hydrateHtmlPreviews(root);
       }
       function hydrateHtmlPreviews(root) {
@@ -2057,6 +2192,81 @@
           (item) => item.room.kind === state.kind && item.room.id === state.id,
         );
       }
+      function queueTargetBots(item) {
+        const ids = [];
+        const push = (id) => {
+          if (id && ids.indexOf(id) < 0) ids.push(id);
+        };
+        ((item && item.botIds) || []).forEach(push);
+        if (item && item.assigneeId) push(item.assigneeId);
+        if (item && item.steerBotId) push(item.steerBotId);
+        return ids.map((id) => botById(id)).filter(Boolean);
+      }
+      function queueTargetLabel(item) {
+        return queueTargetBots(item)
+          .map((bot) => "@" + bot.handle)
+          .join(" ");
+      }
+      function queueWaitingText(item) {
+        const who = queueTargetLabel(item);
+        return who
+          ? t("steer.waitingTo", { who: who })
+          : t("steer.waiting");
+      }
+      function youSteerHtml(msg) {
+        if (!msg) return "";
+        if (msg.queued) {
+          return (
+            '<p class="steer-tag waiting">' + queueWaitingText(msg) + "</p>"
+          );
+        }
+        if (!msg.steer) return "";
+        const to = queueToHtml(msg);
+        const who = queueTargetLabel(msg);
+        return (
+          '<p class="steer-tag">' +
+          (to
+            ? escapeHtml(t("steer.inserted")) + " " + to
+            : escapeHtml(who ? t("steer.tagTo", { who: who }) : t("steer.tag"))) +
+          "</p>"
+        );
+      }
+      function noteSteerOnLive(botIds, text) {
+        const preview = String(text || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 120);
+        const ids = (botIds || []).filter(Boolean);
+        if (!ids.length) return;
+        (state.lives || []).forEach((row) => {
+          if (!row || ids.indexOf(row.botId) < 0) return;
+          const rest = (row.steps || []).filter((step) => step.name !== "steer");
+          row.steps = [
+            { name: "steer", detail: preview, running: true },
+          ].concat(rest).slice(0, 5);
+        });
+      }
+      function queueToHtml(item) {
+        const bots = queueTargetBots(item);
+        if (!bots.length) return "";
+        return (
+          '<span class="queue-to">' +
+          '<span class="queue-avs">' +
+          bots
+            .map(
+              (bot) =>
+                '<span class="queue-av" style="background:' +
+                hue(bot.handle) +
+                '">' +
+                escapeHtml(initials(bot.name)) +
+                "</span>",
+            )
+            .join("") +
+          "</span>" +
+          escapeHtml(queueTargetLabel(item)) +
+          "</span>"
+        );
+      }
       function renderQueue() {
         const root = document.getElementById("queue-chips");
         if (!root) return;
@@ -2073,10 +2283,20 @@
               .replace(/\s+/g, " ")
               .trim()
               .slice(0, 48);
+            const who = queueTargetLabel(item);
+            const title = who
+              ? queueWaitingText(item) + (preview ? " · " + preview : "")
+              : preview;
             return (
-              '<span class="queue-chip"><span class="queue-kind">' +
+              '<span class="queue-chip"' +
+              (title
+                ? ' title="' + escapeHtml(title) + '"'
+                : "") +
+              '><span class="queue-kind">' +
               t("steer.queue") +
-              "</span><span>" +
+              "</span>" +
+              queueToHtml(item) +
+              '<span class="queue-preview">' +
               escapeHtml(preview || t("steer.queue")) +
               '</span><button type="button" data-queue-del="' +
               escapeHtml(item.id) +
@@ -2121,13 +2341,35 @@
         const res = await fetch(messagesUrl());
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || "load failed");
-        state.messages = Array.isArray(body) ? body : [];
+        const incoming = Array.isArray(body) ? body : [];
+        if (opts && opts.merge) {
+          const have = {};
+          (state.messages || []).forEach((msg) => {
+            have[msg.id] = true;
+          });
+          const extras = incoming.filter((msg) => !have[msg.id]);
+          const pending = (state.messages || []).filter(
+            (msg) => String(msg.id).indexOf("pending-") === 0,
+          );
+          if (!extras.length && !pending.length) return;
+          const serverYou = incoming.filter((msg) => msg.author === "you");
+          state.messages = (state.messages || [])
+            .filter((msg) => {
+              if (String(msg.id).indexOf("pending-") === 0) {
+                return !serverYou.some((row) => row.body === msg.body);
+              }
+              return true;
+            })
+            .concat(extras);
+        } else {
+          state.messages = incoming;
+        }
         const last = state.messages[state.messages.length - 1];
         if (last && last.createdAt) {
           touchNavTime(state.kind, state.id, last.createdAt, last);
         }
         markRoomRead();
-        renderThread();
+        renderThread({ pinBottom: !(opts && opts.merge) });
         renderNav();
         if (!opts || opts.resume !== false) await resumeCurrentLive();
       }
@@ -2159,6 +2401,52 @@
           startedAt: lives[0] && lives[0].startedAt,
         });
       }
+      function isFailedAssistant(msg) {
+        if (!msg || msg.author === "you" || msg.queued) return false;
+        const text = String(msg.body || "").trim();
+        if (!text) return false;
+        if (
+          /^(connection error\.?|failed to fetch|load failed|networkerror\b.*)$/i.test(
+            text,
+          )
+        ) {
+          return true;
+        }
+        return /登入已失效|模型請求失敗|模型請求逾時|不是訂閱失效|這個 GitHub Copilot 帳號不支援|unauthorized|not logged in|econnrefused|econnreset|login failed/i.test(
+          text.slice(0, 400),
+        );
+      }
+      function dropFailedAssistant(botIds) {
+        const wanted = {};
+        (botIds || []).forEach((id) => {
+          if (id) wanted[id] = true;
+        });
+        if (!Object.keys(wanted).length) {
+          for (let i = state.messages.length - 1; i >= 0; i--) {
+            const msg = state.messages[i];
+            if (msg.author === "you" || msg.queued) continue;
+            if (isFailedAssistant(msg)) wanted[msg.author] = true;
+            break;
+          }
+        }
+        const ids = Object.keys(wanted);
+        if (!ids.length) return false;
+        const seen = {};
+        const kept = [];
+        for (let i = state.messages.length - 1; i >= 0; i--) {
+          const msg = state.messages[i];
+          if (!seen[msg.author] && wanted[msg.author] && isFailedAssistant(msg)) {
+            seen[msg.author] = true;
+            continue;
+          }
+          if (wanted[msg.author]) seen[msg.author] = true;
+          kept.push(msg);
+        }
+        kept.reverse();
+        if (kept.length === state.messages.length) return false;
+        state.messages = kept;
+        return true;
+      }
       async function deleteChatMessage(id) {
         if (!id) return;
         if (!confirm(t("msg.deleteConfirm"))) return;
@@ -2171,7 +2459,9 @@
         }
         const res = await fetch(messagesUrl(id), { method: "DELETE" });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+        if (!res.ok && res.status !== 404) {
+          throw new Error(body.error || t("deleteFailed"));
+        }
         state.messages = state.messages.filter((item) => item.id !== id);
         if (state.replyTo && state.replyTo.id === id) clearReply();
         if (state.editingId === id) state.editingId = null;
@@ -2188,12 +2478,32 @@
         }
         if (currentRoomBusy()) return;
         state.editingId = null;
-        const text = body || "";
+        const current = state.messages.find((item) => item.id === id);
+        if (current && current.author === "you") {
+          const idx = state.messages.findIndex((item) => item.id === id);
+          if (idx >= 0) state.messages = state.messages.slice(0, idx + 1);
+          renderThread();
+        }
+        const text =
+          typeof body === "string"
+            ? body
+            : current && current.author === "you"
+              ? String(current.body || "")
+              : "";
+        const botIds =
+          current && current.author !== "you" && botById(current.author)
+            ? [current.author]
+            : botsFromSend(text);
+        dropFailedAssistant(botIds);
+        renderThread();
+        const payload = {};
+        if (typeof body === "string") payload.body = body;
+        if (botIds.length === 1) payload.assigneeId = botIds[0];
         await postChat(
           messagesUrl(id) + "/retry",
-          body ? { body: body } : {},
+          payload,
           { kind: state.kind, id: state.id },
-          botsFromSend(text) || (state.kind === "dm" ? [state.id] : []),
+          botIds,
         );
       }
 
@@ -2214,6 +2524,23 @@
         syncSendButton();
       }
 
+      document.getElementById("thread").addEventListener(
+        "scroll",
+        () => {
+          syncJumpBottom();
+          markActivePrompt();
+        },
+        { passive: true },
+      );
+      window.addEventListener("resize", syncThreadChrome);
+      document.getElementById("jump-bottom").addEventListener("click", () => {
+        scrollThreadBottom();
+      });
+      document.getElementById("prompt-rail").addEventListener("click", (event) => {
+        const tick = event.target.closest("[data-prompt-jump]");
+        if (!tick) return;
+        jumpToYouMessage(tick.getAttribute("data-prompt-jump"));
+      });
       document.getElementById("thread").addEventListener("click", async (event) => {
         const fenceCopy = event.target.closest("[data-fence-copy]");
         const fenceInput = event.target.closest("[data-fence-input]");
@@ -2279,12 +2606,14 @@
           const liveStop = event.target.closest("[data-live-stop]");
           if (liveStop) {
             event.preventDefault();
+            event.stopImmediatePropagation();
             stopTurn(liveStop.getAttribute("data-live-stop"));
             return;
           }
           const liveSteer = event.target.closest("[data-live-steer]");
           if (liveSteer) {
             event.preventDefault();
+            event.stopImmediatePropagation();
             insertIntoBotTurn(liveSteer.getAttribute("data-live-steer")).catch(
               (err) => alert(err.message),
             );
@@ -2538,7 +2867,10 @@
         if (bot) showBotCard(bot, event.currentTarget);
       });
       document.getElementById("thread").addEventListener("click", (event) => {
-        const av = event.target.closest("[data-bot-id]");
+        if (event.target.closest("[data-live-stop], [data-live-steer]")) return;
+        const av = event.target.closest(
+          ".avatar[data-bot-id], button.name[data-bot-id]",
+        );
         if (!av) return;
         event.preventDefault();
         const bot = botById(av.getAttribute("data-bot-id"));
@@ -2557,10 +2889,24 @@
         if (event.target.closest("#head-id")) return;
         hideBotCard();
       });
+      function setNavOpen(on) {
+        document.body.classList.toggle("nav-open", on);
+        const scrim = document.getElementById("nav-scrim");
+        const toggle = document.getElementById("nav-toggle");
+        if (scrim) scrim.hidden = !on;
+        if (toggle) toggle.setAttribute("aria-expanded", on ? "true" : "false");
+      }
+      document.getElementById("nav-toggle").addEventListener("click", () => {
+        setNavOpen(!document.body.classList.contains("nav-open"));
+      });
+      document.getElementById("nav-scrim").addEventListener("click", () => {
+        setNavOpen(false);
+      });
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           closeHtmlZoom();
           hideBotCard();
+          setNavOpen(false);
         }
       });
       document.getElementById("html-zoom-close").addEventListener("click", () => {
@@ -3762,6 +4108,7 @@
             state.busySince = started;
           }
           if (!state.busyRoom || here) state.busyRoom = room;
+          if (sameRoom(room, currentRoomRef())) dropFailedAssistant(ids);
           if (!opts || !opts.keepLive) {
             ids.forEach((id) => {
               const have = (state.lives || []).some(
@@ -3929,6 +4276,13 @@
               body: text,
               steer: true,
               replyTo: pending.replyTo || undefined,
+              botIds: pending.botIds || [],
+              assigneeId: pending.assigneeId || "",
+              steerBotId:
+                pending.assigneeId ||
+                (pending.botIds && pending.botIds.length === 1
+                  ? pending.botIds[0]
+                  : ""),
               createdAt: new Date().toISOString(),
             },
           ]);
@@ -3962,11 +4316,24 @@
         if (body.message) {
           dropOptimistic();
           state.messages = state.messages.concat([
-            { ...body.message, steer: true },
+            {
+              ...body.message,
+              steer: true,
+              botIds: pending.botIds || [],
+              assigneeId: pending.assigneeId || "",
+              steerBotId:
+                body.message.steerBotId ||
+                pending.assigneeId ||
+                (pending.botIds && pending.botIds.length === 1
+                  ? pending.botIds[0]
+                  : ""),
+            },
           ]);
           renderThread();
         }
-        flashSteerAck();
+        noteSteerOnLive(pending.botIds, text);
+        paintLiveSteps();
+        flashSteerAck(pending.botIds);
       }
       async function dispatchBusySend(steerNow) {
         const draft = document.getElementById("draft");
@@ -5260,6 +5627,15 @@
         trajEl.hidden = false;
         trajFollow = true;
         await refreshTraj();
+        const url = liveUrl();
+        if (!url || !currentRoomBusy()) return;
+        try {
+          const res = await fetch(url);
+          const body = await res.json().catch(() => ({}));
+          if (res.ok) mergeLiveTraj(body);
+        } catch {
+          /* live merge is best-effort */
+        }
       }
       document.getElementById("traj-btn").addEventListener("click", (event) => {
         event.stopPropagation();
@@ -5303,6 +5679,7 @@
       });
       window.addEventListener("hashchange", () => {
         trajEl.hidden = true;
+        setNavOpen(false);
         openFromHash().catch((err) => alert(err.message));
       });
       Promise.all([openFromHash(), loadModelPick()])

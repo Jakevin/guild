@@ -273,6 +273,7 @@ export async function runAgentLoop(input: {
       if (!traces.length && input.nullIfNoTraces) return null;
       return { text: exhausted, traces, thinking: thinkingOf() };
     }
+    emitProgress(input.toolCtx, traces, thinkingOf());
     const asked = await input.ask({
       round,
       wrap: phase === "wrap",

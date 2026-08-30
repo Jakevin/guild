@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
-import { parseAttachments, postUserMessage } from "../src/handlers.ts";
+import {
+  parseAttachments,
+  postUserMessage,
+  retryMessage,
+} from "../src/handlers.ts";
 import { CHANNEL_ROSTER_CAP, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 import {
@@ -267,6 +271,91 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
   assert.match(html, /assigneeId/);
+});
+
+test("thread has a jump-to-latest button when scrolled up", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  const i18n = readFileSync(
+    fileURLToPath(new URL("../src/public/i18n.js", import.meta.url)),
+    "utf8",
+  );
+  assert.match(html, /id="jump-bottom"/);
+  assert.match(html, /function syncJumpBottom/);
+  assert.match(html, /function scrollThreadBottom/);
+  assert.match(html, /function threadNearBottom/);
+  assert.match(html, /thread-wrap/);
+  assert.match(html, /renderThread\(\{ pinBottom: !\(opts && opts.merge\) \}\)/);
+  assert.match(css, /\.jump-bottom/);
+  assert.match(css, /\.jump-bottom\[hidden\]/);
+  assert.match(i18n, /jumpBottom/);
+  assert.match(i18n, /滾到最新/);
+});
+
+test("thread prompt rail jumps to a user message", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  const i18n = readFileSync(
+    fileURLToPath(new URL("../src/public/i18n.js", import.meta.url)),
+    "utf8",
+  );
+  assert.match(html, /id="prompt-rail"/);
+  assert.match(html, /function syncPromptRail/);
+  assert.match(html, /function jumpToYouMessage/);
+  assert.match(html, /function markActivePrompt/);
+  assert.match(html, /data-prompt-jump/);
+  assert.match(html, /article\.msg\.you\[data-id\]/);
+  assert.match(css, /\.prompt-rail/);
+  assert.match(css, /\.prompt-tick/);
+  assert.match(css, /\.msg\.you\.is-jump/);
+  assert.match(i18n, /promptRail/);
+  assert.match(i18n, /你發過的位置/);
+});
+
+test("live poll merges finished replies while hops are still running", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  assert.match(html, /loadMessages\(\{ resume: false, merge: true \}\)/);
+  assert.match(html, /opts && opts.merge/);
+  assert.match(html, /name === "handoff"/);
+  assert.match(html, /t\("handoff"\)/);
+});
+
+test("queue chip names the bot who will receive it", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  const css = readFileSync(CHAT_CSS, "utf8");
+  const i18n = readFileSync(
+    fileURLToPath(new URL("../src/public/i18n.js", import.meta.url)),
+    "utf8",
+  );
+  assert.match(html, /function queueTargetBots/);
+  assert.match(html, /function queueTargetLabel/);
+  assert.match(html, /function queueToHtml/);
+  assert.match(html, /function queueWaitingText/);
+  assert.match(html, /steer\.waitingTo/);
+  assert.match(html, /function youSteerHtml/);
+  assert.match(html, /function noteSteerOnLive/);
+  assert.match(html, /steer\.tagTo/);
+  assert.match(html, /steerBotId/);
+  assert.match(html, /queue-to/);
+  assert.match(html, /botIds: item\.botIds \|\| \[\]/);
+  assert.match(css, /\.queue-chip \.queue-to/);
+  assert.match(css, /\.queue-av/);
+  assert.match(i18n, /steer\.waitingTo/);
+  assert.match(i18n, /排隊給 \{who\}/);
+});
+
+test("retry keeps optimistic live while POST is in flight", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  assert.match(
+    html,
+    /if \(!lives\.length\) \{\s*if \(state\.posting\) return;/,
+  );
+  assert.match(html, /typeof body === "string"/);
+  assert.match(html, /payload\.assigneeId = botIds\[0\]/);
+  assert.match(
+    html,
+    /current && current\.author !== "you" && botById\(current\.author\)/,
+  );
 });
 
 test("chat composer / picker lists guild and host skills and subagents", () => {
@@ -534,6 +623,73 @@ test("bot line-start specs hand off to each named seat in parallel", async () =>
   assert.ok(Math.max(...hopStarts) - Math.min(...hopStarts) < 80);
 });
 
+test("finished speaker drops live before handoff seats start", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("pass");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  assert.ok(marketing && design);
+  store.addMember(room.id, marketing.id);
+  store.addMember(room.id, design.id);
+  let releaseHop!: () => void;
+  const hopGate = new Promise<void>((resolve) => {
+    releaseHop = resolve;
+  });
+  const pending = postUserMessage(
+    store,
+    room.id,
+    "@marketing 把圖拆給設計",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.handle === "marketing") {
+          return {
+            body: ["先交棒。", "@design", "Goal: 四張圖"].join("\n"),
+            parts: [],
+            source: "local",
+            system: "",
+          };
+        }
+        await hopGate;
+        return {
+          body: "收到 " + input.handle,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 40; i++) {
+    if (
+      store.getLiveBotTurn(room.id, design.id) &&
+      store.listMessages(room.id).some((msg) => msg.author === marketing.id)
+    ) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(
+    store.listMessages(room.id).some((msg) => msg.author === marketing.id),
+    "marketing reply must land before hops finish",
+  );
+  assert.equal(store.getLiveBotTurn(room.id, marketing.id), null);
+  const hopLive = store.getLiveBotTurn(room.id, design.id);
+  assert.ok(hopLive);
+  assert.equal(hopLive?.steps[0]?.name, "handoff");
+  assert.match(String(hopLive?.steps[0]?.detail), /@marketing/);
+  releaseHop();
+  const done = await pending;
+  assert.equal(done.replies.length, 2);
+  assert.equal(done.replies[0].author, marketing.id);
+  assert.equal(done.replies[1].author, design.id);
+});
+
 test("bot @handle spec hands off once to that member", async () => {
   const store = new GuildStore(tempHome());
   const room = store.createChannel("spec");
@@ -745,6 +901,149 @@ test("a second bot can start while another is still live", async () => {
   release();
   const infraDone = await first;
   assert.equal(infraDone.replies[0].author, infra.id);
+});
+
+test("live turn is planted before MCP handshake", async () => {
+  const store = new GuildStore(tempHome());
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  assert.ok(rd);
+  const room = store.openDm(rd.id);
+  let releaseMcp!: () => void;
+  const mcpGate = new Promise<never[]>((resolve) => {
+    releaseMcp = () => resolve([]);
+  });
+  let releaseTurn!: () => void;
+  const turnGate = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  const pending = postUserMessage(
+    store,
+    room.id,
+    "先看這支",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcpTools: mcpGate,
+      turn: async () => {
+        await turnGate;
+        return {
+          body: "收到",
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  const t0 = Date.now();
+  for (let i = 0; i < 40; i++) {
+    if (store.getLiveBotTurn(room.id, rd.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(
+    store.getLiveBotTurn(room.id, rd.id),
+    "live bubble must appear before MCP tools list",
+  );
+  assert.ok(Date.now() - t0 < 800);
+  releaseMcp();
+  releaseTurn();
+  const done = await pending;
+  assert.equal(done.replies[0].author, rd.id);
+});
+
+test("retry of a follow-up without @mention plants live before MCP", async () => {
+  const store = new GuildStore(tempHome());
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  assert.ok(design);
+  const room = store.getRoom("channel-general");
+  assert.ok(room);
+  const first = await postUserMessage(
+    store,
+    room.id,
+    "@design 改善這個prj",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => ({
+        body: "先畫一版",
+        parts: [],
+        source: "local",
+        system: "",
+      }),
+    },
+  );
+  assert.equal(first.replies[0].author, design.id);
+  const follow = await postUserMessage(
+    store,
+    room.id,
+    "不，你這樣就少了RPG風格了",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => ({
+        body: "補上RPG",
+        parts: [],
+        source: "local",
+        system: "",
+      }),
+    },
+  );
+  assert.equal(follow.replies[0].author, design.id);
+  let releaseMcp!: () => void;
+  const mcpGate = new Promise<never[]>((resolve) => {
+    releaseMcp = () => resolve([]);
+  });
+  let releaseTurn!: () => void;
+  const turnGate = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  const pending = retryMessage(
+    store,
+    room.id,
+    follow.message.id,
+    undefined,
+    process.env,
+    undefined,
+    {
+      harvest: false,
+      mcpTools: mcpGate,
+      turn: async () => {
+        await turnGate;
+        return {
+          body: "RPG 材質補上了",
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  const t0 = Date.now();
+  for (let i = 0; i < 40; i++) {
+    if (store.getLiveBotTurn(room.id, design.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(
+    store.getLiveBotTurn(room.id, design.id),
+    "重問 must show 美術 live before MCP handshake",
+  );
+  assert.ok(Date.now() - t0 < 800);
+  releaseMcp();
+  releaseTurn();
+  const redone = await pending;
+  assert.equal(redone.replies.length, 1);
+  assert.equal(redone.replies[0].author, design.id);
 });
 
 test("abortTurn clears a leftover live row even without a controller", () => {

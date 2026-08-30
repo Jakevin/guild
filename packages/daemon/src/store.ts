@@ -51,6 +51,22 @@ export function clipNavPreview(body: string): string {
     .slice(0, NAV_PREVIEW_CAP);
 }
 
+/** Transport / login failures that should not stay in the thread once a new turn starts. */
+export function isFailedAssistantReply(body: string): boolean {
+  const text = String(body || "").trim();
+  if (!text) return false;
+  if (
+    /^(connection error\.?|failed to fetch|load failed|networkerror\b.*)$/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  return /登入已失效|模型請求失敗|模型請求逾時|不是訂閱失效|這個 GitHub Copilot 帳號不支援|unauthorized|not logged in|econnrefused|econnreset|login failed/i.test(
+    text.slice(0, 400),
+  );
+}
+
 export function defaultDataDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.GUILD_HOME ?? join(homedir(), ".guild");
 }
@@ -289,6 +305,16 @@ export class GuildStore {
   clearLiveTurn(roomId: string): void {
     this.liveTurns.delete(roomId);
     this.pendingSteers.delete(roomId);
+  }
+
+  dropLiveBotTurn(roomId: string, botId: string): void {
+    const live = this.liveTurns.get(roomId);
+    if (!live) return;
+    live.delete(botId);
+    if (live.size === 0) this.liveTurns.delete(roomId);
+    const steers = this.pendingSteers.get(roomId);
+    steers?.delete(botId);
+    if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
   }
 
   getLiveTurn(roomId: string): LiveTurn | null {
@@ -887,6 +913,7 @@ export class GuildStore {
     attachments?: ChatAttachment[],
     usage?: ChatUsage,
     steer?: boolean,
+    steerBotId?: string,
   ): ChatMessage {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
@@ -906,6 +933,7 @@ export class GuildStore {
       createdAt: startedAt || now,
       ...(author !== "you" ? { finishedAt: now } : {}),
       ...(steer ? { steer: true } : {}),
+      ...(steer && steerBotId ? { steerBotId } : {}),
     };
     this.db.appendMessage(message);
     return message;
@@ -938,6 +966,18 @@ export class GuildStore {
     });
     if (!next) throw new StoreError(404, "message not found");
     return next;
+  }
+
+  dropLastFailedReply(roomId: string, botId: string): ChatMessage | null {
+    if (!botId || !this.getRoom(roomId)) return null;
+    const messages = this.listMessages(roomId);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const item = messages[i];
+      if (item.author !== botId) continue;
+      if (!isFailedAssistantReply(item.body)) return null;
+      return this.db.deleteMessage(roomId, item.id);
+    }
+    return null;
   }
 
   deleteMessage(roomId: string, messageId: string): ChatMessage {

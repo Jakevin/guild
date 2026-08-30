@@ -190,6 +190,7 @@ test("chat page has a Channel.md editor for channels", () => {
   assert.doesNotMatch(html, /channel-md-btn/);
   assert.match(html, /id="head-av"/);
   assert.match(html, /id="head-id"/);
+  assert.match(html, /id="nav-toggle"/);
   assert.match(html, /openChannelMd/);
   assert.match(html, /Channel\.md/);
   assert.match(html, /\/channel\.md/);

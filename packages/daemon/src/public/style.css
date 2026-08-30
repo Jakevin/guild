@@ -17,6 +17,7 @@
   --ok: #9fdfb2;
   --err: #fca5a5;
   --radius: 14px;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 3px var(--steel);
   color: var(--text);
   background: var(--bg);
   font-family: "SF Pro Text", "PingFang TC", "Segoe UI", system-ui, sans-serif;
@@ -24,8 +25,17 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); }
+html { text-wrap: pretty; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
 
 .appbar {
   display: flex;
@@ -301,7 +311,7 @@ input, textarea, select {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-input::placeholder, textarea::placeholder { color: #6f6f6f; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
 textarea { min-height: 5rem; }
 textarea.body {
   min-height: 9.5rem;
@@ -512,13 +522,13 @@ button:disabled { opacity: 0.45; }
   padding: 0.1rem 0.48rem;
   border: 0;
   border-radius: 999px;
-  background: #222;
+  background: var(--fill);
   color: var(--muted);
   font: inherit;
   font-size: 0.72rem;
   cursor: pointer;
 }
-.mini-tag:hover { color: var(--text); background: #4a4a4a; }
+.mini-tag:hover { color: var(--text); background: var(--lift); }
 .mini-tag.on { background: var(--paper); color: var(--ink); }
 
 .more {

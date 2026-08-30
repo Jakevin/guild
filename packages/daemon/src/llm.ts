@@ -19,7 +19,6 @@ import {
   subscriptionByPicker,
 } from "./oauth.ts";
 import {
-  LLM_ROUND_TIMEOUT_MS,
   openaiTools,
   roundSignal,
   TOOL_LOOP_WRAP,

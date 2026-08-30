@@ -42,7 +42,7 @@ import {
 } from "./mention.ts";
 import { slashNames } from "./slash.ts";
 import { toHistoryItem, type HistoryItem } from "./compact.ts";
-import type { SkillRef, ToolProgress, ToolTrace } from "./tools.ts";
+import type { SkillRef, SubAgentRef, ToolProgress, ToolTrace } from "./tools.ts";
 import type { McpToolRef } from "./mcp.ts";
 
 export type TurnComplete = {
@@ -56,7 +56,7 @@ export type HandlerExtras = {
   mcp?: boolean;
   oauth?: boolean;
   harvest?: boolean;
-  mcpTools?: McpToolRef[];
+  mcpTools?: McpToolRef[] | Promise<McpToolRef[]>;
   onTurnComplete?: (turn: TurnComplete) => void;
   turn?: (input: Parameters<typeof chatReply>[0]) => Promise<ChatReply>;
 };
@@ -407,17 +407,23 @@ function handoffTargets(
   replies: ChatMessage[],
   asked: string,
   history: HistoryItem[],
-): { botId: string; asked: string; history: HistoryItem[] }[] {
+): { botId: string; fromHandle: string; asked: string; history: HistoryItem[] }[] {
   const bots = store.listBots();
   const handles = bots.map((bot) => bot.handle);
   const spoke = new Set(replies.map((row) => row.author));
-  const hops: { botId: string; asked: string; history: HistoryItem[] }[] = [];
+  const hops: {
+    botId: string;
+    fromHandle: string;
+    asked: string;
+    history: HistoryItem[];
+  }[] = [];
   const queued = new Set<string>();
   for (const reply of replies) {
     if (isBroadcastMention(reply.body)) continue;
     const names = summonedHandles(reply.body, handles);
     if (!names.length) continue;
     const from = bots.find((bot) => bot.id === reply.author);
+    const fromHandle = from?.handle || reply.author;
     const hopHistory = history.concat(
       { author: "you", body: asked },
       { author: reply.author, body: reply.body },
@@ -431,7 +437,8 @@ function handoffTargets(
       const spec = assignmentFor(reply.body, bot.handle, handles);
       hops.push({
         botId: bot.id,
-        asked: `（@${from?.handle || reply.author} 交棒給 @${bot.handle}）\n${spec}`,
+        fromHandle,
+        asked: `（@${fromHandle} 交棒給 @${bot.handle}）\n${spec}`,
         history: hopHistory,
       });
     }
@@ -638,6 +645,25 @@ export function extraTurnSkills(store: GuildStore, text: string): SkillRef[] {
   return out;
 }
 
+export function extraTurnSubagents(
+  text: string,
+  agents: SubAgentRef[],
+): SubAgentRef[] {
+  const names = new Set(slashNames(text).map((name) => name.toLowerCase()));
+  if (!names.size) return [];
+  const out: SubAgentRef[] = [];
+  const seen = new Set<string>();
+  for (const item of agents) {
+    const slug = skillLookupKey(item.slug || item.name);
+    const name = skillLookupKey(item.name);
+    if (!names.has(slug) && !names.has(name)) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(item);
+  }
+  return out;
+}
+
 function mergeSkillRefs(staffed: SkillRef[], extra: SkillRef[]): SkillRef[] {
   const seen = new Set(
     staffed.map((item) => skillLookupKey(item.slug || item.name)),
@@ -663,6 +689,8 @@ export function chatTurnForBot(
 ) {
   const detail = store.botDetail(botId);
   const room = store.getRoom(roomId);
+  const asked = slashText ?? userMessage;
+  const subagents = listSpawnRefs(store.listLibrary("subagents"));
   return {
     botName: detail.name,
     handle: detail.handle,
@@ -675,9 +703,10 @@ export function chatTurnForBot(
     model: detail.model ?? null,
     skills: mergeSkillRefs(
       staffedSkills(store, botId),
-      extraTurnSkills(store, slashText ?? userMessage),
+      extraTurnSkills(store, asked),
     ),
-    subagents: listSpawnRefs(store.listLibrary("subagents")),
+    subagents,
+    wantSpawn: extraTurnSubagents(asked, subagents),
     channelMd: channelMarkdownForRoom(store, roomId),
     botMemory: store.readBotMemory(botId),
     channelMemory:
@@ -867,6 +896,7 @@ export function steerUserMessage(
     packed,
     undefined,
     true,
+    botId,
   );
   try {
     store.appendTrajectory(roomId, [
@@ -905,12 +935,8 @@ async function generateReplies(
   const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
   const signal = store.beginTurn(roomId, targets);
-  const mcpTools =
-    extras.mcp === false
-      ? []
-      : extras.mcpTools !== undefined
-        ? extras.mcpTools
-        : await listMcpToolRefs(store.dataDir);
+  plantLiveTurns(store, roomId, targets, memberIds, onlyBotId);
+  const mcpTools = await resolveMcpTools(store, extras);
   const speak = async (
     botId: string,
     turnAsked: string,
@@ -918,11 +944,13 @@ async function generateReplies(
   ) => {
     if (!memberIds.includes(botId) && !onlyBotId) return;
     if (signal.aborted) return;
-    const startedAt = new Date().toISOString();
+    const prev = store.getLiveBotTurn(roomId, botId);
+    const startedAt = prev?.startedAt || new Date().toISOString();
+    store.dropLastFailedReply(roomId, botId);
     store.setLiveTurn(roomId, {
       botId,
-      thinking: "",
-      steps: [{ name: "think", detail: "", running: true }],
+      thinking: prev?.thinking || "",
+      steps: prev?.steps || [],
       startedAt,
     });
     let generated;
@@ -941,9 +969,24 @@ async function generateReplies(
         mcpTools,
         onProgress: (update) => {
           const prev = store.getLiveBotTurn(roomId, botId);
+          const next = toLiveTurn(botId, update);
+          const handoff = (prev?.steps || []).find((step) => step.name === "handoff");
+          const pendingSteers = store.peekSteers(roomId, botId).map((text) => ({
+            name: "steer" as const,
+            detail: text.replace(/\s+/g, " ").trim().slice(0, 120),
+            running: true,
+          }));
+          const keptSteer =
+            pendingSteers.length > 0
+              ? pendingSteers
+              : (prev?.steps || []).filter((step) => step.name === "steer");
+          const rest = next.steps.filter(
+            (step) => step.name !== "handoff" && step.name !== "steer",
+          );
           store.setLiveTurn(roomId, {
-            ...toLiveTurn(botId, update),
+            ...next,
             startedAt: prev?.startedAt || startedAt,
+            steps: [...(handoff ? [handoff] : []), ...keptSteer, ...rest].slice(0, 5),
           });
         },
         pullSteers: () => store.drainSteers(roomId, botId),
@@ -962,6 +1005,7 @@ async function generateReplies(
       undefined,
       usage,
     );
+    store.dropLiveBotTurn(roomId, botId);
     recordTurn(store, roomId, botId, generated, reply);
     replies.push(reply);
     extras.onTurnComplete?.({
@@ -1003,7 +1047,22 @@ async function generateReplies(
     );
     const hops = handoffTargets(store, memberIds, replies, asked, history);
     if (hops.length && !signal.aborted) {
-      for (const hop of hops) store.adoptTurn(roomId, hop.botId, signal);
+      const hopAt = new Date().toISOString();
+      for (const hop of hops) {
+        store.adoptTurn(roomId, hop.botId, signal);
+        store.setLiveTurn(roomId, {
+          botId: hop.botId,
+          thinking: "",
+          steps: [
+            {
+              name: "handoff",
+              detail: `@${hop.fromHandle}`,
+              running: true,
+            },
+          ],
+          startedAt: hopAt,
+        });
+      }
       await Promise.all(
         hops.map((hop) => speak(hop.botId, hop.asked, hop.history)),
       );
@@ -1063,10 +1122,19 @@ export function listRoomTrajectory(store: GuildStore, roomId: string) {
         events: synthesizeTrajectory(store.listMessages(roomId)),
       };
   const extra = liveTrajectoryForRoom(store, roomId, base.events);
+  const open = store.listLiveRoomTurns(roomId).some((turn) => {
+    const started = turn.startedAt ? Date.parse(turn.startedAt) : 0;
+    return !base.events.some(
+      (event) =>
+        event.botId === turn.botId &&
+        event.kind === "assistant" &&
+        (!started || Date.parse(event.ts) >= started),
+    );
+  });
   return {
     ...base,
     events: base.events.concat(extra),
-    live: extra.length > 0,
+    live: extra.length > 0 || open,
   };
 }
 
@@ -1088,6 +1156,37 @@ function lastBotSpeaker(
     if (author && author !== "you" && store.getBot(author)) return author;
   }
   return undefined;
+}
+
+function plantLiveTurns(
+  store: GuildStore,
+  roomId: string,
+  botIds: string[],
+  memberIds: string[],
+  onlyBotId?: string,
+): string {
+  const startedAt = new Date().toISOString();
+  for (const botId of botIds) {
+    if (!botId) continue;
+    if (!memberIds.includes(botId) && !onlyBotId) continue;
+    store.dropLastFailedReply(roomId, botId);
+    store.setLiveTurn(roomId, {
+      botId,
+      thinking: "",
+      steps: [],
+      startedAt,
+    });
+  }
+  return startedAt;
+}
+
+async function resolveMcpTools(
+  store: GuildStore,
+  extras: HandlerExtras,
+): Promise<McpToolRef[]> {
+  if (extras.mcp === false) return [];
+  if (extras.mcpTools !== undefined) return extras.mcpTools;
+  return listMcpToolRefs(store.dataDir);
 }
 
 function followBotId(
@@ -1265,6 +1364,7 @@ export async function retryMessage(
     steps: [],
     startedAt,
   });
+  const mcpTools = await resolveMcpTools(store, extras);
   let generated;
   try {
     generated = await (extras.turn ?? chatReply)({
@@ -1278,7 +1378,7 @@ export async function retryMessage(
       ),
       env,
       signal,
-      mcpTools: extras.mcp === false ? [] : extras.mcpTools,
+      mcpTools,
       onProgress: (update) => {
         const prev = store.getLiveBotTurn(roomId, current.author);
         store.setLiveTurn(roomId, {

@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL,
   finished_at TEXT,
   steer INTEGER NOT NULL DEFAULT 0,
+  steer_bot_id TEXT,
   UNIQUE (room_id, seq)
 );
 
@@ -164,6 +165,8 @@ function messageFromRow(row: Record<string, unknown>): ChatMessage {
   const finishedAt = asString(row.finished_at);
   if (finishedAt) message.finishedAt = finishedAt;
   if (asNumber(row.steer) === 1) message.steer = true;
+  const steerBotId = asString(row.steer_bot_id);
+  if (steerBotId) message.steerBotId = steerBotId;
   return message;
 }
 
@@ -207,6 +210,11 @@ export class GuildDb {
     mkdirSync(dirname(path), { recursive: true });
     this.sqlite = new DatabaseSync(path, { timeout: 5000 });
     this.sqlite.exec(SCHEMA);
+    try {
+      this.sqlite.exec("ALTER TABLE messages ADD COLUMN steer_bot_id TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
     this.sqlite.prepare(
       "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', ?)",
     ).run(SCHEMA_VERSION);
@@ -462,8 +470,8 @@ export class GuildDb {
       .prepare(
         `INSERT INTO messages (
            id, room_id, seq, author, body, parts, reply_to, attachments, usage,
-           created_at, finished_at, steer
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           created_at, finished_at, steer, steer_bot_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         message.id,
@@ -478,6 +486,7 @@ export class GuildDb {
         message.createdAt,
         message.finishedAt ?? null,
         message.steer ? 1 : 0,
+        message.steerBotId ?? null,
       );
   }
 

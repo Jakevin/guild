@@ -112,6 +112,8 @@ export type ChatMessage = {
   finishedAt?: string;
   /** Injected into a live turn (⌘/Ctrl+Enter), not a new user turn. */
   steer?: boolean;
+  /** Live bot this steer was aimed at. */
+  steerBotId?: string;
 };
 
 export type LlmApi =

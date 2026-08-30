@@ -174,6 +174,49 @@ test("Copilot Free/Student SKUs are auto-only", () => {
   assert.deepEqual(copilot?.models, [{ id: "auto", name: "Auto" }]);
 });
 
+test("Pi leftover OAuth slots are Kimi Code and Radius", () => {
+  const dataDir = tempHome();
+  const list = listSubscriptions(dataDir);
+  const ids = list.map((item) => item.id);
+  assert.ok(ids.includes("kimi-coding"));
+  assert.ok(ids.includes("radius"));
+  const kimi = list.find((item) => item.id === "kimi-coding");
+  assert.equal(kimi?.pickerId, "kimi-coding-oauth");
+  assert.equal(kimi?.flow, "device");
+  const kimiIds = (kimi?.models ?? []).map((row) => row.id);
+  assert.ok(kimiIds.includes("kimi-for-coding"));
+  assert.ok(kimiIds.includes("k3"));
+  const radius = list.find((item) => item.id === "radius");
+  assert.equal(radius?.pickerId, "radius-oauth");
+  assert.equal(radius?.flow, "device");
+  assert.deepEqual(radius?.models, []);
+});
+
+test("Radius reuses stored catalog ids before the gateway refresh", () => {
+  const dataDir = tempHome();
+  writeFileSync(
+    join(dataDir, "oauth.json"),
+    `${JSON.stringify(
+      {
+        radius: {
+          type: "oauth",
+          access: "radius-access",
+          refresh: "radius-refresh",
+          expires: Date.now() + 3600_000,
+          availableModelIds: ["pi-gpt", "pi-claude"],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const radius = listSubscriptions(dataDir).find((item) => item.id === "radius");
+  assert.deepEqual(radius?.models, [
+    { id: "pi-gpt", name: "pi-gpt" },
+    { id: "pi-claude", name: "pi-claude" },
+  ]);
+});
+
 test("xai stays ready when access is expired but refresh exists", () => {
   const dataDir = tempHome();
   writeFileSync(

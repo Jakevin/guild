@@ -40,6 +40,51 @@ test("turnTrajectoryEvents records system, tool, and assistant", () => {
   assert.match(JSON.stringify(events[3].payload), /ls/);
 });
 
+test("turnTrajectoryEvents records spawn as its own kind", () => {
+  const events = turnTrajectoryEvents({
+    turnId: "t-spawn",
+    botId: "bot-pm",
+    traces: [
+      {
+        name: "spawn",
+        args: {
+          name: "explorer",
+          description: "find README gaps",
+          prompt: "List every README that omits /slug",
+        },
+        text: "# explorer\nagent: Explorer\n\nREADME.md is missing /slug.",
+        isError: false,
+      },
+    ],
+    text: "explorer 看過了。",
+  });
+  const spawn = events.find((event) => event.kind === "spawn");
+  assert.ok(spawn);
+  assert.match(String(spawn?.summary), /explorer/);
+  assert.doesNotMatch(String(spawn?.summary), /^spawn spawn$/);
+  assert.ok(!events.some((event) => event.kind === "tool"));
+});
+
+test("empty live turn does not invent a Think event", () => {
+  const store = new GuildStore(tempHome());
+  try {
+    store.setLiveTurn("channel-general", {
+      botId: "bot-infra",
+      thinking: "",
+      startedAt: new Date().toISOString(),
+      steps: [],
+    });
+    const listed = listRoomTrajectory(store, "channel-general");
+    assert.equal(listed.live, true);
+    assert.equal(
+      listed.events.some((event) => event.live && event.kind === "thinking"),
+      false,
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test("liveTrajectoryEvents skips assistant and marks live", () => {
   const events = liveTrajectoryEvents({
     botId: "bot-pm",

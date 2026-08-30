@@ -440,16 +440,9 @@ export function throwIfAborted(ctx: ToolContext): void {
   throw err;
 }
 
-export function roundSignal(ctx: ToolContext): AbortSignal {
-  const timeout = AbortSignal.timeout(LLM_ROUND_TIMEOUT_MS);
-  if (!ctx.signal) return timeout;
-  const any = (
-    AbortSignal as typeof AbortSignal & {
-      any?: (signals: AbortSignal[]) => AbortSignal;
-    }
-  ).any;
-  if (typeof any === "function") return any.call(AbortSignal, [timeout, ctx.signal]);
-  return ctx.signal.aborted ? ctx.signal : timeout;
+/** User Stop only. No wall-clock round fuse — Pi/Codex/Hermes wait on the stream. */
+export function roundSignal(ctx: ToolContext): AbortSignal | undefined {
+  return ctx.signal;
 }
 
 export function takeSteers(ctx: ToolContext): string | null {
@@ -698,13 +691,6 @@ function loadSkill(name: string, skills: SkillRef[]): ToolOutcome {
  * This number is only a runaway fuse so a stuck tool loop cannot hang guildd.
  */
 export const MAX_TOOL_ROUNDS = 128;
-/**
- * Per LLM HTTP/stream request. Codex `DEFAULT_STREAM_IDLE_TIMEOUT_MS` = 300_000.
- * Pi documents OpenAI/Anthropic SDK default 10 minutes if timeoutMs is omitted.
- * DSH `streamIdleTimeoutMs` default is also five minutes.
- * Grok CLI `inference_idle_timeout_secs` = 600 (10 min).
- */
-export const LLM_ROUND_TIMEOUT_MS = 300_000;
 
 export const TOOL_LOOP_WRAP =
   "Stop calling tools now and write the user a final reply with what you already have. If you cannot finish, say what is still missing.";

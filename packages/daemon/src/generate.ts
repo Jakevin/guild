@@ -67,7 +67,7 @@ export function localGenerate(
     return {
       name,
       source: "local",
-      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## How you work\n1. Restate the goal in one sentence.\n2. Inspect the workspace before editing.\n3. Make the smallest change that satisfies the goal.\n4. Verify with a command or test.\n5. Summarize what changed and what is still open.\n6. Work that belongs to another seat: @handle with Goal / Done when / out of scope / files.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
+      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- Channel.md is the task. MEMORY.md is standing notes. Do not recap the whole thread.\n\n## Plan\n- One local directive: goal + done when + a short checklist. Revise it when evidence changes.\n\n## Act\n- Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
     };
   }
   if (kind === "skill") {
@@ -130,10 +130,21 @@ async function tryLlmGenerate(
   const bodyHint =
     kind === "subagent"
       ? "body must be Codex-style TOML with name, description, and developer_instructions."
-      : "body must be Markdown.";
-  const system = `You write ${TITLES[kind]} for an AI bot.
+      : kind === "agent"
+        ? `body must be Markdown with sections:
+## Memory — Channel.md is the task; MEMORY.md is standing notes; do not recap the whole thread
+## Plan — one local directive: goal, done when, short checklist
+## Act — inspect, smallest change, verify, stop; hand off other seats with a line-start @handle spec
+## Skills — catalog is availability, not a todo; call skill only when this turn matches`
+        : kind === "soul"
+          ? "body must be Markdown: voice, values, boundaries. Not an operating procedure."
+          : kind === "position"
+            ? "body must be Markdown: duties, definition of done, and a Tools sandbox: line."
+            : "body must be Markdown.";
+  const system = `You write ${TITLES[kind]} for an AI bot in Guild.
 Return JSON only: {"name": string, "body": string}.
-${bodyHint} name is a short title. Language: follow the user's prompt.`;
+${bodyHint}
+name is a short title. Keep it short. Language: follow the user's prompt.`;
   const result = await llmComplete({
     dataDir,
     env,
@@ -341,7 +352,14 @@ When work belongs to someone else, put @handle at the start of a line with a wri
 - Files or evidence
 Each line-start @handle on this quest starts that seat. Mentions in the middle of a sentence do not dispatch.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster (max ${CHANNEL_ROSTER_CAP} on a quest).
-Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.`;
+Only line-start @handle a seat the human already named this turn, or that they asked you to split the work to. Do not invent a third seat. If B must wait for A, do not @ B this turn.
+Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.
+
+Harness this turn (Memory → Plan → Skills → Act):
+- Memory: Channel.md is the task. MEMORY.md is standing notes. The compact log is working memory — do not recap the whole thread.
+- Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
+- Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
+- Act: inspect, smallest change, verify, stop. Spawn is a specialist for a bounded slice of THIS seat's job (explore / review / implement) with a fresh context. Do not spawn to do another staffed bot's job — @handle them instead.`;
 
 export function buildChatSystem(input: {
   botName: string;
@@ -351,12 +369,14 @@ export function buildChatSystem(input: {
   position: string;
   skills?: SkillRef[];
   subagents?: SubAgentRef[];
+  wantSpawn?: SubAgentRef[];
   channelMd?: string;
   botMemory?: string;
   channelMemory?: string;
 }): string {
   const skills = input.skills ?? [];
   const subagents = input.subagents ?? [];
+  const wantSpawn = input.wantSpawn ?? [];
   const skillLine = skills.length
     ? [
         "<system-reminder>",
@@ -391,7 +411,14 @@ export function buildChatSystem(input: {
         }),
         "</available_subagents>",
         "Call spawn with the exact name (or slug) and a self-contained prompt. If the user writes /name matching a subagent, spawn that one. The child has a fresh context and returns a summary.",
-      ].join("\n")
+        wantSpawn.length
+          ? `This turn the user invoked ${wantSpawn
+              .map((item) => "`/" + (item.slug || item.name) + "`")
+              .join(", ")}. Call spawn with that exact name first, with a self-contained prompt covering their request. Do not skip this and do the work yourself.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
     : "";
   const channel = (input.channelMd ?? "").trim();
   const channelBlock = channel
@@ -437,6 +464,7 @@ export async function chatReply(input: {
   model?: ModelRef | null;
   skills?: SkillRef[];
   subagents?: SubAgentRef[];
+  wantSpawn?: SubAgentRef[];
   channelMd?: string;
   botMemory?: string;
   channelMemory?: string;
@@ -459,6 +487,7 @@ export async function chatReply(input: {
     position: input.position,
     skills: input.skills ?? [],
     subagents: input.subagents ?? [],
+    wantSpawn: input.wantSpawn ?? [],
     channelMd: input.channelMd,
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
@@ -500,6 +529,7 @@ async function tryChatLlm(
     userMessage: string;
     skills?: SkillRef[];
     subagents?: SubAgentRef[];
+    wantSpawn?: SubAgentRef[];
     channelMd?: string;
     botMemory?: string;
     channelMemory?: string;
@@ -526,6 +556,7 @@ async function tryChatLlm(
     position: input.position,
     skills,
     subagents: input.subagents ?? [],
+    wantSpawn: input.wantSpawn ?? [],
     channelMd: input.channelMd,
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,

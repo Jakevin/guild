@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { GUILD_DB_FILE } from "../src/db.ts";
-import { GuildStore } from "../src/store.ts";
+import { GuildStore, isFailedAssistantReply } from "../src/store.ts";
 
 function tempHome(): string {
   return mkdtempSync(join(tmpdir(), "guild-messages-"));
@@ -57,6 +57,35 @@ test("deleteMessage removes one row and leaves the rest", () => {
     /message not found/,
   );
   store.close();
+});
+
+test("new turn drops that bot's last failed reply", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  try {
+    const design = store.listBots().find((bot) => bot.handle === "design");
+    assert.ok(design);
+    assert.equal(isFailedAssistantReply("Connection error."), true);
+    assert.equal(isFailedAssistantReply("Failed to fetch"), true);
+    assert.equal(isFailedAssistantReply("here are the stills"), false);
+    store.appendMessage("channel-general", "you", "make stills");
+    store.appendMessage("channel-general", design.id, "Connection error.");
+    store.appendMessage("channel-general", "you", "try again");
+    const removed = store.dropLastFailedReply("channel-general", design.id);
+    assert.equal(removed?.body, "Connection error.");
+    assert.deepEqual(
+      store.listMessages("channel-general").map((item) => item.body),
+      ["make stills", "try again"],
+    );
+    store.appendMessage("channel-general", design.id, "here are the stills");
+    assert.equal(store.dropLastFailedReply("channel-general", design.id), null);
+    assert.equal(
+      store.listMessages("channel-general").at(-1)?.body,
+      "here are the stills",
+    );
+  } finally {
+    store.close();
+  }
 });
 
 test("legacy jsonl and json import into sqlite then drop files", () => {
