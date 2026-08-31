@@ -7,6 +7,9 @@
   <meta name="description" content="A local guild of adventurers. @mention the one you actually want. Not another omniscient chat. This page is a fixture preview — no model, no tools." />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
       --enamel: #0B0E12;
@@ -25,125 +28,255 @@
       --infra: #5b8def;
       --pm: #2ea887;
       --rd: #e07a3d;
-      --design: #e07a3d;
+      --design: #7c6af7;
       --marketing: #d4537e;
       --focus: 0 0 0 2px var(--enamel), 0 0 0 3px var(--steel);
+      --max: 1120px;
+      --gutter: clamp(18px, 4vw, 48px);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
-    body {
-      font: 15px/1.5 "SF Pro Text", "PingFang TC", "Segoe UI", system-ui, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(90% 50% at 50% -10%, #1A222C 0%, transparent 55%),
-        var(--enamel);
+    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
     }
-    a { color: var(--steel); }
+    body {
+      font: 16px/1.55 "IBM Plex Sans", "PingFang TC", "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--enamel);
+    }
+    a { color: var(--steel); text-underline-offset: 3px; }
     a:hover { color: var(--paper); }
     button:focus-visible, a:focus-visible, textarea:focus-visible {
       outline: none;
       box-shadow: var(--focus);
     }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 20px 18px 64px; }
-    header.top {
+    .skip {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 8px 12px;
+      z-index: 20;
+    }
+    .skip:focus { left: 8px; }
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
+      gap: 14px;
+      padding: 14px var(--gutter);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--enamel) 88%, transparent);
+      backdrop-filter: blur(12px);
     }
-    header.top img { width: 48px; height: 48px; }
-    header.top .brand { font-weight: 700; letter-spacing: .02em; }
-    header.top nav { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+    .nav img { width: 36px; height: 36px; flex: none; }
+    .nav .brand {
+      font-family: Syne, "IBM Plex Sans", sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      font-size: 18px;
+    }
+    .nav .ver {
+      color: var(--muted);
+      font: 12px/1.3 "IBM Plex Mono", ui-monospace, monospace;
+      margin-left: 2px;
+    }
+    .nav nav {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 14px;
       border: 1px solid var(--line);
-      background: var(--lift);
+      background: transparent;
       color: var(--text);
-      border-radius: 8px;
-      padding: 8px 12px;
       text-decoration: none;
-      font: inherit;
+      font: 14px/1 "IBM Plex Sans", sans-serif;
       cursor: pointer;
+      border-radius: 0;
     }
+    .btn:hover { border-color: var(--steel); color: var(--paper); }
     .btn.primary {
       background: var(--paper);
       color: var(--ink);
       border-color: var(--paper);
-      font-weight: 650;
+      font-weight: 600;
     }
-    .btn.primary:hover { filter: brightness(1.05); }
-    .banner {
-      border: 1px solid color-mix(in srgb, var(--signal) 45%, var(--line));
-      background: color-mix(in srgb, var(--signal) 10%, var(--panel));
-      color: var(--paper);
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 13px;
-      margin-bottom: 22px;
+    .btn.primary:hover { filter: brightness(1.06); color: var(--ink); }
+    .hero {
+      padding: clamp(48px, 12vh, 120px) var(--gutter) 36px;
+      max-width: calc(var(--max) + var(--gutter) * 2);
+      margin: 0 auto;
     }
-    .banner strong { color: var(--signal); }
-    h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
-    .lead { color: var(--muted); margin: 0 0 16px; max-width: 42rem; }
-    .hero-gif {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      overflow: hidden;
-      background: var(--panel);
-      margin: 0 0 14px;
+    .kicker {
+      font: 12px/1.3 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--steel);
+      margin: 0 0 18px;
     }
-    .hero-gif img { display: block; width: 100%; height: auto; }
-    .cta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 36px; }
-    h2 {
+    h1 {
+      font-family: Syne, "IBM Plex Sans", sans-serif;
+      font-size: clamp(2.35rem, 7.2vw, 5.1rem);
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      line-height: 0.94;
+      margin: 0 0 22px;
+      text-wrap: balance;
+      max-width: 16ch;
+    }
+    .lead {
+      color: var(--muted);
       font-size: 18px;
-      margin: 36px 0 10px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--line);
+      line-height: 1.5;
+      max-width: 38rem;
+      margin: 0 0 28px;
+      text-wrap: pretty;
     }
-    p { margin: 0 0 10px; }
-    .note { color: var(--muted); font-size: 13px; }
-    .hall {
-      display: grid;
-      grid-template-columns: 220px 1fr;
-      gap: 12px;
-      align-items: stretch;
+    .lead code, p code, td code, .note code, .banner code {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 0.9em;
+      color: var(--paper);
     }
-    @media (max-width: 760px) {
-      .hall { grid-template-columns: 1fr; }
-      h1 { font-size: 22px; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 28px; }
+    .banner {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      max-width: 42rem;
+      padding: 12px 0;
+      border-top: 1px solid color-mix(in srgb, var(--signal) 45%, var(--line));
+      border-bottom: 1px solid color-mix(in srgb, var(--signal) 45%, var(--line));
+      font-size: 14px;
+      color: var(--text);
     }
-    .rail, .pane, .soul {
-      background: var(--panel);
+    .banner strong {
+      color: var(--signal);
+      font-weight: 600;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .stage {
+      padding: 0 var(--gutter) 8px;
+      max-width: calc(var(--max) + var(--gutter) * 2);
+      margin: 0 auto 8px;
+    }
+    .stage figure {
+      margin: 0;
       border: 1px solid var(--line);
-      border-radius: 12px;
-      min-width: 0;
+      background: var(--panel);
+      position: relative;
     }
-    .rail { padding: 12px; }
+    .stage figure::before,
+    .stage figure::after,
+    .hall-frame::before,
+    .hall-frame::after {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #F4F5F7 0 22%, #8B909A 55%, #6E747E 100%);
+      box-shadow: 0 0 0 1px #3A3F46;
+      z-index: 1;
+    }
+    .stage figure::before, .hall-frame::before { top: 8px; left: 8px; }
+    .stage figure::after, .hall-frame::after { top: 8px; right: 8px; }
+    .rivets {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+    }
+    .rivets i {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #F4F5F7 0 22%, #8B909A 55%, #6E747E 100%);
+      box-shadow: 0 0 0 1px #3A3F46;
+    }
+    .rivets i:nth-child(1) { bottom: 8px; left: 8px; }
+    .rivets i:nth-child(2) { bottom: 8px; right: 8px; }
+    .stage img { display: block; width: 100%; height: auto; }
+    .stage figcaption {
+      padding: 10px 16px 12px;
+      font: 12px/1.4 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+    section.block {
+      padding: clamp(48px, 8vh, 88px) var(--gutter) 0;
+      max-width: calc(var(--max) + var(--gutter) * 2);
+      margin: 0 auto;
+    }
+    h2 {
+      font-family: Syne, "IBM Plex Sans", sans-serif;
+      font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin: 0 0 12px;
+      text-wrap: balance;
+    }
+    .note { color: var(--muted); font-size: 15px; margin: 0 0 22px; max-width: 42rem; text-wrap: pretty; }
+    .hall-frame {
+      position: relative;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      min-height: 520px;
+    }
+    @media (max-width: 820px) {
+      .hall-frame { grid-template-columns: 1fr; min-height: 0; }
+      h1 { max-width: none; }
+    }
+    .rail {
+      padding: 28px 16px 16px;
+      border-right: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--steel) 6%, transparent), transparent 28%),
+        var(--panel);
+    }
+    @media (max-width: 820px) { .rail { border-right: 0; border-bottom: 1px solid var(--line); } }
     .rail h3 {
-      margin: 0 0 8px;
-      font-size: 11px;
-      letter-spacing: .16em;
+      margin: 0 0 12px;
+      font: 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--steel);
     }
     .seat {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       width: 100%;
+      min-height: 44px;
       text-align: left;
       background: transparent;
       border: 1px solid transparent;
       color: inherit;
       font: inherit;
-      padding: 7px 6px;
-      border-radius: 8px;
+      padding: 6px 8px;
       cursor: pointer;
     }
-    .seat:hover, .seat.on { background: var(--lift); border-color: var(--line); }
-    .seat small { display: block; color: var(--muted); font-size: 12px; }
+    .seat:hover { background: var(--lift); }
+    .seat.on {
+      background: var(--lift);
+      border-color: color-mix(in srgb, var(--signal) 55%, var(--line));
+    }
+    .seat small { display: block; color: var(--muted); font: 12px/1.3 "IBM Plex Mono", ui-monospace, monospace; }
     .av {
       width: 28px; height: 28px; border-radius: 50%;
       display: grid; place-items: center;
@@ -151,121 +284,230 @@
       border: 2px solid #8B909A;
       flex: none;
     }
-    .pane { display: flex; flex-direction: column; min-height: 420px; }
+    .pane { display: flex; flex-direction: column; min-width: 0; min-height: 420px; }
     .pane-head {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; border-bottom: 1px solid var(--line);
-      font-weight: 650;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      font: 13px/1 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--steel);
     }
+    .pane-head b { color: var(--text); font-weight: 600; }
     .thread {
       flex: 1;
-      padding: 12px;
+      padding: 16px;
       overflow: auto;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      min-height: 240px;
+      gap: 12px;
+      min-height: 260px;
+      background: var(--enamel);
     }
     .msg { display: flex; gap: 8px; align-items: flex-start; }
     .msg.you { flex-direction: row-reverse; }
     .bubble {
       background: var(--bubble);
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 8px 10px;
+      padding: 8px 11px;
       max-width: 86%;
+      font-size: 14.5px;
     }
     .msg.you .bubble { background: var(--you); }
-    .bubble .who { font-size: 12px; color: var(--steel); margin-bottom: 2px; }
+    .bubble .who {
+      font: 11px/1.3 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--steel);
+      margin-bottom: 3px;
+    }
     .composer {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 10px 12px; border-top: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 14px 14px;
+      border-top: 1px solid var(--line);
     }
     .chip {
       border: 1px solid var(--line);
       background: var(--fill);
       color: var(--text);
-      border-radius: 999px;
-      padding: 6px 10px;
-      font: inherit;
+      padding: 8px 12px;
+      min-height: 40px;
+      font: 13px/1.3 "IBM Plex Mono", ui-monospace, monospace;
       cursor: pointer;
     }
-    .chip:hover { border-color: var(--steel); }
-    .chip[disabled] { opacity: .45; cursor: not-allowed; }
-    .soul { padding: 12px; }
-    .soul label { display: block; font-size: 12px; color: var(--steel); margin-bottom: 6px; }
+    .chip:hover { border-color: var(--steel); color: var(--paper); }
+    .soul {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px 16px 14px;
+    }
+    .soul label {
+      display: block;
+      font: 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--steel);
+      margin-bottom: 10px;
+    }
     .soul textarea {
       width: 100%;
-      min-height: 96px;
+      min-height: 108px;
       resize: vertical;
-      background: var(--fill);
+      background: var(--enamel);
       color: var(--text);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px;
-      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      padding: 10px 12px;
+      font: 13px/1.45 "IBM Plex Mono", ui-monospace, monospace;
     }
-    .soul .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-    pre.pipe {
-      margin: 0 0 12px;
-      padding: 12px;
-      background: var(--fill);
+    .soul .row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 22px;
+    }
+    .cell {
       border: 1px solid var(--line);
-      border-radius: 10px;
-      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--panel);
+      padding: 12px 14px;
+      font: 13px/1.3 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--paper);
+    }
+    .cell em {
+      display: block;
+      font-style: normal;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+      letter-spacing: 0.04em;
+    }
+    .arrow { color: var(--steel); font: 16px "IBM Plex Mono", monospace; }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--line);
+      margin: 0 0 18px;
+    }
+    .split > div { padding: 16px 18px; }
+    .split > div + div { border-left: 1px solid var(--line); }
+    @media (max-width: 760px) {
+      .split { grid-template-columns: 1fr; }
+      .split > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    }
+    .split h3 {
+      margin: 0 0 8px;
+      font: 12px/1 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--steel);
+    }
+    .split p { margin: 0; color: var(--muted); font-size: 14px; }
+    .term {
+      position: relative;
+      border: 1px solid var(--line);
+      background: var(--fill);
+      margin: 0 0 18px;
+    }
+    .term header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      font: 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--steel);
+    }
+    .term pre {
+      margin: 0;
+      padding: 16px 18px 18px;
+      font: 13.5px/1.55 "IBM Plex Mono", ui-monospace, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
-    ol.steps { padding-left: 20px; }
-    ol.steps li { margin: 0 0 8px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 12px; }
-    th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
-    th { background: var(--lift); }
-    footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
-    kbd {
-      font: 12px ui-monospace, Menlo, monospace;
-      background: var(--fill);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      padding: 0 5px;
+    .limits {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14.5px;
+      margin: 0 0 16px;
+    }
+    .limits th, .limits td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 8px 12px 0;
+      text-align: left;
+      vertical-align: top;
+    }
+    .limits th {
+      font: 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--steel);
+      font-weight: 500;
+      width: 28%;
+    }
+    footer {
+      margin-top: 72px;
+      padding: 22px var(--gutter) 40px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      justify-content: space-between;
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="top">
-      <img src="mark.svg" width="48" height="48" alt="Guild" />
-      <div>
-        <div class="brand">Guild</div>
-        <div class="note">v0.2.8 · local-first</div>
-      </div>
-      <nav>
-        <a class="btn" href="https://github.com/Jakevin/guild">GitHub</a>
-        <a class="btn primary" href="https://github.com/Jakevin/guild#open-the-hall">Run locally</a>
-      </nav>
-    </header>
-
-    <div class="banner" role="status">
-      <strong>Interactive preview — no model calls.</strong>
-      Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys.
-      This tab does not talk to <code>127.0.0.1:7420</code>.
+  <a class="skip" href="#try">Skip to the hall</a>
+  <header class="nav">
+    <img src="mark.svg" width="36" height="36" alt="Guild" />
+    <div>
+      <div class="brand">Guild</div>
+      <div class="ver">v0.2.9 · local-first</div>
     </div>
+    <nav>
+      <a class="btn" href="https://github.com/Jakevin/guild">GitHub</a>
+      <a class="btn primary" href="https://github.com/Jakevin/guild#open-the-hall">Run locally</a>
+    </nav>
+  </header>
 
+  <section class="hero">
+    <p class="kicker">A local guild of adventurers</p>
     <h1>A local bench of bots.<br />@mention the one you want.</h1>
     <p class="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Next move is <code>pnpm i && pnpm test && pnpm dev</code> — not a star.</p>
-
-    <figure class="hero-gif">
-      <img src="https://raw.githubusercontent.com/Jakevin/guild/main/docs/demo-hall-en-2026-08-29.gif" width="960" height="600" alt="A local guild. @mention one adventurer." />
-    </figure>
     <div class="cta-row">
       <a class="btn primary" href="#try">Try the hall</a>
       <a class="btn" href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a>
     </div>
+    <div class="banner" role="status">
+      <div>
+        <strong>Interactive preview — no model calls.</strong>
+        Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys.
+        This tab does not talk to <code>127.0.0.1:7420</code>.
+      </div>
+    </div>
+  </section>
 
-    <h2 id="try">Try the hall</h2>
-    <p class="note">Five seats. Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
+  <div class="stage">
+    <figure>
+      <img src="https://raw.githubusercontent.com/Jakevin/guild/main/docs/demo-hall-en-2026-08-29.gif" width="960" height="600" alt="A local guild. @mention one adventurer." />
+      <span class="rivets" aria-hidden="true"><i></i><i></i></span>
+      <figcaption>Live hall on :7420 — this page is a fixture of the same idea.</figcaption>
+    </figure>
+  </div>
 
-    <div class="hall">
+  <section class="block" id="try">
+    <p class="kicker">Try the hall</p>
+    <h2>Five seats. One @handle.</h2>
+    <p class="note">Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
+    <div class="hall-frame">
+      <span class="rivets" aria-hidden="true"><i></i><i></i></span>
       <aside class="rail" aria-label="Roster">
         <h3>Roster</h3>
         <button type="button" class="seat" data-handle="infra"><span class="av" style="background:var(--infra)">I</span><span>Infra<small>@infra</small></span></button>
@@ -275,7 +517,7 @@
         <button type="button" class="seat" data-handle="marketing"><span class="av" style="background:var(--marketing)">M</span><span>Marketing<small>@marketing</small></span></button>
       </aside>
       <section class="pane">
-        <div class="pane-head">#demo · a channel has a job</div>
+        <div class="pane-head"><b>#demo</b> · a channel has a job</div>
         <div class="thread" id="thread" aria-live="polite"></div>
         <div class="composer">
           <button type="button" class="chip" id="ask-pm">@pm what is the one most important thing now?</button>
@@ -284,8 +526,7 @@
         </div>
       </section>
     </div>
-
-    <div class="soul" style="margin-top:12px">
+    <div class="soul">
       <label for="soul">SOUL.md · @pm Voice (fixture)</label>
       <textarea id="soul" spellcheck="false"># Project Manager
 
@@ -295,31 +536,55 @@
 </textarea>
       <div class="row">
         <button type="button" class="btn" id="apply-soul">Save Voice</button>
-        <span class="note" id="soul-status">Unchanged. Ask @pm, then change Voice, then ask again.</span>
+        <span class="note" id="soul-status" style="margin:0">Unchanged. Ask @pm, then change Voice, then ask again.</span>
       </div>
     </div>
+  </section>
 
-    <h2>How the harness works</h2>
-    <pre class="pipe">@handle → chatReply → HarnessService.turn → runAgentLoop
-
-ask with the tool catalog
-  ├─ no tool calls → that text is the answer
-  └─ tool calls → gateTool → Promise.all → append results → ask again
-
-steer reaches the model next round as &lt;user_steer&gt;
-Stop aborts the turn AbortSignal
-skill catalog is a name + summary; the body loads only when the model calls skill</pre>
+  <section class="block">
+    <p class="kicker">How the harness works</p>
+    <h2>One turn. One process.</h2>
+    <p class="note">@handle → chatReply → HarnessService.turn → runAgentLoop</p>
+    <div class="flow" aria-hidden="true">
+      <div class="cell">@handle<em>assignment</em></div>
+      <span class="arrow">→</span>
+      <div class="cell">chatReply<em>generate.ts</em></div>
+      <span class="arrow">→</span>
+      <div class="cell">HarnessService.turn<em>policy + MCP</em></div>
+      <span class="arrow">→</span>
+      <div class="cell">runAgentLoop<em>harness.ts</em></div>
+    </div>
+    <div class="split">
+      <div>
+        <h3>No tool calls</h3>
+        <p>That text is the answer. The loop stops.</p>
+      </div>
+      <div>
+        <h3>Tool calls</h3>
+        <p><code>gateTool</code> → <code>Promise.all</code> → append results → ask again. Bounded. At the bound it asks for a final answer.</p>
+      </div>
+    </div>
+    <p class="note">steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.</p>
     <p class="note">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.</p>
     <p class="note">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
+  </section>
 
-    <h2>What runs locally</h2>
-    <pre class="pipe">git clone https://github.com/Jakevin/guild.git
+  <section class="block">
+    <p class="kicker">What runs locally</p>
+    <h2>Your disk. Your models.</h2>
+    <div class="term">
+      <header>
+        <span>Quick start</span>
+        <button type="button" class="btn" id="copy-cli">Copy</button>
+      </header>
+      <pre id="cli">git clone https://github.com/Jakevin/guild.git
 cd guild
 pnpm i
 pnpm test
 pnpm dev
 # http://127.0.0.1:7420</pre>
-    <table>
+    </div>
+    <table class="limits">
       <thead><tr><th>Limit</th><th>Fact</th></tr></thead>
       <tbody>
         <tr><td><code>run</code> / <code>write</code></td><td>Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.</td></tr>
@@ -327,14 +592,16 @@ pnpm dev
         <tr><td>Browser</td><td>Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
       </tbody>
     </table>
-    <p>Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
+    <p class="note">Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
+  </section>
 
-    <footer>
-      <p>Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT. <a href="https://github.com/Jakevin/guild">github.com/Jakevin/guild</a></p>
-    </footer>
-  </div>
+  <footer>
+    <p>Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.</p>
+    <p><a href="https://github.com/Jakevin/guild">github.com/Jakevin/guild</a></p>
+  </footer>
+
   <script>
-    const COLORS = { infra: "#5b8def", pm: "#2ea887", rd: "#e07a3d", design: "#e07a3d", marketing: "#d4537e" };
+    const COLORS = { infra: "#5b8def", pm: "#2ea887", rd: "#e07a3d", design: "#7c6af7", marketing: "#d4537e" };
     const GLYPH = { infra: "I", pm: "PM", rd: "R", design: "D", marketing: "M" };
     const NAME = { infra: "Infra", pm: "Project Manager", rd: "RD", design: "Design", marketing: "Marketing" };
     const SHIP_LINE = 'Start every reply with "Ship it:" then exactly two short sentences. No bullets.';
@@ -347,8 +614,6 @@ pnpm dev
     const soul = document.getElementById("soul");
     const soulStatus = document.getElementById("soul-status");
     const seats = [...document.querySelectorAll(".seat")];
-    let askedPm = false;
-    let askedRd = false;
     let soulOn = false;
 
     function esc(s) {
@@ -375,8 +640,6 @@ pnpm dev
 
     function reset() {
       thread.innerHTML = "";
-      askedPm = false;
-      askedRd = false;
       soulOn = false;
       soulStatus.textContent = "Unchanged. Ask @pm, then change Voice, then ask again.";
       mark("");
@@ -387,13 +650,11 @@ pnpm dev
       mark("pm");
       addMsg("you", "@pm what is the one most important thing now?", true);
       addMsg("pm", soulOn ? PM_AFTER : PM_BEFORE, false);
-      askedPm = true;
     });
     document.getElementById("ask-rd").addEventListener("click", () => {
       mark("rd");
       addMsg("you", "@rd look at the current repo. Tell me what it is. Do not start a new feature.", true);
       addMsg("rd", RD_REPLY, false);
-      askedRd = true;
     });
     document.getElementById("reset").addEventListener("click", reset);
     document.getElementById("apply-soul").addEventListener("click", () => {
@@ -414,6 +675,17 @@ pnpm dev
         else if (handle === "rd") document.getElementById("ask-rd").click();
         else mark(handle);
       });
+    });
+    document.getElementById("copy-cli").addEventListener("click", async () => {
+      const btn = document.getElementById("copy-cli");
+      const text = document.getElementById("cli").textContent.replace(/\n# http:\/\/127\.0\.0\.1:7420\s*$/, "\n").trim() + "\n";
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1400);
+      } catch (_) {
+        btn.textContent = "Select & copy";
+      }
     });
     reset();
   </script>
