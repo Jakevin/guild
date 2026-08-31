@@ -1,7 +1,7 @@
 {
   "name": "guild",
   "private": false,
-  "version": "0.2.10",
+  "version": "0.2.11",
   "license": "MIT",
   "description": "A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.",
   "type": "module",
