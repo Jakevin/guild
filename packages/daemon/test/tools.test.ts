@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { buildChatSystem, localGenerate } from "../src/generate.ts";
 import { IMAGE_GEN_TIMEOUT_MS, isSafeGeneratedName } from "../src/image-gen.ts";
 import {
@@ -313,6 +314,52 @@ test("formatToolTranscript prefixes 本機", () => {
   assert.match(text, /^本機\n/);
   assert.match(text, /\$ sysctl hw.memsize/);
   assert.match(text, /hw\.memsize: 1/);
+});
+
+test("README documents the Hermes-shaped harness without claiming 128 or Hermes itself", () => {
+  const root = fileURLToPath(new URL("../../..", import.meta.url));
+  const readme = readFileSync(join(root, "README.md"), "utf8");
+  const zh = readFileSync(join(root, "README.zh.md"), "utf8");
+  const ja = readFileSync(join(root, "README.ja.md"), "utf8");
+  assert.ok(MAX_TOOL_ROUNDS > 8);
+  for (const body of [readme, zh, ja]) {
+    assert.match(body, /@handle.+chatReply.+HarnessService\.turn.+runAgentLoop/s);
+    assert.match(body, /buildChatSystem/);
+    assert.match(body, /Promise\.all/);
+    assert.match(body, /<user_steer>/);
+    assert.match(body, /AbortSignal/);
+    assert.match(body, /gateTool/);
+    assert.match(body, /full_access/);
+    assert.match(body, /packages\/daemon\/src\/harness\.ts/);
+    assert.match(body, /generate\.ts/);
+    assert.match(body, /tools\.ts/);
+    assert.match(body, /browser\.ts/);
+    assert.doesNotMatch(body, /128 (tool )?rounds?/i);
+    assert.doesNotMatch(body, /128 回合/);
+    assert.doesNotMatch(body, /MAX_TOOL_ROUNDS/);
+    assert.doesNotMatch(body, /Guild is Hermes/i);
+    assert.doesNotMatch(body, /is the Codex app-server harness/);
+    assert.doesNotMatch(body, /OS sandbox/);
+    assert.doesNotMatch(body, /automatic approval/i);
+  }
+  assert.match(readme, /## The harness/);
+  assert.match(readme, /borrowed one shape, not a codebase/);
+  assert.match(readme, /not the Codex app-server harness/);
+  assert.match(readme, /There is no approval step/);
+  assert.match(readme, /snapshots your Chrome logins by default/);
+  assert.match(readme, /no import \/ consent prompt/);
+  assert.match(zh, /## Harness 是怎麼跑的/);
+  assert.match(zh, /借的是一個形，不是 codebase/);
+  assert.match(zh, /這不是 Codex app-server 的 harness/);
+  assert.match(zh, /沒有審批步驟/);
+  assert.match(zh, /預設帶你的 Chrome 登入/);
+  assert.match(zh, /沒有匯入、沒有同意步驟/);
+  assert.match(ja, /## ハーネスのまわし方/);
+  assert.match(ja, /借りたのは形ひとつで、codebase ではない/);
+  assert.match(ja, /Codex app-server のハーネスではない/);
+  assert.match(ja, /承認ステップは無い/);
+  assert.match(ja, /既定で Chrome のログインをスナップショット/);
+  assert.match(ja, /import も同意プロンプトも無い/);
 });
 
 test("tool loop follows Codex: no 8-round budget, fuse is last-resort", () => {

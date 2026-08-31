@@ -82,10 +82,26 @@ To keep a host server out of Guild: remove it from the host file, or set `id: mc
 
 If a row has `url` and no `command`, Guild refuses it (`stdio MCP needs a command`). Caps: 40 tools per server, 80 total. `tools/call` timeout is 5 minutes. Sessions live with `guildd`.
 
+## The harness
+
+One turn, one process: `@handle` → `chatReply` → `HarnessService.turn` → `runAgentLoop`.
+
+**Assembly.** `buildChatSystem` (`generate.ts`) stacks in this order: who you are (`@handle`), the hall rules, host facts, the tool list, this turn's skill / subagent catalog, `Channel.md`, then `MEMORY.md`, then `SOUL.md` / `AGENTS.md` / `POSITION.md`. The catalog is a name and a summary — a skill's body loads only when the model calls `skill`. `Channel.md` outranks `MEMORY.md`. History is compacted before the model sees it.
+
+**Loop.** `runAgentLoop` (`harness.ts`) asks the model with the tool catalog. No tool call — that text is the answer. Tool calls — they run in parallel (`Promise.all`), every result goes back into the message list, and the model is asked again. The loop is bounded; at the bound it asks for a final answer instead of more tools.
+
+**You stay in it.** A mid-turn reply queues; Cmd/Ctrl+↩ injects it into the live turn and it reaches the model next round as `<user_steer>`. Stop aborts the turn's `AbortSignal` — the provider fetch and any `spawn` child hold that same signal. Stop is the only thing that ends a turn early. There is no approval step; nothing asks you first.
+
+**The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `full_access` (default) lets everything through, `read_only` keeps `read` / `list` / `skill` / `spawn`, `workspace_write` confines `write` / `run` to the workspace and refuses MCP and `image_gen`. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
+
+**Why Hermes is named here.** We borrowed one shape, not a codebase. Hermes is the closest published example of a local agent that browses as you without hijacking the browser you are using, so `browser.ts` copies that: never CDP the live Chrome profile (Chrome 136+), snapshot `last_used` into `~/.guild/browser-profile/chrome`, drive the copy. The borrowing stops there. The turn loop is Guild's own (`runAgentLoop` + `gateTool`); the sandbox names are Codex-shaped but this is not the Codex app-server harness; the `Harness` trait in `docs/` was never shipped.
+
+Files: `packages/daemon/src/harness.ts` (loop, gate, policy) · `generate.ts` (system assembly, `HALL_RULES`) · `tools.ts` (catalog, steer drain, round fuse) · `browser.ts` (profile snapshot).
+
 ## What it is not
 
 - Not a Codex harness
-- Not a quest board — no project / task board
+- Not a task board — a channel is an open contract
 - Not a party sortie — you assign one @handle; @all is the exception, not the habit
 - Not a cloud account
 - Not an OS jail (optional Position / `GUILD_SANDBOX` tool gate only)

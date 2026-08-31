@@ -82,10 +82,26 @@ pnpm dev
 
 有 `url` 沒有 `command` 會被拒（`stdio MCP needs a command`）。上限：每個 server 40 個工具，合計 80。`tools/call` timeout 5 分鐘。Session 跟 `guildd` 活一樣久。
 
+## Harness 是怎麼跑的
+
+一回合、一條 process：`@handle` → `chatReply` → `HarnessService.turn` → `runAgentLoop`。
+
+**組裝。** `buildChatSystem`（`generate.ts`）依序疊：你是誰（`@handle`）、據點規則、本機環境、工具清單、這一回合的技能／子代理目錄、`Channel.md`、`MEMORY.md`，最後才是 `SOUL.md` / `AGENTS.md` / `POSITION.md`。目錄只有名字和摘要；技能正文要模型自己 call `skill` 才載入。`Channel.md` 蓋過 `MEMORY.md`。歷史會在送到模型之前先壓縮。
+
+**迴圈。** `runAgentLoop`（`harness.ts`）帶著工具目錄去問模型。沒有要工具，那句話就是回覆。要工具，就 `Promise.all` 平行跑完，把每個結果塞回訊息清單，再問一次。迴圈有上限；碰到上限就改要最終回覆，不再給工具。
+
+**你還在迴圈裡。** 有人在跑的時候回覆，是排隊；Cmd/Ctrl+↩ 把這句插入當前回合，下一輪以 `<user_steer>` 送到模型。停止 abort 這一回合的 `AbortSignal`——provider 的 fetch 和 `spawn` 子代理拿的是同一個 signal。只有 Stop 會提前結束一回合。沒有審批步驟，也不會先問你。
+
+**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn`；`workspace_write` 把 `write` / `run` 鎖在 workspace，MCP 和 `image_gen` 直接拒。這是單一 process 裡、跑在你權限下的 tool gate；它擋不掉什麼，`Current limits` 那段寫得很直。
+
+**為什麼在這裡提 Hermes。** 我們借的是一個形，不是 codebase。Hermes 是最接近的公開範例：本機 agent 能用你的瀏覽器，又不動你正在跑的 Chrome。`browser.ts` 借的就是這個做法——不 CDP live profile（Chrome 136+），把 `last_used` 快照到 `~/.guild/browser-profile/chrome`，操作那份複本。借到這裡為止。回合迴圈是 Guild 自己的（`runAgentLoop` + `gateTool`）；sandbox 名稱是 Codex 形狀，但這不是 Codex app-server 的 harness；`docs/` 裡那個 `Harness` trait 也沒實作。
+
+檔案：`packages/daemon/src/harness.ts`（迴圈、閘門、policy）· `generate.ts`（system 組裝、`HALL_RULES`）· `tools.ts`（目錄、steer、回合上限）· `browser.ts`（profile 快照）。
+
 ## 它不是什麼
 
 - 不是 Codex harness
-- 不是任務板——沒有專案 / 任務看板
+- 不是任務板——頻道是一張沒結案的委託
 - 不是小隊出征——點名一個 @handle；@all 是例外，不是習慣
 - 不是雲端帳號
 - 不是 OS jail（可選 Position / `GUILD_SANDBOX` tool gate）

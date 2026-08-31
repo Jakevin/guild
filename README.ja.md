@@ -82,10 +82,26 @@ pnpm dev
 
 `url` があって `command` が無い行は拒否される（`stdio MCP needs a command`）。上限：サーバあたり 40 ツール、合計 80。`tools/call` の timeout は 5 分。セッションは `guildd` と同じ寿命。
 
+## ハーネスのまわし方
+
+1 回合、1 process。`@handle` → `chatReply` → `HarnessService.turn` → `runAgentLoop`。
+
+**組み立て。** `buildChatSystem`（`generate.ts`）はこの順に積む：誰か（`@handle`）、拠点のルール、ローカル環境、ツール一覧、この回合の skill / subagent カタログ、`Channel.md`、`MEMORY.md`、最後に `SOUL.md` / `AGENTS.md` / `POSITION.md`。カタログは名前と要約だけ。skill の本文はモデルが `skill` を呼んでから読む。`Channel.md` は `MEMORY.md` より優先。履歴はモデルに渡る前に圧縮する。
+
+**ループ。** `runAgentLoop`（`harness.ts`）はツールカタログを渡して聞きに行く。ツールが無ければ、その発話が答え。あれば `Promise.all` で並列に走らせ、結果をメッセージへ戻して、もう一度聞く。ループには上限がある。上限に着たらツールを増やさず、最終回答を求める。
+
+**人が割り込める。** 実行中の発話はキュー。Cmd/Ctrl+↩ は今の回合に差し込み、次のラウンドで `<user_steer>` としてモデルに渡る。停止はこの回合の `AbortSignal` を abort する——provider の fetch も `spawn` の子も同じ signal を見ている。停止だけが回合を早く終える。承認ステップは無い。先に聞かない。
+
+**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` だけ。`workspace_write` は `write` / `run` を workspace に閉じ、MCP と `image_gen` は拒否。これはひとつの process 内、あなたの権限で動く tool gate。何を防がないかは `Current limits` にそのまま書いてある。
+
+**なぜ Hermes の名前を出すのか。** 借りたのは形ひとつで、codebase ではない。Hermes は「ローカル agent があなたのブラウザを使えて、稼働中の Chrome は触らない」公開例に最も近い。`browser.ts` はその形を踏む——live profile を CDP しない（Chrome 136+）、`last_used` を `~/.guild/browser-profile/chrome` にスナップショットして複製を操作する。ここまで。回合ループは Guild 自身のもの（`runAgentLoop` + `gateTool`）。sandbox の名前は Codex 形だが、Codex app-server のハーネスではない。`docs/` の `Harness` trait は未実装。
+
+ファイル：`packages/daemon/src/harness.ts`（ループ、ゲート、policy）· `generate.ts`（system 組立、`HALL_RULES`）· `tools.ts`（カタログ、steer、ラウンド上限）· `browser.ts`（profile スナップショット）。
+
 ## これは何かではない
 
 - Codex ハーネスではない
-- クエストボードではない——プロジェクト / タスクボードは無い
+- タスクボードではない——チャンネルは結案していない依頼書だ
 - パーティー出撃ではない——指名は一人の @handle。@all は例外で、習慣にしてはいけない
 - クラウドアカウントではない
 - OS jail ではない（任意の Position / `GUILD_SANDBOX` tool gate のみ）
