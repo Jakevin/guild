@@ -36,6 +36,17 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(workflow, /actions\/deploy-pages/);
 });
 
+test("first-mention starts with wiring a model", () => {
+  const first = readFileSync(join(ROOT, "docs/first-mention.md"), "utf8");
+  const zh = readFileSync(join(ROOT, "docs/first-mention.zh.md"), "utf8");
+  assert.match(first, /## 1\. Get a model \(do this first\)/);
+  assert.match(first, /Guild is not usable/);
+  assert.match(zh, /## 1\. 先接一個模型/);
+  assert.match(zh, /Guild 不能用/);
+  assert.doesNotMatch(first, /they can ack; they cannot think/);
+  assert.doesNotMatch(zh, /冒險者還能回一聲/);
+});
+
 test("README points at the Pages demo without moving the first screen", () => {
   const en = readFileSync(join(ROOT, "README.md"), "utf8");
   const zh = readFileSync(join(ROOT, "README.zh.md"), "utf8");
@@ -44,6 +55,9 @@ test("README points at the Pages demo without moving the first screen", () => {
   assert.match(first, /docs\/demo-hall-en-2026-08-31\.gif/);
   assert.match(first, /## Open the hall/);
   assert.doesNotMatch(first, /jakevin\.github\.io/);
+  assert.match(en, /npx @kevin5251984\/guild web/);
+  assert.match(zh, /npx @kevin5251984\/guild web/);
+  assert.match(ja, /npx @kevin5251984\/guild web/);
   for (const body of [en, zh, ja]) {
     assert.match(body, /https:\/\/jakevin\.github\.io\/guild\//);
     assert.match(body, /docs\/demo-hall-en-2026-08-31\.gif/);

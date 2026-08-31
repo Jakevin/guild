@@ -10,9 +10,32 @@ Repo: https://github.com/Jakevin/guild · `v0.2.1`
 
 ## You need
 
-Node ≥ 22.19, pnpm 10.x, and a model (Ollama, an API key, or a subscription: ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter / Kimi Code / Pi Radius). Without a model they can ack; they cannot think.
+A **model first**. Guild cannot think or run tools without one. Then Node ≥ 22.19 and [pnpm](https://pnpm.io) 10.x.
 
-## 1. Open the hall
+## 1. Get a model (do this first)
+
+Pick **one**. Do not `@mention` anyone until it is connected.
+
+| You have | Do |
+|---|---|
+| ChatGPT Plus / Pro | Codex OAuth on Models → Subscriptions |
+| Claude Pro / Max | Claude OAuth |
+| Grok / SuperGrok / X Premium | xAI OAuth |
+| Copilot / OpenRouter / Kimi Code / Pi Radius | that OAuth |
+| OpenAI / Anthropic / xAI / OpenRouter API key | paste it on Models → API Key |
+| Ollama | install Ollama, pull a local model |
+
+Without this step, Guild is not usable.
+
+## 2. Open the hall
+
+Node ≥ 22.19. One command, same shape as `npx @deepseek-ai/dsh web`:
+
+```bash
+npx @kevin5251984/guild web
+```
+
+That starts `guildd` at http://127.0.0.1:7420 and opens a browser. From a checkout instead:
 
 ```bash
 git clone https://github.com/Jakevin/guild.git
@@ -22,13 +45,11 @@ pnpm test
 pnpm dev
 ```
 
-Open http://127.0.0.1:7420. Chrome should read **Channels / Roster / Workshop**.
+Chrome should read **Channels / Roster / Workshop**.
+
+**First click in the hall: Models** (`/settings`). Finish the login or paste the key, then **Apply** a default model. The empty thread will send you there if you skipped it.
 
 Rooms, messages, and trajectory live in `guild.sqlite`. Souls / skills / MEMORY.md stay files. Not a cloud account.
-
-## 2. Wire a model
-
-**Models** (`/settings`). Pick Ollama, paste a key, or complete OAuth. Skip this and `@pm` only nods.
 
 ## 3. Write a contract
 

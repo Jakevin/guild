@@ -10,7 +10,7 @@ pnpm test
 pnpm dev                 # http://127.0.0.1:7420
 ```
 
-`pnpm test` runs `@guild/daemon` only. Data directory is `GUILD_HOME` (default `~/.guild`). The daemon boots Cordis from `packages/daemon/cordis.yml`. Point data at a temp dir when testing:
+`pnpm test` runs the daemon package (`@kevin5251984/guild`) only. Data directory is `GUILD_HOME` (default `~/.guild`). The daemon boots Cordis from `packages/daemon/cordis.yml`. Point data at a temp dir when testing:
 
 ```bash
 GUILD_HOME=/tmp/guild-dev pnpm dev

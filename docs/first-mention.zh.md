@@ -10,13 +10,32 @@ Repo：https://github.com/Jakevin/guild · `v0.2.1`
 
 ## 你要有的
 
-- [Node](https://nodejs.org) ≥ 22.19
-- [pnpm](https://pnpm.io) 10.x
-- 一個模型：Ollama 本機，或 OpenAI / Anthropic / OpenRouter 的 key，或 ChatGPT Codex / Claude Pro / Kimi Code 那種訂閱
+**先有模型。** 沒有可用模型，Guild 不能想、也不能跑工具。然後才是 [Node](https://nodejs.org) ≥ 22.19 與 [pnpm](https://pnpm.io) 10.x。
 
-沒有模型，冒險者還能回一聲；他們不能想。先把模型接上，再點名。
+## 1. 先接一個模型
 
-## 1. 打開大廳
+選 **一種**。接上之前不要 `@mention`。
+
+| 你有 | 做 |
+|---|---|
+| ChatGPT Plus / Pro | 模型 → 訂閱，Codex OAuth |
+| Claude Pro / Max | Claude OAuth |
+| Grok / SuperGrok / X Premium | xAI OAuth |
+| Copilot / OpenRouter / Kimi Code / Pi Radius | 對應 OAuth |
+| OpenAI / Anthropic / xAI / OpenRouter API key | 模型 → API Key 貼上 |
+| Ollama | 先裝 Ollama，拉一個本機模型 |
+
+沒這步，Guild 不能用。
+
+## 2. 打開大廳
+
+Node ≥ 22.19。一條指令，跟 `npx @deepseek-ai/dsh web` 一樣：
+
+```bash
+npx @kevin5251984/guild web
+```
+
+會起 `guildd`（http://127.0.0.1:7420）並開瀏覽器。從原始碼跑則：
 
 ```bash
 git clone https://github.com/Jakevin/guild.git
@@ -26,21 +45,11 @@ pnpm test
 pnpm dev
 ```
 
-打開 [http://127.0.0.1:7420](http://127.0.0.1:7420)。側欄應是 **Channels / Roster / Workshop**（或中文：委託 / 編制 / 工坊）。
+側欄應是 **Channels / Roster / Workshop**（或中文：委託 / 編制 / 工坊）。
+
+**大廳第一個點：模型**（`/settings`）。把訂閱登完或把 key 存好，再 **套用** 主模型。空執行緒也會把你導去那頁。
 
 資料不在雲端帳號。房間、訊息、軌跡在 `guild.sqlite`；Soul / skill / `MEMORY.md` 仍是檔。
-
-## 2. 接一個模型
-
-進 **Models**（`/settings`）。
-
-| 你有 | 做 |
-|---|---|
-| Ollama | 選本機模型 |
-| API key | 貼進對應 provider |
-| ChatGPT Codex / Claude Pro / Grok / Copilot / OpenRouter / Kimi Code / Pi Radius | 走 OAuth |
-
-存好。沒這步，下面的 `@pm` 只會點頭。
 
 ## 3. 開一張委託
 

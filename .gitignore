@@ -8,3 +8,5 @@ apps/desktop/src-tauri/target/
 .env
 .env.*
 docs/_demo-work/
+packages/daemon/vendor/
+packages/daemon/package.json.prepack-backup

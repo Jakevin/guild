@@ -10,9 +10,9 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @guild/daemon dev",
+    "dev": "pnpm --filter @kevin5251984/guild dev",
     "dev:desktop": "pnpm --filter @guild/desktop dev",
     "build": "pnpm -r build",
-    "test": "pnpm --filter @guild/daemon test"
+    "test": "pnpm --filter @kevin5251984/guild test"
   }
 }

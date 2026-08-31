@@ -1,18 +1,40 @@
 {
-  "name": "@guild/daemon",
-  "version": "0.0.1",
+  "name": "@kevin5251984/guild",
+  "version": "0.2.12",
   "type": "module",
-  "bin": {
-    "guildd": "./src/cli.ts"
+  "license": "MIT",
+  "description": "A local guild of adventurers. npx @kevin5251984/guild web",
+  "engines": {
+    "node": ">=22.19.0"
   },
+  "bin": {
+    "guild": "./bin/guildd.mjs",
+    "guildd": "./bin/guildd.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "cordis.yml",
+    "vendor"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jakevin/guild.git",
+    "directory": "packages/daemon"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "start": "tsx src/cli.ts",
+    "start": "node ./bin/guildd.mjs",
     "build": "tsc -p tsconfig.json",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "prepack": "node ./scripts/vendor-protocol.mjs prepack",
+    "postpack": "node ./scripts/vendor-protocol.mjs postpack"
   },
   "dependencies": {
     "@cordisjs/plugin-include": "1.0.4",
@@ -22,11 +44,11 @@
     "@earendil-works/pi-ai": "^0.84.2",
     "@guild/protocol": "workspace:*",
     "cordis": "4.0.0-rc.8",
-    "schemastery": "^3.18.0"
+    "schemastery": "^3.18.0",
+    "tsx": "4.20.5"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
-    "tsx": "4.20.5",
     "typescript": "5.9.3"
   }
 }

@@ -22,9 +22,15 @@ pnpm dev
 
 Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
 
+No clone — Node ≥ 22.19 only:
+
+```bash
+npx @kevin5251984/guild web
+```
+
 Fixture preview (no model, no tools): [jakevin.github.io/guild](https://jakevin.github.io/guild/).
 
-1. **Models** (`/settings`) — wire a provider or a subscription. Without a model, adventurers can still ack; they cannot think.
+1. **Models** (`/settings`) — **first click.** Connect a subscription (OAuth) or paste an API key, then Apply a default. Without a ready model Guild cannot think or run tools. Do not `@mention` yet.
 2. Open a channel — a contract. Write `Channel.md` if the hall has a job.
 3. `@pm` to scope, `@rd` to look at code. Put the `@handle` at the **start of a line** — that is the assignment. They also answer when you reply to them; name nobody and the last adventurer who spoke continues. `@channel` pings the whole roster — usually the wrong move.
 

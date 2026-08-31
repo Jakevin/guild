@@ -1,9 +1,19 @@
 {
   "name": "@guild/protocol",
-  "version": "0.0.1",
+  "version": "0.2.11",
   "type": "module",
+  "license": "MIT",
+  "description": "Shared types for Guild (guildd).",
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": ["src"]
+  "files": ["src"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jakevin/guild.git",
+    "directory": "packages/protocol"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
