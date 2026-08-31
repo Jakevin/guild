@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guild — a local bench. @mention one.</title>
+  <meta name="description" content="A local guild of adventurers. @mention the one you actually want. Not another omniscient chat. This page is a fixture preview — no model, no tools." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <style>
+    :root {
+      --enamel: #0B0E12;
+      --paper: #F3EFE6;
+      --ink: #0B0E12;
+      --steel: #A8B0BC;
+      --signal: #C9A227;
+      --panel: #10141A;
+      --lift: #161C24;
+      --bubble: #1A222C;
+      --you: #242C36;
+      --text: #E8E4DC;
+      --muted: #8B8F96;
+      --line: #1C222C;
+      --fill: #141A22;
+      --infra: #5b8def;
+      --pm: #2ea887;
+      --rd: #e07a3d;
+      --design: #e07a3d;
+      --marketing: #d4537e;
+      --focus: 0 0 0 2px var(--enamel), 0 0 0 3px var(--steel);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font: 15px/1.5 "SF Pro Text", "PingFang TC", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(90% 50% at 50% -10%, #1A222C 0%, transparent 55%),
+        var(--enamel);
+    }
+    a { color: var(--steel); }
+    a:hover { color: var(--paper); }
+    button:focus-visible, a:focus-visible, textarea:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 20px 18px 64px; }
+    header.top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    header.top img { width: 48px; height: 48px; }
+    header.top .brand { font-weight: 700; letter-spacing: .02em; }
+    header.top nav { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      background: var(--lift);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
+      text-decoration: none;
+      font: inherit;
+      cursor: pointer;
+    }
+    .btn.primary {
+      background: var(--paper);
+      color: var(--ink);
+      border-color: var(--paper);
+      font-weight: 650;
+    }
+    .btn.primary:hover { filter: brightness(1.05); }
+    .banner {
+      border: 1px solid color-mix(in srgb, var(--signal) 45%, var(--line));
+      background: color-mix(in srgb, var(--signal) 10%, var(--panel));
+      color: var(--paper);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 22px;
+    }
+    .banner strong { color: var(--signal); }
+    h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+    .lead { color: var(--muted); margin: 0 0 16px; max-width: 42rem; }
+    .hero-gif {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--panel);
+      margin: 0 0 14px;
+    }
+    .hero-gif img { display: block; width: 100%; height: auto; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 36px; }
+    h2 {
+      font-size: 18px;
+      margin: 36px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+    }
+    p { margin: 0 0 10px; }
+    .note { color: var(--muted); font-size: 13px; }
+    .hall {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+    @media (max-width: 760px) {
+      .hall { grid-template-columns: 1fr; }
+      h1 { font-size: 22px; }
+    }
+    .rail, .pane, .soul {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      min-width: 0;
+    }
+    .rail { padding: 12px; }
+    .rail h3 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--steel);
+    }
+    .seat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      color: inherit;
+      font: inherit;
+      padding: 7px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .seat:hover, .seat.on { background: var(--lift); border-color: var(--line); }
+    .seat small { display: block; color: var(--muted); font-size: 12px; }
+    .av {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: grid; place-items: center;
+      color: #fff; font-size: 11px; font-weight: 700;
+      border: 2px solid #8B909A;
+      flex: none;
+    }
+    .pane { display: flex; flex-direction: column; min-height: 420px; }
+    .pane-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-bottom: 1px solid var(--line);
+      font-weight: 650;
+    }
+    .thread {
+      flex: 1;
+      padding: 12px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 240px;
+    }
+    .msg { display: flex; gap: 8px; align-items: flex-start; }
+    .msg.you { flex-direction: row-reverse; }
+    .bubble {
+      background: var(--bubble);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      max-width: 86%;
+    }
+    .msg.you .bubble { background: var(--you); }
+    .bubble .who { font-size: 12px; color: var(--steel); margin-bottom: 2px; }
+    .composer {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 10px 12px; border-top: 1px solid var(--line);
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: var(--fill);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .chip:hover { border-color: var(--steel); }
+    .chip[disabled] { opacity: .45; cursor: not-allowed; }
+    .soul { padding: 12px; }
+    .soul label { display: block; font-size: 12px; color: var(--steel); margin-bottom: 6px; }
+    .soul textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      background: var(--fill);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .soul .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    pre.pipe {
+      margin: 0 0 12px;
+      padding: 12px;
+      background: var(--fill);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    ol.steps { padding-left: 20px; }
+    ol.steps li { margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 12px; }
+    th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: var(--lift); }
+    footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+    kbd {
+      font: 12px ui-monospace, Menlo, monospace;
+      background: var(--fill);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <img src="mark.svg" width="48" height="48" alt="Guild" />
+      <div>
+        <div class="brand">Guild</div>
+        <div class="note">v0.2.8 · local-first</div>
+      </div>
+      <nav>
+        <a class="btn" href="https://github.com/Jakevin/guild">GitHub</a>
+        <a class="btn primary" href="https://github.com/Jakevin/guild#open-the-hall">Run locally</a>
+      </nav>
+    </header>
+
+    <div class="banner" role="status">
+      <strong>Interactive preview — no model calls.</strong>
+      Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys.
+      This tab does not talk to <code>127.0.0.1:7420</code>.
+    </div>
+
+    <h1>A local bench of bots.<br />@mention the one you want.</h1>
+    <p class="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Next move is <code>pnpm i && pnpm test && pnpm dev</code> — not a star.</p>
+
+    <figure class="hero-gif">
+      <img src="https://raw.githubusercontent.com/Jakevin/guild/main/docs/demo-hall-en-2026-08-29.gif" width="960" height="600" alt="A local guild. @mention one adventurer." />
+    </figure>
+    <div class="cta-row">
+      <a class="btn primary" href="#try">Try the hall</a>
+      <a class="btn" href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a>
+    </div>
+
+    <h2 id="try">Try the hall</h2>
+    <p class="note">Five seats. Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
+
+    <div class="hall">
+      <aside class="rail" aria-label="Roster">
+        <h3>Roster</h3>
+        <button type="button" class="seat" data-handle="infra"><span class="av" style="background:var(--infra)">I</span><span>Infra<small>@infra</small></span></button>
+        <button type="button" class="seat" data-handle="pm"><span class="av" style="background:var(--pm)">PM</span><span>Project Manager<small>@pm</small></span></button>
+        <button type="button" class="seat" data-handle="rd"><span class="av" style="background:var(--rd)">R</span><span>RD<small>@rd</small></span></button>
+        <button type="button" class="seat" data-handle="design"><span class="av" style="background:var(--design)">D</span><span>Design<small>@design</small></span></button>
+        <button type="button" class="seat" data-handle="marketing"><span class="av" style="background:var(--marketing)">M</span><span>Marketing<small>@marketing</small></span></button>
+      </aside>
+      <section class="pane">
+        <div class="pane-head">#demo · a channel has a job</div>
+        <div class="thread" id="thread" aria-live="polite"></div>
+        <div class="composer">
+          <button type="button" class="chip" id="ask-pm">@pm what is the one most important thing now?</button>
+          <button type="button" class="chip" id="ask-rd">@rd look at the current repo.</button>
+          <button type="button" class="chip" id="reset">Reset</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="soul" style="margin-top:12px">
+      <label for="soul">SOUL.md · @pm Voice (fixture)</label>
+      <textarea id="soul" spellcheck="false"># Project Manager
+
+## Voice
+- First the goal and the deadline, then the detail.
+- Ask a concrete question. Do not open an endless discussion.
+</textarea>
+      <div class="row">
+        <button type="button" class="btn" id="apply-soul">Save Voice</button>
+        <span class="note" id="soul-status">Unchanged. Ask @pm, then change Voice, then ask again.</span>
+      </div>
+    </div>
+
+    <h2>How the harness works</h2>
+    <pre class="pipe">@handle → chatReply → HarnessService.turn → runAgentLoop
+
+ask with the tool catalog
+  ├─ no tool calls → that text is the answer
+  └─ tool calls → gateTool → Promise.all → append results → ask again
+
+steer reaches the model next round as &lt;user_steer&gt;
+Stop aborts the turn AbortSignal
+skill catalog is a name + summary; the body loads only when the model calls skill</pre>
+    <p class="note">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.</p>
+    <p class="note">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
+
+    <h2>What runs locally</h2>
+    <pre class="pipe">git clone https://github.com/Jakevin/guild.git
+cd guild
+pnpm i
+pnpm test
+pnpm dev
+# http://127.0.0.1:7420</pre>
+    <table>
+      <thead><tr><th>Limit</th><th>Fact</th></tr></thead>
+      <tbody>
+        <tr><td><code>run</code> / <code>write</code></td><td>Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.</td></tr>
+        <tr><td>MCP</td><td>Host Claude / Cursor / Codex stdio is live with no import step.</td></tr>
+        <tr><td>Browser</td><td>Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
+      </tbody>
+    </table>
+    <p>Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
+
+    <footer>
+      <p>Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT. <a href="https://github.com/Jakevin/guild">github.com/Jakevin/guild</a></p>
+    </footer>
+  </div>
+  <script>
+    const COLORS = { infra: "#5b8def", pm: "#2ea887", rd: "#e07a3d", design: "#e07a3d", marketing: "#d4537e" };
+    const GLYPH = { infra: "I", pm: "PM", rd: "R", design: "D", marketing: "M" };
+    const NAME = { infra: "Infra", pm: "Project Manager", rd: "RD", design: "Design", marketing: "Marketing" };
+    const SHIP_LINE = 'Start every reply with "Ship it:" then exactly two short sentences. No bullets.';
+    const PM_BEFORE = "The job on this channel is to explain Guild in one minute. The most important thing is to @mention the person you want — do not start a new feature.";
+    const PM_AFTER = "Ship it: @mention one seat. Do not start a new feature.";
+    const RD_REPLY = "This repo is Guild: a local daemon on :7420. You staff named adventurers and @mention one. I am not starting a feature.";
+    const CHANNEL = { who: "you", handle: "you", text: "#demo\nJob: explain Guild in one minute.\nMost important thing: @mention the person you want." };
+
+    const thread = document.getElementById("thread");
+    const soul = document.getElementById("soul");
+    const soulStatus = document.getElementById("soul-status");
+    const seats = [...document.querySelectorAll(".seat")];
+    let askedPm = false;
+    let askedRd = false;
+    let soulOn = false;
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function addMsg(handle, text, you) {
+      const row = document.createElement("div");
+      row.className = "msg" + (you ? " you" : "");
+      const av = you ? "Y" : GLYPH[handle];
+      const bg = you ? "#242C36" : COLORS[handle];
+      const who = you ? "you" : "@" + handle + " · " + NAME[handle];
+      row.innerHTML =
+        '<span class="av" style="background:' + bg + '">' + esc(av) + "</span>" +
+        '<div class="bubble"><div class="who">' + esc(who) + "</div>" +
+        esc(text).replace(/\n/g, "<br>") + "</div>";
+      thread.appendChild(row);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    function mark(handle) {
+      seats.forEach((el) => el.classList.toggle("on", el.getAttribute("data-handle") === handle));
+    }
+
+    function reset() {
+      thread.innerHTML = "";
+      askedPm = false;
+      askedRd = false;
+      soulOn = false;
+      soulStatus.textContent = "Unchanged. Ask @pm, then change Voice, then ask again.";
+      mark("");
+      addMsg("you", CHANNEL.text, true);
+    }
+
+    document.getElementById("ask-pm").addEventListener("click", () => {
+      mark("pm");
+      addMsg("you", "@pm what is the one most important thing now?", true);
+      addMsg("pm", soulOn ? PM_AFTER : PM_BEFORE, false);
+      askedPm = true;
+    });
+    document.getElementById("ask-rd").addEventListener("click", () => {
+      mark("rd");
+      addMsg("you", "@rd look at the current repo. Tell me what it is. Do not start a new feature.", true);
+      addMsg("rd", RD_REPLY, false);
+      askedRd = true;
+    });
+    document.getElementById("reset").addEventListener("click", reset);
+    document.getElementById("apply-soul").addEventListener("click", () => {
+      const body = soul.value;
+      soulOn = body.includes("Ship it:");
+      if (!soulOn) {
+        soul.value = body.replace("## Voice\n", "## Voice\n" + SHIP_LINE + "\n");
+        soulOn = true;
+      }
+      soulStatus.textContent = soulOn
+        ? "Voice saved in this tab only. Ask @pm again — the fixture now starts with Ship it:"
+        : "Voice missing Ship it: — not applied.";
+    });
+    seats.forEach((el) => {
+      el.addEventListener("click", () => {
+        const handle = el.getAttribute("data-handle");
+        if (handle === "pm") document.getElementById("ask-pm").click();
+        else if (handle === "rd") document.getElementById("ask-rd").click();
+        else mark(handle);
+      });
+    });
+    reset();
+  </script>
+</body>
+</html>
