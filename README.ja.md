@@ -8,7 +8,7 @@
 
 Local-first. Your files. Your models.
 
-![ローカルのギルド。ひとり指名。](docs/demo-hall-en-2026-08-29.gif)
+![ローカルのギルド。ひとり指名。](docs/demo-hall-en-2026-08-31.gif)
 
 ## 拠点をひらく
 

@@ -8,7 +8,7 @@
 
 Local-first. Your files. Your models.
 
-![本機冒險者工會。點名一人。](docs/demo-hall-en-2026-08-29.gif)
+![本機冒險者工會。點名一人。](docs/demo-hall-en-2026-08-31.gif)
 
 ## 打開大廳
 
