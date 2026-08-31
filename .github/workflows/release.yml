@@ -23,7 +23,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -44,11 +44,12 @@ jobs:
           test "$WANT" = "$ROOT"
           test "$WANT" = "$PKG"
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22.19"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - run: pnpm i --frozen-lockfile
       - run: pnpm test

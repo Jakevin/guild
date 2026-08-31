@@ -17,6 +17,12 @@ test("release.yml is the npm trusted-publisher workflow", () => {
   assert.match(yml, /working-directory: packages\/daemon/);
   assert.match(yml, /npm publish --access public/);
   assert.match(yml, /gh release create/);
+  assert.match(yml, /actions\/checkout@v6/);
+  assert.match(yml, /actions\/setup-node@v7/);
+  assert.match(yml, /pnpm\/action-setup@v6/);
+  assert.doesNotMatch(yml, /actions\/checkout@v4/);
+  assert.doesNotMatch(yml, /actions\/setup-node@v4/);
+  assert.doesNotMatch(yml, /pnpm\/action-setup@v4/);
   assert.doesNotMatch(yml, /NPM_TOKEN/);
   assert.doesNotMatch(yml, /NODE_AUTH_TOKEN/);
 });
