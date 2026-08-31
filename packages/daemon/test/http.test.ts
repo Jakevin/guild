@@ -578,6 +578,10 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /--bg:\s*#0B0E12/);
   assert.match(chatCss, /--signal:\s*#C9A227/);
   assert.match(chatCss, /:focus-visible/);
+  assert.match(chatCss, /--press:\s*0\.97/);
+  assert.match(chatCss, /\.primary:active:not\(:disabled\)/);
+  assert.match(chatCss, /prefers-reduced-motion:\s*reduce/);
+  assert.doesNotMatch(chatCss, /transition:\s*all/);
   assert.match(chatCss, /Quest board/);
   assert.match(chatCss, /#16100B/);
   assert.match(chatCss, /--plaque:\s*var\(--notice\)/);
@@ -715,6 +719,15 @@ test("home is chat and studio is the roster", () => {
   );
   assert.match(style, /--bg:\s*#0B0E12/);
   assert.match(style, /--paper:\s*#F3EFE6/);
+  assert.match(style, /--press:\s*0\.97/);
+  assert.match(style, /a\.btn[^{]*\{[^}]*background:\s*var\(--paper\)/);
+  assert.match(style, /button:where\(:hover\):where\(:not\(:disabled\)\)/);
+  assert.match(style, /button:where\(:active\):where\(:not\(:disabled\)\)/);
+  assert.match(style, /\.rpg-npc:hover \{ background: transparent/);
+  assert.match(style, /\.rpg-exit:active/);
+  assert.match(style, /\.rpg-acts a:active/);
+  assert.match(style, /\.key-tab:focus-visible \{[\s\S]*box-shadow:\s*var\(--focus\)/);
+  assert.doesNotMatch(style, /transition:\s*all/);
   assert.match(style, /grid-template-columns:\s*40px minmax\(0,\s*1fr\)/);
   assert.match(style, /-webkit-line-clamp:\s*2/);
   assert.match(style, /\.host-row/);

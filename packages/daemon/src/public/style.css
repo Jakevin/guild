@@ -16,7 +16,12 @@
   --accent: #A8B0BC;
   --ok: #9fdfb2;
   --err: #fca5a5;
+  --danger: #f0a8a8;
   --radius: 14px;
+  --press: 0.97;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --press-ms: 140ms;
+  --hover-ms: 160ms;
   --focus: 0 0 0 2px var(--bg), 0 0 0 3px var(--steel);
   color: var(--text);
   background: var(--bg);
@@ -88,6 +93,7 @@ select:focus-visible {
 }
 .locale-switch button.on,
 .locale-switch button:hover { background: var(--lift); color: var(--text); }
+.locale-switch button:active:not(:disabled) { transform: scale(var(--press)); }
 
 body.app {
   display: grid;
@@ -329,6 +335,19 @@ button {
   border: 0;
   border-radius: 999px;
   cursor: pointer;
+  transition:
+    background-color var(--hover-ms) ease,
+    border-color var(--hover-ms) ease,
+    color var(--hover-ms) ease,
+    transform var(--press-ms) var(--ease-out),
+    opacity var(--hover-ms) ease;
+}
+/* :where keeps this weaker than tavern / steel / ghost rules. */
+button:where(:hover):where(:not(:disabled)) {
+  background: color-mix(in srgb, var(--paper) 88%, white);
+}
+button:where(:active):where(:not(:disabled)) {
+  transform: scale(var(--press));
 }
 button.secondary {
   background: transparent;
@@ -336,8 +355,12 @@ button.secondary {
   border: 1px solid var(--line);
   margin-top: 0.55rem;
 }
+button.secondary:hover:not(:disabled) {
+  background: var(--lift);
+  color: var(--text);
+}
 button.danger {
-  color: #fca5a5;
+  color: var(--danger);
   border-color: #4a2a2a;
 }
 button:disabled { opacity: 0.45; }
@@ -503,7 +526,10 @@ button:disabled { opacity: 0.45; }
   background: var(--fill);
   color: var(--muted);
   font-size: 0.85rem;
+  transition: background-color var(--hover-ms) ease, color var(--hover-ms) ease, transform var(--press-ms) var(--ease-out);
 }
+.chip:hover:not(.on) { color: var(--text); background: var(--lift); }
+.chip:active { transform: scale(var(--press)); }
 .chip.on { background: var(--paper); color: var(--ink); }
 .chip-n {
   opacity: 0.55;
@@ -527,8 +553,10 @@ button:disabled { opacity: 0.45; }
   font: inherit;
   font-size: 0.72rem;
   cursor: pointer;
+  transition: background-color var(--hover-ms) ease, color var(--hover-ms) ease, transform var(--press-ms) var(--ease-out);
 }
 .mini-tag:hover { color: var(--text); background: var(--lift); }
+.mini-tag:active { transform: scale(var(--press)); }
 .mini-tag.on { background: var(--paper); color: var(--ink); }
 
 .more {
@@ -632,13 +660,15 @@ a.btn {
   margin: 0;
   padding: 0.55rem 0.95rem;
   font-weight: 560;
-  color: #111;
-  background: var(--text);
+  color: var(--ink);
+  background: var(--paper);
   border-radius: 999px;
   text-decoration: none;
   white-space: nowrap;
+  transition: background-color var(--hover-ms) ease, transform var(--press-ms) var(--ease-out);
 }
-a.btn:hover { text-decoration: none; opacity: 0.92; }
+a.btn:hover { text-decoration: none; background: color-mix(in srgb, var(--paper) 88%, white); }
+a.btn:active { transform: scale(var(--press)); }
 
 .lib-card {
   display: grid;
@@ -913,12 +943,13 @@ a.btn:hover { text-decoration: none; opacity: 0.92; }
   font: inherit;
   font-size: 0.86rem;
   cursor: pointer;
+  transition: background-color var(--hover-ms) ease, border-color var(--hover-ms) ease, color var(--hover-ms) ease, transform var(--press-ms) var(--ease-out);
 }
-.key-tab:hover { color: var(--text); border-color: #333; }
+.key-tab:hover { color: var(--text); border-color: color-mix(in srgb, var(--steel) 45%, var(--line)); background: var(--lift); }
 .key-tab.on {
-  background: #1c1c1c;
+  background: var(--lift);
   color: var(--text);
-  border-color: #3a3a3a;
+  border-color: color-mix(in srgb, var(--steel) 45%, var(--line));
 }
 .key-tab.add {
   border-style: dashed;
@@ -927,12 +958,13 @@ a.btn:hover { text-decoration: none; opacity: 0.92; }
 }
 .key-tab.add:hover {
   color: var(--text);
-  border-color: #555;
+  border-color: color-mix(in srgb, var(--steel) 45%, var(--line));
   background: var(--fill);
 }
+.key-tab:active:not(:disabled) { transform: scale(var(--press)); }
 .key-tab:focus { outline: none; }
 .key-tab:focus-visible {
-  box-shadow: 0 0 0 2px #000, 0 0 0 4px #6a6a6a;
+  box-shadow: var(--focus);
 }
 .key-tab .badge { margin-left: 0.15rem; }
 dialog.pick.add-provider { width: min(32rem, 92vw); }
@@ -956,13 +988,13 @@ dialog.pick.add-provider { width: min(32rem, 92vw); }
   cursor: pointer;
 }
 .preset-grid button:hover {
-  border-color: #3a3a3a;
-  background: #1c1c1c;
+  border-color: color-mix(in srgb, var(--steel) 45%, var(--line));
+  background: var(--lift);
 }
+.preset-grid button:active:not(:disabled) { transform: scale(var(--press)); }
 .preset-grid button:focus { outline: none; }
 .preset-grid button:focus-visible {
-  border-color: #6a6a6a;
-  box-shadow: 0 0 0 2px #000, 0 0 0 4px #5a5a5a;
+  box-shadow: var(--focus);
 }
 .preset-grid button[data-preset="custom"] { grid-column: 1 / -1; }
 .preset-grid button .hint {
@@ -1232,6 +1264,11 @@ body.app.bar-page .shell {
   cursor: pointer;
 }
 .rpg-exit:hover { background: #2a3460; }
+.rpg-npc:hover { background: transparent; }
+.rpg-exit:active,
+.rpg-npc:active {
+  transform: none;
+}
 .rpg-dialog {
   position: absolute;
   left: 3.5%;
@@ -1282,6 +1319,10 @@ body.app.bar-page .shell {
 }
 .rpg-acts a:hover,
 .rpg-acts button:hover { background: #2a3460; text-decoration: none; }
+.rpg-acts a:active,
+.rpg-acts button:active {
+  transform: none;
+}
 
 body.office-page {
   background: #1a1714;
@@ -1503,4 +1544,25 @@ body.office-page {
       "talk";
   }
   .nook { flex-direction: row; justify-content: center; gap: 2rem; min-height: 64px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .chip,
+  .mini-tag,
+  a.btn,
+  .key-tab,
+  .preset-grid button,
+  .locale-switch button {
+    transition: none;
+  }
+  button:active:not(:disabled),
+  .chip:active,
+  .mini-tag:active,
+  a.btn:active,
+  .key-tab:active,
+  .preset-grid button:active,
+  .locale-switch button:active {
+    transform: none;
+  }
 }
