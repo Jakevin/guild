@@ -30,6 +30,8 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /not a task board/i);
   assert.match(html, /not a tavern/i);
   assert.doesNotMatch(html, /Quest board/);
+  assert.match(html, /docs\/demo-hall-en-2026-08-31\.gif/);
+  assert.doesNotMatch(html, /docs\/demo-hall-en-2026-08-29\.gif/);
   assert.match(workflow, /path: site/);
   assert.match(workflow, /actions\/deploy-pages/);
 });
