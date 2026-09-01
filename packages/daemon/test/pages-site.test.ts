@@ -87,3 +87,38 @@ test("README points at the Pages demo without moving the first screen", () => {
     assert.match(body, /docs\/readme-hall-2026-08-29\.png/);
   }
 });
+
+test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
+  const html = readFileSync(SITE, "utf8");
+  assert.match(html, /data-locale="zh-CN"/);
+  assert.match(html, /data-locale="zh-TW"/);
+  assert.match(html, /data-locale="en"/);
+  assert.match(html, /data-locale="ja"/);
+  assert.match(html, /aria-label="简体中文">简</);
+  assert.match(html, /aria-label="繁體中文">繁</);
+  assert.match(html, /aria-label="English">EN</);
+  assert.match(html, /aria-label="日本語">日</);
+  assert.match(html, /guild-pages-locale/);
+  assert.match(html, /navigator\.language/);
+  assert.match(html, /function detectLocale/);
+  assert.match(html, /function setLocale/);
+  assert.match(html, /document\.documentElement\.lang/);
+  assert.match(html, /"seat\.infra": "基建"/);
+  assert.match(html, /"seat\.pm": "專案經理"/);
+  assert.match(html, /"seat\.rd": "研發"/);
+  assert.match(html, /"seat\.design": "美術設計"/);
+  assert.match(html, /"seat\.marketing": "行銷"/);
+  assert.match(html, /html\[lang\^="zh"\] h1/);
+  assert.match(html, /PingFang/);
+  assert.match(html, /Hiragino/);
+  assert.match(html, /class="skip" href="#try"/);
+  assert.doesNotMatch(html, /<select/);
+  assert.doesNotMatch(html, /🏳️|🇨🇳|🇹🇼|🇯🇵|🇺🇸/);
+  const banners = [...html.matchAll(/"banner\.title": "([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(banners.length, 4);
+  assert.ok(banners.every((s) => s === "Interactive preview — no model calls."));
+  assert.match(html, /"pm\.after": "Ship it:/);
+  assert.match(html, /"zh-TW": \{/);
+  assert.match(html, /"zh-CN": \{/);
+  assert.match(html, /\bnpx @kevin5251984\/guild web\b/);
+});

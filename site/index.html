@@ -130,7 +130,7 @@
     .skip:focus { left: 8px; }
 
     /* Enamel press: paper / steel / ghost */
-    .btn, .chip, .seat, .soul .btn {
+    .btn, .chip, .seat, .soul .btn, .locale-switch button {
       transition:
         background-color var(--hover-ms) ease,
         border-color var(--hover-ms) ease,
@@ -141,7 +141,8 @@
     }
     .btn:active:not(:disabled),
     .chip:active:not(:disabled),
-    .seat:active:not(:disabled) {
+    .seat:active:not(:disabled),
+    .locale-switch button:active:not(:disabled) {
       transform: scale(var(--press));
     }
 
@@ -190,6 +191,41 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+      align-items: center;
+    }
+    .locale-switch {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      background: var(--fill);
+    }
+    .locale-switch button {
+      margin: 0;
+      min-height: 40px;
+      min-width: 36px;
+      padding: 0 10px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      font: 12px/1 "IBM Plex Sans", "PingFang TC", "Hiragino Sans", sans-serif;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    .locale-switch button:last-child { border-right: 0; }
+    .locale-switch button:hover {
+      color: var(--paper);
+      background: var(--lift);
+    }
+    .locale-switch button[aria-pressed="true"] {
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .locale-switch button:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+      position: relative;
+      z-index: 1;
     }
     .btn {
       display: inline-flex;
@@ -414,6 +450,36 @@
       -webkit-font-smoothing: none;
       font-smooth: never;
       text-rendering: geometricPrecision;
+    }
+    /* Pixelify has no CJK / kana. HUD titles fall back; sign stays Cinzel. */
+    html[lang^="zh"] h1,
+    html[lang="ja"] h1,
+    html[lang^="zh"] h2,
+    html[lang="ja"] h2 {
+      font-family: "IBM Plex Sans", "PingFang TC", "PingFang SC", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-smooth: auto;
+      text-rendering: auto;
+      letter-spacing: 0.04em;
+      line-height: 1.28;
+    }
+    html[lang^="zh"] h1,
+    html[lang="ja"] h1 {
+      font-size: clamp(1.7rem, 5vw, 2.8rem);
+      max-width: 16em;
+    }
+    html[lang^="zh"] .kicker,
+    html[lang="ja"] .kicker,
+    html[lang^="zh"] .rail h3,
+    html[lang="ja"] .rail h3,
+    html[lang^="zh"] .stage figcaption,
+    html[lang="ja"] .stage figcaption,
+    html[lang^="zh"] .split h3,
+    html[lang="ja"] .split h3,
+    html[lang^="zh"] .banner strong,
+    html[lang="ja"] .banner strong {
+      font-family: "IBM Plex Sans", "PingFang TC", "PingFang SC", "Hiragino Sans", sans-serif;
+      letter-spacing: 0.08em;
     }
     .note { color: var(--muted); font-size: 15px; margin: 0 0 22px; max-width: 42rem; text-wrap: pretty; }
 
@@ -722,16 +788,22 @@
   </style>
 </head>
 <body>
-  <a class="skip" href="#try">Skip to the hall</a>
+  <a class="skip" href="#try" data-i18n="skip">Skip to the hall</a>
   <header class="nav">
     <span class="mark"><img src="mark.svg" width="36" height="36" alt="Guild" /></span>
     <div>
       <div class="brand">Guild</div>
-      <div class="ver">v0.2.17 · local-first</div>
+      <div class="ver">v0.2.17 · <span data-i18n="local">local-first</span></div>
     </div>
     <nav>
+      <div class="locale-switch" role="group" data-i18n-aria="lang.group" aria-label="Language">
+        <button type="button" data-locale="zh-CN" aria-label="简体中文">简</button>
+        <button type="button" data-locale="zh-TW" aria-label="繁體中文">繁</button>
+        <button type="button" data-locale="en" aria-label="English">EN</button>
+        <button type="button" data-locale="ja" aria-label="日本語">日</button>
+      </div>
       <a class="btn" href="https://github.com/Jakevin/guild">GitHub</a>
-      <a class="btn primary" href="#run">Run locally</a>
+      <a class="btn primary" href="#run" data-i18n="nav.run">Run locally</a>
     </nav>
   </header>
 
@@ -743,56 +815,56 @@
         <span>Enamel · steel · five seats</span>
       </div>
     </div>
-    <p class="kicker">A local guild of adventurers</p>
-    <h1>A local bench of bots.<br />@mention the one you want.</h1>
-    <p class="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. Checkout with pnpm is the alternative.</p>
+    <p class="kicker" data-i18n="kicker.hero">A local guild of adventurers</p>
+    <h1 data-i18n-html="h1">A local bench of bots.<br />@mention the one you want.</h1>
+    <p class="lead" data-i18n-html="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. Checkout with pnpm is the alternative.</p>
     <div class="cta-row">
-      <a class="btn primary" href="#try">Try the hall</a>
+      <a class="btn primary" href="#try" data-i18n="cta.try">Try the hall</a>
       <a class="btn" href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a>
     </div>
     <div class="banner" role="status">
       <div>
-        <strong>Interactive preview — no model calls.</strong>
-        Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys.
-        This tab does not talk to <code>127.0.0.1:7420</code>.
+        <strong data-i18n="banner.title">Interactive preview — no model calls.</strong>
+        <span data-i18n-html="banner.body">Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys.
+        This tab does not talk to <code>127.0.0.1:7420</code>.</span>
       </div>
     </div>
   </section>
 
   <div class="stage">
     <figure>
-      <img src="https://raw.githubusercontent.com/Jakevin/guild/main/docs/demo-hall-en-2026-08-31.gif" width="960" height="600" alt="A local guild. @mention one adventurer." />
+      <img src="https://raw.githubusercontent.com/Jakevin/guild/main/docs/demo-hall-en-2026-08-31.gif" width="960" height="600" data-i18n-alt="img.alt" alt="A local guild. @mention one adventurer." />
       <span class="rivets" aria-hidden="true"><i></i><i></i></span>
-      <figcaption>Live hall on :7420 — this page is a fixture of the same idea.</figcaption>
+      <figcaption data-i18n="figcaption">Live hall on :7420 — this page is a fixture of the same idea.</figcaption>
     </figure>
   </div>
 
   <section class="block" id="try">
-    <p class="kicker">Try the hall</p>
-    <h2>Five seats. One @handle.</h2>
-    <p class="note">Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
+    <p class="kicker" data-i18n="kicker.try">Try the hall</p>
+    <h2 data-i18n="h2.try">Five seats. One @handle.</h2>
+    <p class="note" data-i18n-html="note.try">Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
     <div class="hall-frame">
       <span class="rivets" aria-hidden="true"><i></i><i></i></span>
-      <aside class="rail" aria-label="Roster">
-        <h3>Roster</h3>
-        <button type="button" class="seat" data-handle="infra"><span class="av" style="background:var(--infra)">I</span><span>Infra<small>@infra</small></span></button>
-        <button type="button" class="seat" data-handle="pm"><span class="av" style="background:var(--pm)">PM</span><span>Project Manager<small>@pm</small></span></button>
-        <button type="button" class="seat" data-handle="rd"><span class="av" style="background:var(--rd)">R</span><span>RD<small>@rd</small></span></button>
-        <button type="button" class="seat" data-handle="design"><span class="av" style="background:var(--design)">D</span><span>Design<small>@design</small></span></button>
-        <button type="button" class="seat" data-handle="marketing"><span class="av" style="background:var(--marketing)">M</span><span>Marketing<small>@marketing</small></span></button>
+      <aside class="rail" data-i18n-aria="roster" aria-label="Roster">
+        <h3 data-i18n="roster">Roster</h3>
+        <button type="button" class="seat" data-handle="infra"><span class="av" style="background:var(--infra)">I</span><span><span data-i18n="seat.infra">Infra</span><small>@infra</small></span></button>
+        <button type="button" class="seat" data-handle="pm"><span class="av" style="background:var(--pm)">PM</span><span><span data-i18n="seat.pm">Project Manager</span><small>@pm</small></span></button>
+        <button type="button" class="seat" data-handle="rd"><span class="av" style="background:var(--rd)">R</span><span><span data-i18n="seat.rd">RD</span><small>@rd</small></span></button>
+        <button type="button" class="seat" data-handle="design"><span class="av" style="background:var(--design)">D</span><span><span data-i18n="seat.design">Design</span><small>@design</small></span></button>
+        <button type="button" class="seat" data-handle="marketing"><span class="av" style="background:var(--marketing)">M</span><span><span data-i18n="seat.marketing">Marketing</span><small>@marketing</small></span></button>
       </aside>
       <section class="pane">
-        <div class="pane-head"><b>#demo</b> · a channel has a job</div>
+        <div class="pane-head"><b>#demo</b> · <span data-i18n="pane.job">a channel has a job</span></div>
         <div class="thread" id="thread" aria-live="polite"></div>
         <div class="composer">
           <button type="button" class="chip" id="ask-pm">@pm what is the one most important thing now?</button>
           <button type="button" class="chip" id="ask-rd">@rd look at the current repo.</button>
-          <button type="button" class="chip" id="reset">Reset</button>
+          <button type="button" class="chip" id="reset" data-i18n="chip.reset">Reset</button>
         </div>
       </section>
     </div>
     <div class="soul">
-      <label for="soul">SOUL.md · @pm Voice (fixture)</label>
+      <label for="soul" data-i18n="soul.label">SOUL.md · @pm Voice (fixture)</label>
       <textarea id="soul" spellcheck="false"># Project Manager
 
 ## Voice
@@ -800,18 +872,18 @@
 - Ask a concrete question. Do not open an endless discussion.
 </textarea>
       <div class="row">
-        <button type="button" class="btn" id="apply-soul">Save Voice</button>
+        <button type="button" class="btn" id="apply-soul" data-i18n="soul.save">Save Voice</button>
         <span class="note" id="soul-status" style="margin:0">Unchanged. Ask @pm, then change Voice, then ask again.</span>
       </div>
     </div>
   </section>
 
   <section class="block">
-    <p class="kicker">How the harness works</p>
-    <h2>One turn. One process.</h2>
+    <p class="kicker" data-i18n="kicker.harness">How the harness works</p>
+    <h2 data-i18n="h2.harness">One turn. One process.</h2>
     <p class="note">@handle → chatReply → HarnessService.turn → runAgentLoop</p>
     <div class="flow" aria-hidden="true">
-      <div class="cell">@handle<em>assignment</em></div>
+      <div class="cell">@handle<em data-i18n="flow.assign">assignment</em></div>
       <span class="arrow">→</span>
       <div class="cell">chatReply<em>generate.ts</em></div>
       <span class="arrow">→</span>
@@ -821,27 +893,27 @@
     </div>
     <div class="split">
       <div>
-        <h3>No tool calls</h3>
-        <p>That text is the answer. The loop stops.</p>
+        <h3 data-i18n="h3.notool">No tool calls</h3>
+        <p data-i18n="p.notool">That text is the answer. The loop stops.</p>
       </div>
       <div>
-        <h3>Tool calls</h3>
-        <p><code>gateTool</code> → <code>Promise.all</code> → append results → ask again. Bounded. At the bound it asks for a final answer.</p>
+        <h3 data-i18n="h3.tool">Tool calls</h3>
+        <p data-i18n-html="p.tool"><code>gateTool</code> → <code>Promise.all</code> → append results → ask again. Bounded. At the bound it asks for a final answer.</p>
       </div>
     </div>
-    <p class="note">steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.</p>
-    <p class="note">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.</p>
-    <p class="note">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
+    <p class="note" data-i18n-html="note.steer">steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.</p>
+    <p class="note" data-i18n-html="note.hermes">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.</p>
+    <p class="note" data-i18n-html="note.files">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
   </section>
 
   <section class="block" id="run">
-    <p class="kicker">What runs locally</p>
-    <h2>Your disk. Your models.</h2>
-    <p class="note">Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.</p>
+    <p class="kicker" data-i18n="kicker.run">What runs locally</p>
+    <h2 data-i18n="h2.run">Your disk. Your models.</h2>
+    <p class="note" data-i18n-html="note.run">Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.</p>
     <div class="term">
       <header>
         <span>npx</span>
-        <button type="button" class="btn" id="copy-cli">Copy</button>
+        <button type="button" class="btn" id="copy-cli" data-i18n="copy">Copy</button>
       </header>
       <pre id="cli">npx @kevin5251984/guild web
 # http://127.0.0.1:7420
@@ -852,30 +924,329 @@ pnpm test
 pnpm dev</pre>
     </div>
     <table class="limits">
-      <thead><tr><th>Limit</th><th>Fact</th></tr></thead>
+      <thead><tr><th data-i18n="th.limit">Limit</th><th data-i18n="th.fact">Fact</th></tr></thead>
       <tbody>
-        <tr><td><code>run</code> / <code>write</code></td><td>Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.</td></tr>
-        <tr><td>MCP</td><td>Host Claude / Cursor / Codex stdio is live with no import step.</td></tr>
-        <tr><td>Browser</td><td>Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
+        <tr><td><code>run</code> / <code>write</code></td><td data-i18n-html="td.shell">Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.</td></tr>
+        <tr><td>MCP</td><td data-i18n="td.mcp">Host Claude / Cursor / Codex stdio is live with no import step.</td></tr>
+        <tr><td>Browser</td><td data-i18n-html="td.browser">Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
       </tbody>
     </table>
-    <p class="note">Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
+    <p class="note" data-i18n-html="note.security">Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
   </section>
 
   <footer>
-    <p>Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.</p>
+    <p data-i18n="footer">Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.</p>
     <p><a href="https://github.com/Jakevin/guild">github.com/Jakevin/guild</a></p>
   </footer>
 
   <script>
     const COLORS = { infra: "#5b8def", pm: "#2ea887", rd: "#e07a3d", design: "#7c6af7", marketing: "#d4537e" };
     const GLYPH = { infra: "I", pm: "PM", rd: "R", design: "D", marketing: "M" };
-    const NAME = { infra: "Infra", pm: "Project Manager", rd: "RD", design: "Design", marketing: "Marketing" };
     const SHIP_LINE = 'Start every reply with "Ship it:" then exactly two short sentences. No bullets.';
-    const PM_BEFORE = "The job on this channel is to explain Guild in one minute. The most important thing is to @mention the person you want — do not start a new feature.";
-    const PM_AFTER = "Ship it: @mention one seat. Do not start a new feature.";
-    const RD_REPLY = "This repo is Guild: a local daemon on :7420. You staff named adventurers and @mention one. I am not starting a feature.";
-    const CHANNEL = { who: "you", handle: "you", text: "#demo\nJob: explain Guild in one minute.\nMost important thing: @mention the person you want." };
+    const LOCALES = ["zh-CN", "zh-TW", "en", "ja"];
+    const LANG_ATTR = { "zh-CN": "zh-Hans", "zh-TW": "zh-Hant", en: "en", ja: "ja" };
+    const I18N = {
+      en: {
+        title: "Guild — a local guild. @mention one.",
+        skip: "Skip to the hall",
+        local: "local-first",
+        "nav.run": "Run locally",
+        "lang.group": "Language",
+        "kicker.hero": "A local guild of adventurers",
+        h1: "A local bench of bots.<br />@mention the one you want.",
+        lead: "Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. Checkout with pnpm is the alternative.",
+        "cta.try": "Try the hall",
+        "banner.title": "Interactive preview — no model calls.",
+        "banner.body": "Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys. This tab does not talk to <code>127.0.0.1:7420</code>.",
+        "img.alt": "A local guild. @mention one adventurer.",
+        figcaption: "Live hall on :7420 — this page is a fixture of the same idea.",
+        "kicker.try": "Try the hall",
+        "h2.try": "Five seats. One @handle.",
+        "note.try": "Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.",
+        roster: "Roster",
+        "pane.job": "a channel has a job",
+        "chip.reset": "Reset",
+        "soul.label": "SOUL.md · @pm Voice (fixture)",
+        "soul.save": "Save Voice",
+        "kicker.harness": "How the harness works",
+        "h2.harness": "One turn. One process.",
+        "flow.assign": "assignment",
+        "h3.notool": "No tool calls",
+        "p.notool": "That text is the answer. The loop stops.",
+        "h3.tool": "Tool calls",
+        "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → append results → ask again. Bounded. At the bound it asks for a final answer.",
+        "note.steer": "steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.",
+        "note.hermes": "Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.",
+        "note.files": "Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.",
+        "kicker.run": "What runs locally",
+        "h2.run": "Your disk. Your models.",
+        "note.run": "Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.",
+        copy: "Copy",
+        copied: "Copied",
+        "copy.fail": "Select & copy",
+        "th.limit": "Limit",
+        "th.fact": "Fact",
+        "td.shell": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.",
+        "td.mcp": "Host Claude / Cursor / Codex stdio is live with no import step.",
+        "td.browser": "Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.",
+        "note.security": "Read <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> before you point this at a machine you care about.",
+        footer: "Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.",
+        "seat.infra": "Infra",
+        "seat.pm": "Project Manager",
+        "seat.rd": "RD",
+        "seat.design": "Design",
+        "seat.marketing": "Marketing",
+        you: "you",
+        "status.unchanged": "Unchanged. Ask @pm, then change Voice, then ask again.",
+        "status.saved": "Voice saved in this tab only. Ask @pm again — the fixture now starts with Ship it:",
+        "status.missing": "Voice missing Ship it: — not applied.",
+        "pm.before": "The job on this channel is to explain Guild in one minute. The most important thing is to @mention the person you want — do not start a new feature.",
+        "pm.after": "Ship it: @mention one seat. Do not start a new feature.",
+        "rd.reply": "This repo is Guild: a local daemon on :7420. You staff named adventurers and @mention one. I am not starting a feature.",
+        channel: "#demo\nJob: explain Guild in one minute.\nMost important thing: @mention the person you want.",
+        "ask.pm": "@pm what is the one most important thing now?",
+        "ask.rd": "@rd look at the current repo. Tell me what it is. Do not start a new feature.",
+        ship: 'Start every reply with "Ship it:" then exactly two short sentences. No bullets.'
+      },
+      "zh-TW": {
+        title: "Guild — 本機冒險者工會。點名一人。",
+        skip: "跳到大廳",
+        local: "本機優先",
+        "nav.run": "本機啟動",
+        "lang.group": "語言",
+        "kicker.hero": "本機冒險者工會",
+        h1: "本機冒險者工會。<br />用 @mention 點名你要的那個人。",
+        lead: "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>，不是按個 star。要用 pnpm checkout 是替代路徑。",
+        "cta.try": "試大廳",
+        "banner.title": "Interactive preview — no model calls.",
+        "banner.body": "固定回覆。沒有 <code>run</code>、沒有 <code>write</code>、沒有 MCP、沒有瀏覽器、沒有 API key。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
+        "img.alt": "本機冒險者工會。點名一人。",
+        figcaption: ":7420 上的真大廳 — 這頁是同一件事的靜態預覽。",
+        "kicker.try": "試大廳",
+        "h2.try": "五席。一個 @handle。",
+        "note.try": "點 <code>@pm</code> — 只有 PM 回。點 <code>@rd</code> — 換一席。改 Voice，再問 PM — 同一個人，不同聲音。",
+        roster: "編制",
+        "pane.job": "頻道有一份委託",
+        "chip.reset": "重設",
+        "soul.label": "SOUL.md · @pm Voice（預覽）",
+        "soul.save": "儲存 Voice",
+        "kicker.harness": "Harness 怎麼跑",
+        "h2.harness": "一回合。一條 process。",
+        "flow.assign": "分派",
+        "h3.notool": "沒有工具呼叫",
+        "p.notool": "那句話就是回覆。迴圈停。",
+        "h3.tool": "有工具呼叫",
+        "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 把結果塞回去 → 再問一次。有上限。碰到上限就改要最終回覆。",
+        "note.steer": "引導下一輪以 <code>&lt;user_steer&gt;</code> 進模型。Stop 會 abort 這回合的 <code>AbortSignal</code>。技能目錄只有名字與摘要；正文要模型自己 call <code>skill</code> 才載入。",
+        "note.hermes": "Guild 只借 Hermes 一個形做瀏覽器快照 — 不動正在跑的 Chrome。回合迴圈是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。預設 sandbox 是 <code>full_access</code>。",
+        "note.files": "檔案：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
+        "kicker.run": "本機在跑什麼",
+        "h2.run": "你的磁碟。你的模型。",
+        "note.run": "Node ≥ 22.19。一行，不必 clone。大廳在 <code>http://127.0.0.1:7420</code>。",
+        copy: "複製",
+        copied: "已複製",
+        "copy.fail": "選取後複製",
+        "th.limit": "限制",
+        "th.fact": "事實",
+        "td.shell": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。",
+        "td.mcp": "本機 Claude / Cursor / Codex 的 stdio 免匯入、直接可用。",
+        "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。設 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
+        "note.security": "對你在意的機器動手之前，先讀 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
+        footer: "Guild 不是任務板，不是酒館，不是小隊出征。頻道是一張沒結案的委託。MIT.",
+        "seat.infra": "基建",
+        "seat.pm": "專案經理",
+        "seat.rd": "研發",
+        "seat.design": "美術設計",
+        "seat.marketing": "行銷",
+        you: "你",
+        "status.unchanged": "還沒改。先問 @pm，改 Voice，再問一次。",
+        "status.saved": "Voice 只存在這個分頁。再問 @pm — 預覽現在以 Ship it: 開頭。",
+        "status.missing": "Voice 沒有 Ship it: — 沒套用。",
+        "pm.before": "這個頻道的委託是用一分鐘講清楚 Guild。最重要的事是 @mention 你要的那個人 — 不要開新功能。",
+        "pm.after": "Ship it: 點名一席。不要開新功能。",
+        "rd.reply": "這個 repo 是 Guild：本機 daemon，跑在 :7420。你編制有名字的冒險者，再 @mention 其中一個。我不會開新功能。",
+        channel: "#demo\n委託：用一分鐘講清楚 Guild。\n最重要的事：@mention 你要的那個人。",
+        "ask.pm": "@pm 現在最重要的一件事是什麼？",
+        "ask.rd": "@rd 看目前這個 repo。告訴我它是什麼。不要開新功能。",
+        ship: '每則回覆以 "Ship it:" 開頭，再接兩句短句。不要條列。'
+      },
+      "zh-CN": {
+        title: "Guild — 本地冒险者公会。点名一人。",
+        skip: "跳到大厅",
+        local: "本地优先",
+        "nav.run": "本地启动",
+        "lang.group": "语言",
+        "kicker.hero": "本地冒险者公会",
+        h1: "本地冒险者公会。<br />用 @mention 点名你要的那个人。",
+        lead: "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>，不是点个 star。用 pnpm checkout 是替代路径。",
+        "cta.try": "试大厅",
+        "banner.title": "Interactive preview — no model calls.",
+        "banner.body": "固定回复。没有 <code>run</code>、没有 <code>write</code>、没有 MCP、没有浏览器、没有 API key。这个分页不会连到 <code>127.0.0.1:7420</code>。",
+        "img.alt": "本地冒险者公会。点名一人。",
+        figcaption: ":7420 上的真大厅 — 这页是同一件事的静态预览。",
+        "kicker.try": "试大厅",
+        "h2.try": "五席。一个 @handle。",
+        "note.try": "点 <code>@pm</code> — 只有 PM 回。点 <code>@rd</code> — 换一席。改 Voice，再问 PM — 同一个人，不同声音。",
+        roster: "编制",
+        "pane.job": "频道有一份委托",
+        "chip.reset": "重置",
+        "soul.label": "SOUL.md · @pm Voice（预览）",
+        "soul.save": "保存 Voice",
+        "kicker.harness": "Harness 怎么跑",
+        "h2.harness": "一回合。一条 process。",
+        "flow.assign": "指派",
+        "h3.notool": "没有工具调用",
+        "p.notool": "那句话就是回复。循环停。",
+        "h3.tool": "有工具调用",
+        "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 把结果塞回去 → 再问一次。有上限。碰到上限就改要最终回复。",
+        "note.steer": "引导下一轮以 <code>&lt;user_steer&gt;</code> 进模型。Stop 会 abort 这回合的 <code>AbortSignal</code>。技能目录只有名字与摘要；正文要模型自己 call <code>skill</code> 才载入。",
+        "note.hermes": "Guild 只借 Hermes 一个形做浏览器快照 — 不动正在跑的 Chrome。回合循环是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。默认 sandbox 是 <code>full_access</code>。",
+        "note.files": "文件：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
+        "kicker.run": "本地在跑什么",
+        "h2.run": "你的磁盘。你的模型。",
+        "note.run": "Node ≥ 22.19。一行，不必 clone。大厅在 <code>http://127.0.0.1:7420</code>。",
+        copy: "复制",
+        copied: "已复制",
+        "copy.fail": "选取后复制",
+        "th.limit": "限制",
+        "th.fact": "事实",
+        "td.shell": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。",
+        "td.mcp": "本机 Claude / Cursor / Codex 的 stdio 免导入、直接可用。",
+        "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。设 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
+        "note.security": "对你在意的机器动手之前，先读 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
+        footer: "Guild 不是任务板，不是酒馆，不是小队出征。频道是一张没结案的委托。MIT.",
+        "seat.infra": "基建",
+        "seat.pm": "项目经理",
+        "seat.rd": "研发",
+        "seat.design": "美术设计",
+        "seat.marketing": "营销",
+        you: "你",
+        "status.unchanged": "还没改。先问 @pm，改 Voice，再问一次。",
+        "status.saved": "Voice 只存在这个分页。再问 @pm — 预览现在以 Ship it: 开头。",
+        "status.missing": "Voice 没有 Ship it: — 没套用。",
+        "pm.before": "这个频道的委托是用一分钟讲清楚 Guild。最重要的事是 @mention 你要的那个人 — 不要开新功能。",
+        "pm.after": "Ship it: 点名一席。不要开新功能。",
+        "rd.reply": "这个 repo 是 Guild：本地 daemon，跑在 :7420。你编制有名字的冒险者，再 @mention 其中一个。我不会开新功能。",
+        channel: "#demo\n委托：用一分钟讲清楚 Guild。\n最重要的事：@mention 你要的那个人。",
+        "ask.pm": "@pm 现在最重要的一件事是什么？",
+        "ask.rd": "@rd 看目前这个 repo。告诉我它是什么。不要开新功能。",
+        ship: '每则回复以 "Ship it:" 开头，再接两句短句。不要条列。'
+      },
+      ja: {
+        title: "Guild — ローカルの冒険者ギルド。ひとり指名。",
+        skip: "拠点へスキップ",
+        local: "ローカルファースト",
+        "nav.run": "ローカルで起動",
+        "lang.group": "言語",
+        "kicker.hero": "ローカルの冒険者ギルド",
+        h1: "ローカルの冒険者ギルド。<br />@mention で欲しい一人を指名。",
+        lead: "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。Node ≥ 22.19 が必要。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。star ではない。pnpm の checkout は代替。",
+        "cta.try": "拠点を試す",
+        "banner.title": "Interactive preview — no model calls.",
+        "banner.body": "固定の返信。<code>run</code> も <code>write</code> も MCP もブラウザも API key もない。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
+        "img.alt": "ローカルのギルド。ひとり指名。",
+        figcaption: ":7420 の本番拠点 — このページは同じ発想の静的プレビュー。",
+        "kicker.try": "拠点を試す",
+        "h2.try": "五席。ひとりの @handle。",
+        "note.try": "<code>@pm</code> を押すと PM だけが返す。<code>@rd</code> は別の席。Voice を変えて PM にもう一度 — 同じ人、違う声。",
+        roster: "ロスター",
+        "pane.job": "チャンネルには依頼がある",
+        "chip.reset": "リセット",
+        "soul.label": "SOUL.md · @pm Voice（プレビュー）",
+        "soul.save": "Voice を保存",
+        "kicker.harness": "ハーネスのまわし方",
+        "h2.harness": "1 回合。1 process。",
+        "flow.assign": "指名",
+        "h3.notool": "ツール呼び出しなし",
+        "p.notool": "その発話が答え。ループは止まる。",
+        "h3.tool": "ツール呼び出しあり",
+        "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 結果を戻して、もう一度聞く。上限あり。上限では最終回答を求める。",
+        "note.steer": "steer は次ラウンドで <code>&lt;user_steer&gt;</code> としてモデルへ。Stop はこの回合の <code>AbortSignal</code> を abort する。スキルカタログは名前と要約だけ。本文はモデルが <code>skill</code> を呼んでから読む。",
+        "note.hermes": "Guild が Hermes から借りたのはブラウザスナップショットの形ひとつ — 稼働中の Chrome は触らない。回合ループは Guild 自身。Codex app-server のハーネスではない。OS jail ではない。既定の sandbox は <code>full_access</code>。",
+        "note.files": "ファイル：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
+        "kicker.run": "ローカルで動くもの",
+        "h2.run": "あなたのディスク。あなたのモデル。",
+        "note.run": "Node ≥ 22.19。1 行、clone 不要。拠点は <code>http://127.0.0.1:7420</code>。",
+        copy: "コピー",
+        copied: "コピーした",
+        "copy.fail": "選択してコピー",
+        "th.limit": "制限",
+        "th.fact": "事実",
+        "td.shell": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。",
+        "td.mcp": "ホスト側 Claude / Cursor / Codex の stdio は import なしで使える。",
+        "td.browser": "<code>last_used</code> の Chrome を <code>~/.guild/browser-profile/chrome</code> にスナップショット。空にするなら <code>GUILD_BROWSER_REAL_PROFILE=0</code>。",
+        "note.security": "大事なマシンに向ける前に <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> を読む。",
+        footer: "Guild はタスクボードではない。酒場ではない。パーティー出撃ではない。チャンネルは結案していない依頼書だ。MIT.",
+        "seat.infra": "インフラ",
+        "seat.pm": "PM",
+        "seat.rd": "RD",
+        "seat.design": "デザイン",
+        "seat.marketing": "マーケティング",
+        you: "あなた",
+        "status.unchanged": "未変更。先に @pm へ聞き、Voice を変えて、もう一度。",
+        "status.saved": "Voice はこのタブだけ。もう一度 @pm — プレビューは Ship it: で始まる。",
+        "status.missing": "Voice に Ship it: がない — 未適用。",
+        "pm.before": "このチャンネルの依頼は Guild を一分で説明すること。いちばん大事なのは欲しい人を @mention すること — 新機能は始めない。",
+        "pm.after": "Ship it: 席をひとつ指名。新機能は始めない。",
+        "rd.reply": "この repo は Guild：:7420 のローカル daemon。名前のある冒険者を編成し、ひとりを @mention する。新機能は始めない。",
+        channel: "#demo\n依頼: Guild を一分で説明する。\nいちばん大事なこと: 欲しい人を @mention する。",
+        "ask.pm": "@pm いま一番大事なことは何？",
+        "ask.rd": "@rd いまの repo を見て、何か教えて。新機能は始めない。",
+        ship: 'すべての返信を "Ship it:" で始め、短い文を二つ。箇条書きは禁止。'
+      }
+    };
+
+    let currentLocale = "en";
+    function detectLocale() {
+      try {
+        var saved = localStorage.getItem("guild-pages-locale");
+        if (saved && I18N[saved]) return saved;
+      } catch (err) {}
+      var nav = "";
+      if (typeof navigator !== "undefined") {
+        nav = String(navigator.language || navigator.userLanguage || "").toLowerCase();
+      }
+      if (nav.indexOf("zh-tw") === 0 || nav.indexOf("zh-hant") === 0 || nav.indexOf("zh-hk") === 0 || nav.indexOf("zh-mo") === 0) return "zh-TW";
+      if (nav.indexOf("zh") === 0) return "zh-CN";
+      if (nav.indexOf("ja") === 0) return "ja";
+      return "en";
+    }
+    function t(key) {
+      var pack = I18N[currentLocale] || I18N.en;
+      return (pack && pack[key]) || I18N.en[key] || key;
+    }
+    function applyI18n() {
+      document.documentElement.lang = LANG_ATTR[currentLocale] || "en";
+      document.title = t("title");
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        el.textContent = t(el.getAttribute("data-i18n"));
+      });
+      document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+        el.innerHTML = t(el.getAttribute("data-i18n-html"));
+      });
+      document.querySelectorAll("[data-i18n-aria]").forEach(function (el) {
+        el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
+      });
+      document.querySelectorAll("[data-i18n-alt]").forEach(function (el) {
+        el.setAttribute("alt", t(el.getAttribute("data-i18n-alt")));
+      });
+      document.querySelectorAll("[data-locale]").forEach(function (el) {
+        el.setAttribute("aria-pressed", el.getAttribute("data-locale") === currentLocale ? "true" : "false");
+      });
+      var askPm = document.getElementById("ask-pm");
+      var askRd = document.getElementById("ask-rd");
+      if (askPm) askPm.textContent = t("ask.pm");
+      if (askRd) askRd.textContent = t("ask.rd");
+      var copyBtn = document.getElementById("copy-cli");
+      if (copyBtn) copyBtn.textContent = t("copy");
+      refreshSoulStatus();
+    }
+    function setLocale(locale) {
+      if (!I18N[locale]) locale = "en";
+      currentLocale = locale;
+      try { localStorage.setItem("guild-pages-locale", locale); } catch (err) {}
+      applyI18n();
+    }
 
     const thread = document.getElementById("thread");
     const soul = document.getElementById("soul");
@@ -886,13 +1257,15 @@ pnpm dev</pre>
     function esc(s) {
       return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
-
+    function seatName(handle) {
+      return t("seat." + handle);
+    }
     function addMsg(handle, text, you) {
       const row = document.createElement("div");
       row.className = "msg" + (you ? " you" : "");
       const av = you ? "Y" : GLYPH[handle];
       const bg = you ? "#242C36" : COLORS[handle];
-      const who = you ? "you" : "@" + handle + " · " + NAME[handle];
+      const who = you ? t("you") : "@" + handle + " · " + seatName(handle);
       row.innerHTML =
         '<span class="av" style="background:' + bg + '">' + esc(av) + "</span>" +
         '<div class="bubble"><div class="who">' + esc(who) + "</div>" +
@@ -900,40 +1273,40 @@ pnpm dev</pre>
       thread.appendChild(row);
       thread.scrollTop = thread.scrollHeight;
     }
-
     function mark(handle) {
       seats.forEach((el) => el.classList.toggle("on", el.getAttribute("data-handle") === handle));
     }
-
+    function refreshSoulStatus() {
+      if (!soulStatus) return;
+      soulStatus.textContent = soulOn ? t("status.saved") : t("status.unchanged");
+    }
     function reset() {
       thread.innerHTML = "";
       soulOn = false;
-      soulStatus.textContent = "Unchanged. Ask @pm, then change Voice, then ask again.";
       mark("");
-      addMsg("you", CHANNEL.text, true);
+      addMsg("you", t("channel"), true);
+      refreshSoulStatus();
     }
 
     document.getElementById("ask-pm").addEventListener("click", () => {
       mark("pm");
-      addMsg("you", "@pm what is the one most important thing now?", true);
-      addMsg("pm", soulOn ? PM_AFTER : PM_BEFORE, false);
+      addMsg("you", t("ask.pm"), true);
+      addMsg("pm", soulOn ? t("pm.after") : t("pm.before"), false);
     });
     document.getElementById("ask-rd").addEventListener("click", () => {
       mark("rd");
-      addMsg("you", "@rd look at the current repo. Tell me what it is. Do not start a new feature.", true);
-      addMsg("rd", RD_REPLY, false);
+      addMsg("you", t("ask.rd"), true);
+      addMsg("rd", t("rd.reply"), false);
     });
     document.getElementById("reset").addEventListener("click", reset);
     document.getElementById("apply-soul").addEventListener("click", () => {
       const body = soul.value;
       soulOn = body.includes("Ship it:");
       if (!soulOn) {
-        soul.value = body.replace("## Voice\n", "## Voice\n" + SHIP_LINE + "\n");
-        soulOn = true;
+        soul.value = body.replace("## Voice\n", "## Voice\n" + t("ship") + "\n");
+        soulOn = soul.value.includes("Ship it:");
       }
-      soulStatus.textContent = soulOn
-        ? "Voice saved in this tab only. Ask @pm again — the fixture now starts with Ship it:"
-        : "Voice missing Ship it: — not applied.";
+      soulStatus.textContent = soulOn ? t("status.saved") : t("status.missing");
     });
     seats.forEach((el) => {
       el.addEventListener("click", () => {
@@ -948,12 +1321,20 @@ pnpm dev</pre>
       const text = "npx @kevin5251984/guild web\n";
       try {
         await navigator.clipboard.writeText(text);
-        btn.textContent = "Copied";
-        setTimeout(() => { btn.textContent = "Copy"; }, 1400);
+        btn.textContent = t("copied");
+        setTimeout(() => { btn.textContent = t("copy"); }, 1400);
       } catch (_) {
-        btn.textContent = "Select & copy";
+        btn.textContent = t("copy.fail");
       }
     });
+    document.querySelector(".locale-switch").addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-locale]");
+      if (!btn) return;
+      setLocale(btn.getAttribute("data-locale"));
+    });
+
+    currentLocale = detectLocale();
+    applyI18n();
     reset();
   </script>
 </body>
