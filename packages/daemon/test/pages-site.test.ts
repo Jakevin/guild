@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -51,10 +51,22 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /\.sign \{[\s\S]*?font-family:\s*Cinzel/);
   assert.doesNotMatch(html, /h1 \{[^}]*font-family:\s*Syne/);
   assert.doesNotMatch(html, /h2 \{[^}]*font-family:\s*Syne/);
-  assert.match(html, /docs\/demo-hall-en-2026-08-31\.gif/);
+  assert.match(html, /src="demo-hall-en-2026-08-31\.gif"/);
+  assert.doesNotMatch(html, /docs\/demo-hall-en-2026-08-31\.gif/);
   assert.doesNotMatch(html, /docs\/demo-hall-en-2026-08-29\.gif/);
+  assert.doesNotMatch(html, /raw\.githubusercontent\.com\/Jakevin\/guild\/main\/docs\/demo-hall/);
   assert.match(workflow, /path: site/);
   assert.match(workflow, /actions\/deploy-pages/);
+});
+
+test("Pages GIF is a byte-identical copy inside site/", () => {
+  const gif = join(ROOT, "site/demo-hall-en-2026-08-31.gif");
+  const src = join(ROOT, "docs/demo-hall-en-2026-08-31.gif");
+  assert.equal(existsSync(gif), true);
+  const a = readFileSync(gif);
+  const b = readFileSync(src);
+  assert.equal(a.equals(b), true);
+  assert.ok(a.byteLength > 1_000_000);
 });
 
 test("Pages JSON-LD and the nav version match the npm package", () => {
@@ -134,4 +146,30 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
   assert.match(html, /"zh-TW": \{/);
   assert.match(html, /"zh-CN": \{/);
   assert.match(html, /\bnpx @kevin5251984\/guild web\b/);
+  assert.match(html, /id="tonight"/);
+  assert.match(html, /class="plaques"/);
+  assert.match(html, /OpenCode Free/);
+  assert.match(html, /does not hire a seat/);
+  assert.match(html, /not a four-language app/);
+  assert.match(html, /"h2\.tonight": "今晚大廳能做的事"/);
+  assert.match(html, /"pl\.mobile\.t": "\/m 外出"/);
+  assert.match(html, /opencode\.ai/);
+  assert.match(html, /Guild 0\.2\.20/);
+  assert.doesNotMatch(html, /four-language UI/);
+
+  const start = html.indexOf("const I18N = {");
+  const end = html.indexOf("\n    };", start);
+  assert.ok(start >= 0 && end > start, "I18N object");
+  const I18N = new Function(`${html.slice(start, end + "\n    };".length)}\nreturn I18N;`)() as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const locales = ["en", "zh-TW", "zh-CN", "ja"] as const;
+  assert.deepEqual(Object.keys(I18N), [...locales]);
+  const keys = Object.keys(I18N.en).sort();
+  assert.ok(keys.length >= 70, `en keys ${keys.length}`);
+  for (const loc of locales) {
+    assert.deepEqual(Object.keys(I18N[loc]).sort(), keys, loc);
+    assert.equal(I18N[loc]["banner.title"], "Interactive preview — no model calls.");
+  }
 });
