@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -135,6 +135,55 @@ test("workspace_write refuses run cwd outside the workspace", async () => {
   assert.match(ok.text, new RegExp(workspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("workspace_write refuses browser", async () => {
+  const workspace = tempDir();
+  const ctx = { sandbox: "workspace_write" as const, workspace };
+  const refused = gateTool(
+    "browser",
+    { action: "open", url: "https://example.com" },
+    ctx,
+  );
+  assert.ok(refused);
+  assert.match(refused.text, /workspace_write refused browser/);
+  const ran = await executeTool(
+    "browser",
+    { action: "open", url: "https://example.com" },
+    ctx,
+  );
+  assert.equal(ran.isError, true);
+  assert.match(ran.text, /full_access/);
+  const names = guildTools([], ctx).map((tool) => tool.name);
+  assert.ok(!names.includes("browser"));
+  assert.ok(!names.includes("image_gen"));
+  assert.ok(names.includes("read"));
+  assert.ok(names.includes("run"));
+});
+
+test("workspace_write refuses read and list outside the workspace", async () => {
+  const workspace = tempDir();
+  const outside = tempDir();
+  const leaked = join(outside, "secret.txt");
+  writeFileSync(leaked, "do not read me");
+  const ctx = { sandbox: "workspace_write" as const, workspace };
+  const bad = gateTool("read", { path: "/etc/passwd" }, ctx);
+  assert.ok(bad);
+  assert.match(bad.text, /refused read outside workspace/);
+  const file = await executeTool("read", { path: leaked }, ctx);
+  assert.equal(file.isError, true);
+  assert.match(file.text, /outside workspace/);
+  assert.ok(!file.text.includes("do not read me"));
+  const badList = gateTool("list", { path: outside }, ctx);
+  assert.ok(badList);
+  assert.match(badList.text, /refused list outside workspace/);
+  const inside = join(workspace, "note.txt");
+  writeFileSync(inside, "ok");
+  assert.equal(gateTool("read", { path: inside }, ctx), null);
+  assert.equal(gateTool("list", { path: "" }, ctx), null);
+  const listed = await executeTool("list", { path: "." }, ctx);
+  assert.equal(listed.isError, false);
+  assert.match(listed.text, /note\.txt/);
+});
+
 test("workspace_write refuses mcp", async () => {
   const refused = gateTool("mcp__echo__ping", {}, {
     sandbox: "workspace_write",
@@ -184,4 +233,52 @@ test("executeTool dispatch uses the tools table, not a local switch", async () =
   });
   assert.deepEqual(names, ["run"]);
   assert.equal(result.text, "via-table:run");
+});
+
+test("workspace_write without a workspace falls back to the guild checkout", async () => {
+  const homeSecret = join(homedir(), "secret.txt");
+  const outside = gateTool("read", { path: homeSecret }, {
+    sandbox: "workspace_write",
+  });
+  assert.ok(outside);
+  assert.match(outside.text, /refused read outside workspace/);
+  assert.ok(outside.text.includes(homeSecret));
+  const key = gateTool("read", { path: join(homedir(), ".ssh", "id_rsa") }, {
+    sandbox: "workspace_write",
+  });
+  assert.ok(key);
+  assert.match(key.text, /refused read outside workspace/);
+  assert.equal(
+    gateTool(
+      "read",
+      { path: join(defaultWorkspace(), "package.json") },
+      { sandbox: "workspace_write" },
+    ),
+    null,
+  );
+  assert.equal(
+    gateTool("list", { path: "packages" }, { sandbox: "workspace_write" }),
+    null,
+  );
+  const wrote = gateTool(
+    "write",
+    { path: join(homedir(), "pwned.txt"), content: "x" },
+    { sandbox: "workspace_write" },
+  );
+  assert.ok(wrote);
+  assert.match(wrote.text, /refused write outside workspace/);
+  const ran = gateTool("run", { command: "pwd", workdir: homedir() }, {
+    sandbox: "workspace_write",
+  });
+  assert.ok(ran);
+  assert.match(ran.text, /refused run cwd outside workspace/);
+  // A relative read resolves inside the workspace, not all of $HOME.
+  const probe = await executeTool(
+    "read",
+    { path: "guild-sandbox-probe.txt" },
+    { sandbox: "workspace_write" },
+  );
+  assert.equal(probe.isError, true);
+  assert.ok(probe.text.includes(defaultWorkspace()));
+  assert.ok(!probe.text.includes(join(homedir(), "guild-sandbox-probe.txt")));
 });

@@ -259,6 +259,7 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /`explorer`/);
   assert.match(HALL_RULES, /Spawn first when/);
   assert.match(HALL_RULES, /Do not skip spawn/);
+  assert.match(HALL_RULES, /do not start this turn/);
 });
 
 test("child spawn cannot escalate a read_only parent", () => {
@@ -267,7 +268,7 @@ test("child spawn cannot escalate a read_only parent", () => {
     allowWrite: false,
   });
   assert.deepEqual(childSpawnPolicy("full_access", true), {
-    sandbox: "full_access",
+    sandbox: "read_only",
     allowWrite: false,
   });
   assert.deepEqual(childSpawnPolicy("full_access", false), {

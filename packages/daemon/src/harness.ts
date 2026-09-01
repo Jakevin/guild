@@ -171,9 +171,10 @@ export function gateTool(
     };
   }
 
+  // No explicit workspace means the guild checkout, never all of $HOME.
   const workspace = input.workspace?.trim()
     ? resolveToolPath(input.workspace)
-    : HOME;
+    : defaultWorkspace();
 
   if (name.startsWith("mcp__")) {
     return {
@@ -182,9 +183,20 @@ export function gateTool(
     };
   }
 
+  if (name === "read" || name === "list") {
+    const raw = typeof args.path === "string" ? args.path : "";
+    if (name === "list" && !raw.trim()) return null;
+    const target = resolveToolPath(raw, workspace);
+    if (!pathInsideWorkspace(target, workspace)) {
+      return {
+        text: `sandbox=workspace_write refused ${name} outside workspace: ${target}`,
+        isError: true,
+      };
+    }
+    return null;
+  }
+
   if (
-    name === "read" ||
-    name === "list" ||
     name === "skill" ||
     name === "spawn" ||
     name === "read_spawn"
@@ -224,7 +236,11 @@ export function gateTool(
     };
   }
 
-  return null;
+  // browser (CDP into the user's Chrome profile) and anything unnamed: refuse.
+  return {
+    text: `sandbox=workspace_write refused ${name}; use full_access`,
+    isError: true,
+  };
 }
 
 export type LoopCall = {

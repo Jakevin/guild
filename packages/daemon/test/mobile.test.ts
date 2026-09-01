@@ -10,6 +10,9 @@ const MOBILE_HTML = fileURLToPath(
 const MOBILE_CSS = fileURLToPath(
   new URL("../src/public/mobile.css", import.meta.url),
 );
+const CHAT_HTML = fileURLToPath(
+  new URL("../src/public/chat.html", import.meta.url),
+);
 
 async function listen(dataDir: string) {
   const app = await listenApp(dataDir);
@@ -68,4 +71,64 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(css, /safe-area-inset/);
   assert.doesNotMatch(html, /href="\/studio"/);
   assert.doesNotMatch(html, /href="\/library"/);
+});
+
+test("away page shares the hall's enamel tokens and press language", () => {
+  const css = readFileSync(MOBILE_CSS, "utf8");
+  assert.match(css, /--enamel:/);
+  assert.match(css, /--paper:/);
+  assert.match(css, /--bubble:/);
+  assert.match(css, /--danger:/);
+  assert.match(css, /--press:\s*0\.97/);
+  assert.match(css, /--ease-out:\s*cubic-bezier\(0\.23, 1, 0\.32, 1\)/);
+  assert.match(css, /--press-ms:\s*140ms/);
+  assert.match(css, /--hover-ms:\s*160ms/);
+  assert.match(css, /transform:\s*scale\(var\(--press\)\)/);
+  assert.doesNotMatch(css, /transition:\s*all/);
+  // Send is the one paper CTA; Stop stays a ghost on --fill/--lift.
+  assert.match(css, /\.send \{\s*background: var\(--paper\);\s*color: var\(--ink\);/);
+  assert.match(css, /\.turn-stop,\n\.stop-all \{\s*color: var\(--danger\);\s*background: var\(--fill\);/);
+  assert.match(css, /\.msg\.bot \.bubble \{\s*background: var\(--bubble\);/);
+  assert.match(
+    css,
+    /box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--steel\) 38%, transparent\)/,
+  );
+  assert.match(css, /\.flash\.err \{[\s\S]*?background: var\(--lift\);[\s\S]*?color: var\(--danger\);/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transform: none/);
+  assert.doesNotMatch(css, /#16100B/i);
+  assert.doesNotMatch(css, /Quest board/i);
+  assert.doesNotMatch(css, /#2a2a2a/i);
+  assert.doesNotMatch(css, /#1c1c1c/i);
+  assert.doesNotMatch(css, /#3a3a3a/i);
+  assert.doesNotMatch(css, /#1a1a1a/i);
+  assert.doesNotMatch(css, /#6f6f6f/i);
+  assert.doesNotMatch(css, /#cfcfcf/i);
+});
+
+test("away page locks the five seats and can steer a live turn", () => {
+  const html = readFileSync(MOBILE_HTML, "utf8");
+  const chat = readFileSync(CHAT_HTML, "utf8");
+  for (const page of [html, chat]) {
+    assert.match(page, /SEAT_HUE/);
+    assert.match(page, /infra: "#5b8def"/);
+    assert.match(page, /pm: "#2ea887"/);
+    assert.match(page, /rd: "#e07a3d"/);
+    assert.match(page, /design: "#7c6af7"/);
+    assert.match(page, /marketing: "#d4537e"/);
+    assert.match(page, /const COLORS = \["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"\]/);
+    assert.doesNotMatch(page, /gold:|seats: 6|第六席/);
+  }
+  assert.match(html, /\/steer/);
+  assert.match(html, /data-live-steer/);
+  assert.match(html, /id="steer"/);
+  assert.match(html, /class="steer"/);
+  assert.match(html, /t\("live\.steer"\)/);
+  assert.match(html, /steer\.hint|live\.steer/);
+  assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
+  assert.match(html, /role="status" aria-live="polite"/);
+  assert.match(html, /classList\.toggle\("err"/);
+  assert.match(html, /mobile\.css\?v=enamel/);
+  assert.doesNotMatch(html, /WebSocket/);
+  assert.doesNotMatch(html, /fonts\.googleapis/);
+  assert.doesNotMatch(html, /inn-street|#16100B/);
 });

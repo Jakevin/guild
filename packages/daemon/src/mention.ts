@@ -8,6 +8,15 @@ const LIST_MARK = /^[ \t]*(?:\d+[.)、]\s*|[-*•]\s+)/;
 /** Assignee right after the marker, or after 通過後/最後/再叫… — not the first @ anywhere on the line. */
 const LIST_ASSIGN =
   /^(?:`?@([A-Za-z0-9_-]+)`?|(?:通過後|最後|再叫|交給|交棒(?:給)?|指派|(?:call|ask)\s+)\s*`?@([A-Za-z0-9_-]+)`?)/i;
+/** Numbered/bullet item that names a later wave — do not start them this turn. */
+const LIST_LATER =
+  /^(?:通過後|最後|然後|之後|完成後)\s*`?@([A-Za-z0-9_-]+)`?/i;
+/** Prose: 四席完成後由 @infra / 才交 @infra. 再叫 is a handoff, not a defer. */
+const DEFER_AT =
+  /(?:完成後|通過後|最後(?:才|由)?|才需要|才叫|才交)[^@\n]{0,24}@([A-Za-z0-9_-]+)/gi;
+/** Bare handle after the same cues: 才需要call infra. */
+const DEFER_BARE =
+  /(?:完成後|才需要|才叫)\s*(?:call|ask|由)\s*`?@?([A-Za-z0-9_-]+)`?/gi;
 
 /** Drop fenced / inline code so `@pm` in a snippet does not dispatch. */
 export function stripMentionNoise(text: string): string {
@@ -39,6 +48,8 @@ export type MentionBlock = {
   handles: string[];
   kind: "lead" | "list";
 };
+
+export type MentionBot = { id: string; handle: string };
 
 function knownHandlesIn(chunk: string, known: Set<string>): string[] {
   const names: string[] = [];
@@ -97,17 +108,75 @@ export function lineStartMentions(text: string, handles: string[]): MentionBlock
   }));
 }
 
+/** Fenced samples only. Keep inline `code` so 「再叫 `@infra`」 still parses. */
+function stripFences(text: string): string {
+  return String(text ?? "").replace(/```[\s\S]*?```/g, " ");
+}
+
+/** Seats the same message says to start after someone else finishes. */
+export function deferredHandles(text: string, handles: string[]): string[] {
+  const raw = String(text ?? "");
+  const known = new Set(handles.map((handle) => handle.toLowerCase()));
+  const out: string[] = [];
+  const add = (name: string) => {
+    const key = name.toLowerCase();
+    if (!known.has(key) || out.includes(key)) return;
+    out.push(key);
+  };
+  const scan = stripFences(raw);
+  for (const row of scan.matchAll(new RegExp(DEFER_AT.source, "gi"))) {
+    if (row[1]) add(row[1]);
+  }
+  for (const row of scan.matchAll(new RegExp(DEFER_BARE.source, "gi"))) {
+    if (row[1]) add(row[1]);
+  }
+  let fence = false;
+  for (const part of raw.split(/(\r?\n)/)) {
+    if (part === "\n" || part === "\r\n") continue;
+    const trimmed = part.trim();
+    if (trimmed.startsWith("```")) {
+      fence = !fence;
+      continue;
+    }
+    if (fence || !LIST_MARK.test(part)) continue;
+    const hit = part.replace(LIST_MARK, "").match(LIST_LATER);
+    if (hit?.[1]) add(hit[1]);
+  }
+  return out;
+}
+
+export function withoutDeferredIds(
+  ids: string[],
+  text: string,
+  bots: MentionBot[],
+): string[] {
+  if (!ids.length) return ids;
+  const deferred = new Set(
+    deferredHandles(
+      text,
+      bots.map((bot) => bot.handle),
+    ),
+  );
+  if (!deferred.size) return ids;
+  return ids.filter((id) => {
+    const bot = bots.find((row) => row.id === id);
+    return !bot || !deferred.has(bot.handle.toLowerCase());
+  });
+}
+
 /**
  * Fallback when the client did not pick an assignee.
  * Every line-start @handle group, otherwise the first @handle in prose.
+ * Seats named as a later wave (完成後 / 最後 / 才叫) stay quiet this turn.
  */
 export function summonedHandles(text: string, handles: string[]): string[] {
   const known = new Set(handles.map((handle) => handle.toLowerCase()));
+  const deferred = new Set(deferredHandles(text, handles));
   const take = (names: string[]): string[] => {
     const out: string[] = [];
     for (const name of names) {
       const key = name.toLowerCase();
-      if (!known.has(key) || out.includes(key)) continue;
+      if (!known.has(key) || deferred.has(key) || out.includes(key)) continue;
       out.push(key);
     }
     return out;
@@ -117,7 +186,8 @@ export function summonedHandles(text: string, handles: string[]): string[] {
     const out: string[] = [];
     for (const block of blocks) {
       for (const handle of block.handles) {
-        if (!out.includes(handle)) out.push(handle);
+        if (deferred.has(handle) || out.includes(handle)) continue;
+        out.push(handle);
       }
     }
     return out;
@@ -126,11 +196,6 @@ export function summonedHandles(text: string, handles: string[]): string[] {
   const first = /(?:^|\s)@([A-Za-z0-9_-]+)\b/.exec(scan);
   if (first) return take([first[1]]);
   return [];
-}
-
-/** Fenced samples only. Keep inline `code` so 「再叫 `@infra`」 still parses. */
-function stripFences(text: string): string {
-  return String(text ?? "").replace(/```[\s\S]*?```/g, " ");
 }
 
 /**
@@ -143,17 +208,16 @@ const HANDOFF_ASK =
 
 export function handoffHandles(text: string, handles: string[]): string[] {
   const known = new Set(handles.map((handle) => handle.toLowerCase()));
+  const deferred = new Set(deferredHandles(text, handles));
   const out = summonedHandles(text, handles);
   const ask = new RegExp(HANDOFF_ASK.source, "gi");
   for (const row of stripFences(text).matchAll(ask)) {
     const key = row[1].toLowerCase();
-    if (!known.has(key) || out.includes(key)) continue;
+    if (!known.has(key) || deferred.has(key) || out.includes(key)) continue;
     out.push(key);
   }
   return out;
 }
-
-export type MentionBot = { id: string; handle: string };
 
 export function sanitizeMentionIds(
   raw: unknown,
@@ -188,7 +252,7 @@ export function parseMentionIds(
     if (!bot || out.includes(bot.id)) continue;
     out.push(bot.id);
   }
-  return out;
+  return withoutDeferredIds(out, text, bots);
 }
 
 /**
@@ -206,7 +270,11 @@ export function messageMentionIds(
         bots,
         message.author === "you" ? "user" : "bot",
       );
-  return ids.filter((id) => id !== message.author);
+  return withoutDeferredIds(
+    ids.filter((id) => id !== message.author),
+    message.body,
+    bots,
+  );
 }
 
 /**

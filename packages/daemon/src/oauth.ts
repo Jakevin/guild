@@ -1242,7 +1242,7 @@ export async function completeOAuth(input: {
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   temperature?: number;
-  reasoning?: "minimal" | "low" | "medium" | "high";
+  reasoning?: string;
   tools?: boolean;
   skills?: SkillRef[];
   toolCtx?: ToolContext;
@@ -1301,7 +1301,7 @@ export async function completeOAuth(input: {
   });
   const options: {
     temperature?: number;
-    reasoning?: "minimal" | "low" | "medium" | "high";
+    reasoning?: string;
     signal?: AbortSignal;
     transformHeaders?: (
       headers: Record<string, string | null>,

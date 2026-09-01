@@ -40,6 +40,16 @@ import {
   withDuration,
 } from "./usage.ts";
 import {
+  attachReasoning,
+  clampEffort,
+  reasoningFor,
+  reasoningPayload,
+  refreshReasoningCatalog,
+  sanitizeEffort,
+} from "./reasoning-catalog.ts";
+
+export { refreshReasoningCatalog };
+import {
   OPENCODE_FREE_DEFAULT_MODEL,
   OPENCODE_FREE_PROVIDER_ID,
   fetchOpenCodeFreeModels,
@@ -291,6 +301,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       return {
         id,
         ...provider,
+        models: attachReasoning(id, provider.models),
         apiKey: stored === "literal" ? "" : key,
         apiKeyPreview: key ? maskApiKey(key) : "",
         stored,
@@ -307,19 +318,19 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ready:
         isKeylessProvider(p.id) ||
         Boolean(resolveApiKey(p.apiKey, env) || p.stored === "literal"),
-      models: p.models,
+      models: attachReasoning(p.id, p.models),
     })),
     ...subscriptions.map((s) => ({
       id: s.pickerId,
       name: s.name,
       kind: "oauth" as const,
       ready: s.ready,
-      models: s.models ?? [],
+      models: attachReasoning(s.pickerId, s.models ?? []),
     })),
   ];
   return {
     default: file.default ?? null,
-    reasoning: file.reasoning ?? "medium",
+    reasoning: file.reasoning ?? "",
     fast: Boolean(file.fast),
     aux: file.aux ?? {},
     auxRoles: AUX_ROLES,
@@ -483,9 +494,14 @@ export async function llmComplete(input: {
     spawnDepth: 0,
     allowWrite: true,
   };
+  const file = readModelsFile(input.dataDir);
+  const effort = clampEffort(
+    file.fast ? "low" : file.reasoning,
+    reasoningFor(target.providerId, target.model),
+    Boolean(file.fast),
+  );
   if (OAUTH_PICKER_IDS.has(target.providerId)) {
     try {
-      const file = readModelsFile(input.dataDir);
       return await completeOAuth({
         dataDir: input.dataDir,
         pickerId: target.providerId,
@@ -493,7 +509,7 @@ export async function llmComplete(input: {
         system: input.system,
         messages: input.messages,
         temperature: input.temperature ?? 0.4,
-        reasoning: file.fast ? "low" : file.reasoning,
+        reasoning: effort,
         tools: useTools,
         skills: input.skills,
         toolCtx,
@@ -521,6 +537,7 @@ export async function llmComplete(input: {
       input.temperature ?? 0.4,
       useTools,
       toolCtx,
+      effort,
     );
     if (!done) return null;
     return {
@@ -554,11 +571,12 @@ async function dispatchComplete(
   temperature: number,
   tools: boolean,
   ctx: ToolContext,
+  effort?: string,
 ): Promise<DispatchResult | null> {
   if (isKeylessProvider(target.providerId) && usesZenResponses(target.model)) {
     return tools
-      ? completeZenResponsesTools(target, system, messages, ctx)
-      : wrapText(await completeZenResponses(target, system, messages));
+      ? completeZenResponsesTools(target, system, messages, ctx, effort)
+      : wrapText(await completeZenResponses(target, system, messages, effort));
   }
   if (target.api === "openai-responses") {
     const text = await completeCodex(target, system, messages);
@@ -570,8 +588,8 @@ async function dispatchComplete(
       : wrapText(await completeAnthropic(target, system, messages));
   }
   return tools
-    ? completeOpenAiTools(target, system, messages, temperature, ctx)
-    : wrapText(await completeOpenAi(target, system, messages, temperature));
+    ? completeOpenAiTools(target, system, messages, temperature, ctx, effort)
+    : wrapText(await completeOpenAi(target, system, messages, temperature, effort));
 }
 
 function wrapText(text: string | null): DispatchResult | null {
@@ -584,6 +602,7 @@ async function completeOpenAiTools(
   messages: { role: "user" | "assistant"; content: string }[],
   temperature: number,
   ctx: ToolContext,
+  effort?: string,
 ): Promise<DispatchResult | null> {
   type ChatMsg = {
     role: string;
@@ -635,6 +654,7 @@ async function completeOpenAiTools(
               messages: msgs,
               tools: catalog,
               tool_choice: "auto",
+              ...reasoningPayload(target.providerId, target.baseUrl, effort),
             }),
             signal: roundSignal(ctx),
           });
@@ -901,6 +921,7 @@ async function completeZenResponses(
   target: LlmTarget,
   system: string,
   messages: { role: "user" | "assistant"; content: string }[],
+  effort?: string,
 ): Promise<string | null> {
   const response = await postZenResponses(
     target,
@@ -908,6 +929,7 @@ async function completeZenResponses(
       model: target.model,
       instructions: system,
       input: messages,
+      ...reasoningPayload(target.providerId, target.baseUrl, effort),
     },
     AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   );
@@ -921,6 +943,7 @@ async function completeZenResponsesTools(
   system: string,
   messages: { role: "user" | "assistant"; content: string }[],
   ctx: ToolContext,
+  effort?: string,
 ): Promise<DispatchResult | null> {
   const input: ZenInput[] = messages.map((item) => ({
     role: item.role,
@@ -960,6 +983,7 @@ async function completeZenResponsesTools(
               input,
               tools,
               tool_choice: "auto",
+              ...reasoningPayload(target.providerId, target.baseUrl, effort),
             },
             roundSignal(ctx),
           );
@@ -1070,6 +1094,7 @@ async function completeOpenAi(
   system: string,
   messages: { role: "user" | "assistant"; content: string }[],
   temperature: number,
+  effort?: string,
 ): Promise<string | null> {
   const url = `${target.baseUrl}/chat/completions`;
   const response = await fetch(url, {
@@ -1079,6 +1104,7 @@ async function completeOpenAi(
       model: target.model,
       temperature,
       messages: [{ role: "system", content: system }, ...messages],
+      ...reasoningPayload(target.providerId, target.baseUrl, effort),
     }),
     signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
@@ -1278,6 +1304,7 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
       .map((model) => ({
         id: model.id.trim(),
         name: model.name?.trim() || undefined,
+        ...(model.reasoning ? { reasoning: model.reasoning } : {}),
       }));
     if (models.length === 0) {
       throw new StoreError(400, `provider ${id} needs at least one model`);
@@ -1307,12 +1334,7 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
   for (const [role, ref] of Object.entries(file.aux ?? {})) {
     aux[role as AuxRole] = validRef(ref as ModelRef | null);
   }
-  const reasoning =
-    file.reasoning === "minimal" ||
-    file.reasoning === "low" ||
-    file.reasoning === "high"
-      ? file.reasoning
-      : "medium";
+  const reasoning = sanitizeEffort(file.reasoning);
   const recent = (file.recent ?? [])
     .map((ref) => validRef(ref))
     .filter((ref): ref is ModelRef => Boolean(ref))

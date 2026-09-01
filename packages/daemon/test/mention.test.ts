@@ -17,6 +17,7 @@ import {
   mentionedHandles,
   assignmentFor,
   handoffHandles,
+  deferredHandles,
   isBroadcastMention,
   messageMentionIds,
 } from "../src/mention.ts";
@@ -126,18 +127,35 @@ test("prose @handles are references; line-start @handles all summon", () => {
     "",
     "在 PM 放行前：不替換既有 GIF、不改 README、不重啟 daemon、不上版。",
   ].join("\n");
-  assert.deepEqual(summonedHandles(pmPlan, handles), [
+  assert.deepEqual(deferredHandles(pmPlan, handles), ["marketing", "infra"]);
+  assert.deepEqual(summonedHandles(pmPlan, handles), ["design", "pm"]);
+  assert.deepEqual(handoffHandles(pmPlan, handles), ["design", "pm"]);
+  const waitInfra = [
+    "@design",
+    "Goal: 圖",
+    "@marketing",
+    "Goal: 文案",
+    "@infra",
+    "Goal: 組 RC",
+    "",
+    "**依賴順序：** @design 與 @marketing 可並行；四席完成後由 @infra 組 RC",
+  ].join("\n");
+  assert.deepEqual(deferredHandles(waitInfra, handles), ["infra"]);
+  assert.deepEqual(summonedHandles(waitInfra, handles), [
     "design",
-    "pm",
     "marketing",
-    "infra",
   ]);
-  assert.deepEqual(handoffHandles(pmPlan, handles), [
-    "design",
-    "pm",
-    "marketing",
-    "infra",
-  ]);
+  assert.deepEqual(
+    summonedHandles(
+      "@design\nGoal: 圖\n@infra\nGoal: 組 RC\n四席完成後，才需要call infra",
+      handles,
+    ),
+    ["design"],
+  );
+  assert.deepEqual(
+    handoffHandles("@design\nGoal: 圖\n四席完成後再叫 `@infra`。", handles),
+    ["design"],
+  );
   assert.match(assignmentFor(pmPlan, "design", handles), /不替換既有 GIF/);
   assert.match(assignmentFor(pmPlan, "infra", handles), /不替換既有 GIF/);
   assert.deepEqual(
@@ -210,7 +228,7 @@ test("@all starts every channel member at once", async () => {
   assert.ok(Math.max(...starts) - Math.min(...starts) < 80);
 });
 
-test("@handle of a bot outside the channel adds them and they reply", async () => {
+test("@handle of a bot outside the channel does not add them", async () => {
   const dataDir = tempHome();
   writeModelsFile(dataDir, { default: null, providers: {} });
   const { server, origin } = await listen(dataDir, {});
@@ -248,16 +266,15 @@ test("@handle of a bot outside the channel adds them and they reply", async () =
     });
     assert.equal(posted.status, 201);
     const replies = posted.body.replies as { author: string; body: string }[];
-    assert.equal(replies.length, 1);
-    assert.equal(replies[0].author, rd.id);
-    assert.match(replies[0].body, /收到/);
+    assert.equal(replies.length, 0);
 
     const after = (await json(origin, "/workspace")).body as {
       channels: { id: string; memberIds: string[] }[];
     };
     const opsAfter = after.channels.find((ch) => ch.id === channelId);
-    assert.ok(opsAfter?.memberIds.includes(rd.id));
-    assert.ok(opsAfter?.memberIds.includes(pm.id));
+    assert.ok(opsAfter);
+    assert.ok(!opsAfter.memberIds.includes(rd.id));
+    assert.ok(opsAfter.memberIds.includes(pm.id));
   } finally {
     await closeServer(server);
   }
@@ -344,6 +361,8 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /assignCandidates/);
   assert.match(html, /function lastBotAuthor/);
   assert.match(html, /function summonedBotIds/);
+  assert.match(html, /function deferredHandles/);
+  assert.match(html, /完成後\\|通過後/);
   assert.match(html, /if \(ids\.length\) \{/);
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
@@ -822,6 +841,17 @@ test("messageMentionIds prefers the stored list over the body", () => {
     messageMentionIds({ author: "you", body: "@design 請做" }, bots),
     [design.id],
   );
+  assert.deepEqual(
+    messageMentionIds(
+      {
+        author: pm.id,
+        body: "@design\n圖\n@infra\n上版\n四席完成後由 @infra",
+        mentions: [design.id, infra.id],
+      },
+      bots,
+    ),
+    [design.id],
+  );
 });
 
 test("finished speaker drops live before handoff seats start", async () => {
@@ -891,7 +921,7 @@ test("finished speaker drops live before handoff seats start", async () => {
   assert.equal(done.replies[1].author, design.id);
 });
 
-test("bot numbered list with backtick @handles hands off each seat", async () => {
+test("bot numbered list starts the first wave; 通過後 / 最後 wait", async () => {
   const store = new GuildStore(tempHome());
   const room = store.createChannel("gif");
   const pm = store.listBots().find((bot) => bot.handle === "pm");
@@ -934,14 +964,88 @@ test("bot numbered list with backtick @handles hands off each seat", async () =>
   const authors = posted.replies.map((row) => row.author);
   assert.equal(posted.replies[0].author, pm.id);
   assert.ok(authors.includes(design.id));
-  assert.ok(authors.includes(marketing.id));
-  assert.ok(authors.includes(infra.id));
-  assert.equal(posted.replies.length, 4);
+  assert.ok(!authors.includes(marketing.id));
+  assert.ok(!authors.includes(infra.id));
+  assert.equal(posted.replies.length, 2);
   assert.ok(asked.includes("design"));
-  assert.ok(asked.includes("marketing"));
-  assert.ok(asked.includes("infra"));
+  assert.ok(!asked.includes("marketing"));
+  assert.ok(!asked.includes("infra"));
   const designAsk = asked.filter((name) => name === "design");
   assert.equal(designAsk.length, 1);
+});
+
+test("line-start @infra after 四席完成後 does not start this turn", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("rc");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(pm && design && marketing && infra);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, marketing.id);
+  store.addMember(room.id, infra.id);
+  const asked: string[] = [];
+  const first = await postUserMessage(
+    store,
+    room.id,
+    "@pm 排四席，完成後才叫 infra",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        if (input.handle === "pm") {
+          return [
+            "@design",
+            "Goal: 圖",
+            "@marketing",
+            "Goal: 文案",
+            "@infra",
+            "Goal: 組 RC",
+            "**依賴順序：** @design 與 @marketing 可並行；四席完成後由 @infra 組 RC",
+          ].join("\n");
+        }
+        return "收到 " + input.handle;
+      }),
+    },
+  );
+  const firstAuthors = first.replies.map((row) => row.author);
+  assert.equal(first.replies[0].author, pm.id);
+  assert.ok(firstAuthors.includes(design.id));
+  assert.ok(firstAuthors.includes(marketing.id));
+  assert.ok(!firstAuthors.includes(infra.id));
+  assert.deepEqual(first.replies[0].mentions, [design.id, marketing.id]);
+  assert.ok(asked.includes("design"));
+  assert.ok(asked.includes("marketing"));
+  assert.ok(!asked.includes("infra"));
+
+  asked.length = 0;
+  const later = await postUserMessage(
+    store,
+    room.id,
+    "@infra 組 RC",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        return "收到 " + input.handle;
+      }),
+    },
+  );
+  assert.equal(later.replies.length, 1);
+  assert.equal(later.replies[0].author, infra.id);
+  assert.deepEqual(asked, ["infra"]);
 });
 
 test("bot 「再叫 `@infra`」 in prose still hands off", async () => {
@@ -1171,7 +1275,7 @@ test("bot @outsider does not grow the roster; @all in a bot reply stays quiet", 
   assert.equal(blast.replies[0].author, pm.id);
 });
 
-test("@handle cannot exceed the quest roster cap", async () => {
+test("@handle of a 7th bot does not add a seat past the roster cap", async () => {
   const dataDir = tempHome();
   writeModelsFile(dataDir, { default: null, providers: {} });
   const { server, origin } = await listen(dataDir, {});
@@ -1221,8 +1325,16 @@ test("@handle cannot exceed the quest roster cap", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ body: `@${seventh.handle} 請進來` }),
     });
-    assert.equal(posted.status, 400);
-    assert.match(String(posted.body.error || ""), /最多 6 席/);
+    assert.equal(posted.status, 201);
+    const replies = posted.body.replies as { author: string }[];
+    assert.equal(replies.length, 0);
+    const after = (await json(origin, "/workspace")).body as {
+      channels: { id: string; memberIds: string[] }[];
+    };
+    const full = after.channels.find((ch) => ch.id === channelId);
+    assert.ok(full);
+    assert.equal(full.memberIds.length, CHANNEL_ROSTER_CAP);
+    assert.ok(!full.memberIds.includes(seventh.id));
   } finally {
     await closeServer(server);
   }

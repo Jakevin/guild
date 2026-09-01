@@ -25,7 +25,14 @@ import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 export const GUILD_DB_FILE = "guild.sqlite";
 /** Per-room hot window in SQLite. Older rows spill to rooms/<id>/trajectory.jsonl. */
 export const TRAJECTORY_HOT_CAP = 1000;
-const SCHEMA_VERSION = "2";
+/** Bump when this guildd writes a shape an older guildd cannot read. */
+export const SCHEMA_VERSION = "2";
+
+/** Numeric view of a `meta.schema` value. Missing/garbage = 0 (migrate). */
+function schemaVersionOf(raw: unknown): number {
+  const value = Number(typeof raw === "string" ? raw.trim() : raw);
+  return Number.isFinite(value) ? value : 0;
+}
 const WAREHOUSE_TAIL = 1024 * 1024;
 
 const SCHEMA = `
@@ -281,7 +288,24 @@ export class GuildDb {
   constructor(readonly path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.sqlite = new DatabaseSync(path, { timeout: 5000 });
-    this.sqlite.exec(SCHEMA);
+    try {
+      this.sqlite.exec(SCHEMA);
+      // Refuse to open a DB written by a newer guildd: the ALTERs below and the
+      // version upsert would silently migrate the file back down.
+      const row = this.sqlite
+        .prepare("SELECT value FROM meta WHERE key = 'schema'")
+        .get() as { value?: unknown } | undefined;
+      const stored = schemaVersionOf(row?.value);
+      const current = schemaVersionOf(SCHEMA_VERSION);
+      if (stored > current) {
+        throw new Error(
+          `guild.sqlite schema ${stored} is newer than this guildd (${current}); upgrade guildd`,
+        );
+      }
+    } catch (error) {
+      this.close();
+      throw error;
+    }
     try {
       this.sqlite.exec("ALTER TABLE messages ADD COLUMN steer_bot_id TEXT");
     } catch {
@@ -302,13 +326,22 @@ export class GuildDb {
     } catch {
       /* column already exists on fresh schema */
     }
-    this.sqlite.prepare(
-      "INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    ).run(SCHEMA_VERSION);
+    try {
+      this.sqlite.prepare(
+        "INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(SCHEMA_VERSION);
+    } catch (error) {
+      this.close();
+      throw error;
+    }
   }
 
   close(): void {
-    this.sqlite.close();
+    try {
+      this.sqlite.close();
+    } catch {
+      /* already closed */
+    }
   }
 
   importLegacyFiles(dataDir: string): void {

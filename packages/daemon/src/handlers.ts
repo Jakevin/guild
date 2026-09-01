@@ -753,32 +753,14 @@ function askedText(
   return `附件：\n${legend}\n\n${asked}`;
 }
 
-/** @handle of a bot not in this channel adds them, then they can reply. */
+/** Roster is staffed in the members panel. @handle never pulls a new seat. */
 export function inviteMentionedBots(
   store: GuildStore,
   roomId: string,
-  userMessage: { author?: string; body: string; mentions?: string[] },
+  _userMessage?: { author?: string; body: string; mentions?: string[] },
 ): string[] {
   const room = store.getRoom(roomId);
-  if (!room) return [];
-  if (room.kind !== "channel") return room.memberIds;
-  if (isBroadcastMention(userMessage.body)) return room.memberIds;
-  const ids = messageMentionIds(
-    {
-      author: userMessage.author || "you",
-      body: userMessage.body,
-      mentions: userMessage.mentions,
-    },
-    store.listBots(),
-  );
-  let memberIds = room.memberIds;
-  for (const id of ids) {
-    if (memberIds.includes(id)) continue;
-    if (!store.getBot(id)) continue;
-    store.addMember(roomId, id);
-    memberIds = [...memberIds, id];
-  }
-  return memberIds;
+  return room?.memberIds ?? [];
 }
 
 export function channelMarkdownForRoom(
@@ -1180,7 +1162,7 @@ async function generateReplies(
     turnAsked: string,
     turnHistory: HistoryItem[],
   ) => {
-    if (!memberIds.includes(botId) && !onlyBotId) return;
+    if (!memberIds.includes(botId)) return;
     if (signal.aborted) return;
     const prev = store.getLiveBotTurn(roomId, botId);
     const startedAt = prev?.startedAt || new Date().toISOString();
@@ -1418,7 +1400,7 @@ function plantLiveTurns(
   const startedAt = new Date().toISOString();
   for (const botId of botIds) {
     if (!botId) continue;
-    if (!memberIds.includes(botId) && !onlyBotId) continue;
+    if (!memberIds.includes(botId)) continue;
     store.dropLastFailedReply(roomId, botId);
     store.setLiveTurn(roomId, {
       botId,
@@ -1482,18 +1464,13 @@ function hasExplicitSummon(
 }
 
 function includeFollowBot(
-  store: GuildStore,
-  roomId: string,
+  _store: GuildStore,
+  _roomId: string,
   memberIds: string[],
   follow?: string,
 ): string[] {
   if (!follow || memberIds.includes(follow)) return memberIds;
-  try {
-    store.addMember(roomId, follow);
-    return [...memberIds, follow];
-  } catch {
-    return memberIds;
-  }
+  return memberIds;
 }
 
 function inviteAssignee(
@@ -1504,12 +1481,10 @@ function inviteAssignee(
   const room = store.getRoom(roomId);
   if (!room) return [];
   if (room.kind !== "channel") return room.memberIds;
-  if (room.memberIds.includes(assigneeId)) return room.memberIds;
   if (!store.getBot(assigneeId)) {
     throw new StoreError(400, "assignee does not exist");
   }
-  store.addMember(roomId, assigneeId);
-  return [...room.memberIds, assigneeId];
+  return room.memberIds;
 }
 
 export async function postUserMessage(
@@ -1730,4 +1705,9 @@ export async function retryMessage(
 
 export { StoreError, localGenerate };
 
-export { publicModels, mergeModelsFile, refreshOpenCodeFreeCatalog } from "./llm.ts";
+export {
+  publicModels,
+  mergeModelsFile,
+  refreshOpenCodeFreeCatalog,
+  refreshReasoningCatalog,
+} from "./llm.ts";

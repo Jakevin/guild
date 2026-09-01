@@ -29,6 +29,7 @@ import {
   mergeModelsFile,
   publicModels,
   refreshOpenCodeFreeCatalog,
+  refreshReasoningCatalog,
   listBench,
   listLibrary,
   listMcpServers,
@@ -102,11 +103,107 @@ const LIBRARY_KINDS = new Set<LibraryKind>([
   "subagents",
 ]);
 
-const CORS_HEADERS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type, authorization",
-} as const;
+/**
+ * Same-origin guard. The hall UI is served by this daemon (`http://127.0.0.1:7420/`
+ * and the Tailscale address), so it never needs CORS. A request that carries an
+ * `Origin` from somewhere else is a foreign page trying to read local files
+ * (`/host/read`), so it is refused before any route runs.
+ */
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+/** Tailscale MagicDNS names: `machine.tailnet.ts.net`. */
+const MAGIC_DNS_SUFFIX = ".ts.net";
+
+function headerLine(value: string | string[] | undefined): string {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" ? first.trim() : "";
+}
+
+function normalizeHost(host: string): string {
+  const lower = host.trim().toLowerCase().replace(/\.$/, "");
+  return LOCAL_HOSTS.has(lower) ? "127.0.0.1" : lower;
+}
+
+/** Host header is an authority, not a URL: `127.0.0.1:7420`, `[::1]:7420`, `bot.local`. */
+function hostPortOf(authority: string): { host: string; port: string } {
+  const value = authority.trim();
+  if (!value) return { host: "", port: "" };
+  if (value.startsWith("[")) {
+    const end = value.indexOf("]");
+    const host = end === -1 ? value : value.slice(0, end + 1);
+    const rest = end === -1 ? "" : value.slice(end + 1);
+    const colon = rest.indexOf(":");
+    return { host, port: colon === -1 ? "" : rest.slice(colon + 1) };
+  }
+  const colon = value.indexOf(":");
+  if (colon === -1) return { host: value, port: "" };
+  return { host: value.slice(0, colon), port: value.slice(colon + 1) };
+}
+
+/** Dotted-quad octets, or null when this is not an IPv4 literal. */
+function ipv4Octets(host: string): number[] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) return null;
+  const octets: number[] = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const value = Number(part);
+    if (!Number.isInteger(value) || value > 255) return null;
+    octets.push(value);
+  }
+  return octets;
+}
+
+/**
+ * True only for authorities that cannot be a public name: loopback, RFC1918,
+ * CGNAT / Tailscale 100.64/10, and MagicDNS `*.ts.net`. A rebinding page
+ * (`evil.com` resolving to 127.0.0.1) matches Origin against Host, so the
+ * authority itself has to be checked too.
+ */
+export function isLocalAuthority(raw: string): boolean {
+  let host = String(raw || "").trim().toLowerCase().replace(/\.$/, "");
+  if (!host) return false;
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true;
+  if (LOCAL_HOSTS.has(host)) return true;
+  const octets = ipv4Octets(host);
+  if (octets) {
+    const [first, second] = octets as [number, number, number, number];
+    if (first === 127) return true; // 127/8 loopback
+    if (first === 10) return true; // RFC1918
+    if (first === 172 && second >= 16 && second <= 31) return true;
+    if (first === 192 && second === 168) return true;
+    if (first === 100 && second >= 64 && second <= 127) return true; // CGNAT
+    return false;
+  }
+  return host.endsWith(MAGIC_DNS_SUFFIX);
+}
+
+/** True when there is no Origin (curl, Node fetch, same-origin opaque) or it matches Host. */
+export function sameOrigin(req: IncomingMessage): boolean {
+  const raw = headerLine(req.headers.origin);
+  if (!raw) return true;
+  let origin: URL;
+  try {
+    origin = new URL(raw);
+  } catch {
+    return false;
+  }
+  const secure = origin.protocol === "https:";
+  if (!secure && origin.protocol !== "http:") return false;
+  const host = headerLine(req.headers.host);
+  if (!host) return false;
+  const wanted = hostPortOf(host);
+  // Origin == Host is not enough: DNS rebinding makes a public name resolve to
+  // this machine, so both authorities must be loopback / private.
+  if (!isLocalAuthority(wanted.host) || !isLocalAuthority(origin.hostname)) {
+    return false;
+  }
+  return (
+    normalizeHost(wanted.host) === normalizeHost(origin.hostname) &&
+    (wanted.port || (secure ? "443" : "80")) ===
+      (origin.port || (secure ? "443" : "80"))
+  );
+}
 
 function send(
   res: ServerResponse,
@@ -119,7 +216,6 @@ function send(
     "content-type": type,
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
-    ...CORS_HEADERS,
     ...extra,
   });
   res.end(body);
@@ -261,8 +357,12 @@ export async function handleRequest(
   const path = pathname(req);
 
   try {
+    if (!sameOrigin(req)) {
+      throw new StoreError(403, "cross-origin refused");
+    }
+
     if (method === "OPTIONS") {
-      res.writeHead(204, CORS_HEADERS);
+      res.writeHead(204);
       res.end();
       return;
     }
@@ -311,7 +411,6 @@ export async function handleRequest(
         "content-type": type,
         "content-length": bytes.length,
         "cache-control": "private, max-age=86400",
-        ...CORS_HEADERS,
       });
       res.end(bytes);
       return;
@@ -859,6 +958,7 @@ export async function handleRequest(
     if (method === "GET" && path === "/settings/models") {
       await refreshCopilotCatalog(store.dataDir);
       await refreshOpenCodeFreeCatalog(store.dataDir);
+      await refreshReasoningCatalog().catch(() => {});
       json(res, 200, publicModels(store.dataDir));
       return;
     }

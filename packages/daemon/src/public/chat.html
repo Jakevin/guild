@@ -167,12 +167,7 @@
                       <a class="model-choice" href="/settings" data-i18n="model.settings">狀態欄</a>
                     </div>
                   </div>
-                  <select id="model-reasoning" hidden>
-                    <option value="minimal" data-i18n="reason.min">最低</option>
-                    <option value="low" data-i18n="reason.low">低</option>
-                    <option value="medium" data-i18n="reason.mid">中</option>
-                    <option value="high" data-i18n="reason.high">高</option>
-                  </select>
+                  <select id="model-reasoning" hidden></select>
                   <input type="checkbox" id="model-fast" hidden />
                 </div>
               </div>
@@ -266,6 +261,13 @@
     </div>
     <script>
       const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
+      const SEAT_HUE = {
+        infra: "#5b8def",
+        pm: "#2ea887",
+        rd: "#e07a3d",
+        design: "#7c6af7",
+        marketing: "#d4537e",
+      };
       const CHANNEL_ROSTER_CAP = 6;
       function isGeneralChannel(ch) {
         return Boolean(ch && (ch.id === "channel-general" || ch.name === "general"));
@@ -321,6 +323,8 @@
       };
 
       function hue(key) {
+        const seat = SEAT_HUE[String(key).toLowerCase()];
+        if (seat) return seat;
         let n = 0;
         for (const ch of String(key)) n = (n + ch.charCodeAt(0) * 17) % COLORS.length;
         return COLORS[n];
@@ -1036,14 +1040,48 @@
         }
         return out;
       }
+      function deferredHandles(text) {
+        const raw = String(text || "");
+        const out = [];
+        const add = (name) => {
+          const key = String(name || "").toLowerCase();
+          if (key && out.indexOf(key) < 0) out.push(key);
+        };
+        const scan = raw.replace(/```[\s\S]*?```/g, " ");
+        const cue =
+          /(?:完成後|通過後|最後(?:才|由)?|才需要|才叫|才交)[^@\n]{0,24}@([A-Za-z0-9_-]+)/gi;
+        const bare =
+          /(?:完成後|才需要|才叫)\s*(?:call|ask|由)\s*`?@?([A-Za-z0-9_-]+)`?/gi;
+        let row;
+        while ((row = cue.exec(scan))) add(row[1]);
+        while ((row = bare.exec(scan))) add(row[1]);
+        const later =
+          /^[ \t]*(?:\d+[.)、]\s*|[-*•]\s+)(?:通過後|最後|然後|之後|完成後)\s*`?@([A-Za-z0-9_-]+)`?/i;
+        const lines = raw.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+          const hit = lines[i].match(later);
+          if (hit) add(hit[1]);
+        }
+        return out;
+      }
       function summonedBotIds(text) {
         const raw = String(text || "");
+        const deferred = new Set(deferredHandles(raw));
+        const members = new Set(
+          state.kind === "channel"
+            ? ((currentChannel() && currentChannel().memberIds) || [])
+            : state.kind === "dm"
+              ? [state.id]
+              : [],
+        );
         const known = new Map(
-          (state.bots || []).map((bot) => [String(bot.handle).toLowerCase(), bot.id]),
+          (state.bots || [])
+            .filter((bot) => !members.size || members.has(bot.id))
+            .map((bot) => [String(bot.handle).toLowerCase(), bot.id]),
         );
         const out = [];
-        const push = (id) => {
-          if (id && !out.includes(id)) out.push(id);
+        const push = (id, handle) => {
+          if (id && !deferred.has(handle) && !out.includes(id)) out.push(id);
         };
         let fence = false;
         const lines = raw.split(/\r?\n/);
@@ -1060,11 +1098,21 @@
           if (!m) continue;
           const names = m[1].match(/@([A-Za-z0-9_-]+)/g) || [];
           for (let n = 0; n < names.length; n++) {
-            push(known.get(names[n].slice(1).toLowerCase()));
+            const handle = names[n].slice(1).toLowerCase();
+            push(known.get(handle), handle);
           }
         }
         if (out.length) return out;
-        return mentionedBotIds(raw).slice(0, 1);
+        return mentionedBotIds(raw)
+          .filter((id) => {
+            const bot = (state.bots || []).find((row) => row.id === id);
+            return (
+              bot &&
+              (!members.size || members.has(id)) &&
+              !deferred.has(String(bot.handle).toLowerCase())
+            );
+          })
+          .slice(0, 1);
       }
       function lastBotAuthor() {
         const msgs = state.messages || [];
@@ -1244,7 +1292,20 @@
       }
       function botModelMeta(bot) {
         const model = botModelLabel(bot) || "—";
-        const reason = reasonLabel((modelCfg && modelCfg.reasoning) || "medium");
+        const spec = (() => {
+          const ref = botModelRef(bot);
+          if (!ref) return null;
+          const hit = allModels().find(
+            (row) => row.provider === ref.provider && row.model === ref.model,
+          );
+          return (hit && hit.reasoning) || null;
+        })();
+        const reasonVal = clampEffort(
+          modelCfg && modelCfg.reasoning,
+          spec,
+          Boolean(modelCfg && modelCfg.fast),
+        );
+        const reason = reasonVal ? reasonLabel(reasonVal) : "—";
         const provider = botProviderLabel(bot) || "—";
         return model + " · " + reason + " · " + provider;
       }
@@ -5332,6 +5393,7 @@
               group: p.name || p.id,
               ready: Boolean(p.ready),
               kind: p.kind || "key",
+              reasoning: m.reasoning || null,
             });
           }
         }
@@ -5345,10 +5407,45 @@
         return hit ? hit.name : ref.model;
       }
       function reasonLabel(value) {
+        if (value === "none") return t("reason.none");
         if (value === "minimal") return t("reason.min");
         if (value === "low") return t("reason.low");
+        if (value === "medium") return t("reason.mid");
         if (value === "high") return t("reason.high");
-        return t("reason.mid");
+        if (value === "xhigh") return t("reason.xhigh");
+        if (value === "max") return t("reason.max");
+        return value || t("reason.mid");
+      }
+      function activeReasoningSpec() {
+        const ref = activeModelRef();
+        if (!ref) return null;
+        const hit = allModels().find(
+          (row) => row.provider === ref.provider && row.model === ref.model,
+        );
+        return (hit && hit.reasoning) || null;
+      }
+      function effortChoices(spec) {
+        const raw = spec && spec.supportedEfforts;
+        if (!raw || !raw.length) return [];
+        return spec.mandatory
+          ? raw.filter((key) => key !== "none")
+          : raw.slice();
+      }
+      function clampEffort(want, spec, fast) {
+        const choices = effortChoices(spec);
+        if (!choices.length) return "";
+        if (fast) {
+          if (choices.indexOf("low") >= 0) return "low";
+          if (choices.indexOf("minimal") >= 0) return "minimal";
+          return choices[choices.length - 1];
+        }
+        if (want && choices.indexOf(want) >= 0) return want;
+        if (spec.defaultEffort && choices.indexOf(spec.defaultEffort) >= 0) {
+          return spec.defaultEffort;
+        }
+        if (choices.indexOf("high") >= 0) return "high";
+        if (choices.indexOf("medium") >= 0) return "medium";
+        return choices[0];
       }
       function speedLabel() {
         return modelCfg.fast ? t("speed.fast") : t("speed.normal");
@@ -5450,25 +5547,44 @@
         }
         document.getElementById("model-results").innerHTML =
           html || '<p class="model-empty">' + t("noModels") + "</p>";
-        document.getElementById("model-reasoning").value = modelCfg.reasoning || "medium";
         document.getElementById("model-fast").checked = Boolean(modelCfg.fast);
-        const reason = reasonLabel(modelCfg.reasoning || "medium");
+        const spec = activeReasoningSpec();
+        const choices = effortChoices(spec);
+        const reasonVal = clampEffort(
+          modelCfg.reasoning,
+          spec,
+          Boolean(modelCfg.fast),
+        );
+        const reasonSel = document.getElementById("model-reasoning");
+        reasonSel.innerHTML = choices
+          .map(
+            (value) =>
+              '<option value="' +
+              value +
+              '">' +
+              reasonLabel(value) +
+              "</option>",
+          )
+          .join("");
+        if (reasonVal) reasonSel.value = reasonVal;
+        const reasonRow = document.querySelector('.model-nav [data-sheet="reasoning"]');
+        if (reasonRow) reasonRow.hidden = !choices.length;
+        if (!choices.length) {
+          const pane = document.getElementById("model-sheet-reasoning");
+          if (pane && !pane.hidden) showModelSheet("models");
+        }
+        const reason = choices.length ? reasonLabel(reasonVal) : "";
         const speed = speedLabel();
         const name = displayName(current);
         document.getElementById("model-btn-label").textContent = current
-          ? name + " " + reason
+          ? name + (reason ? " " + reason : "")
           : name;
         document.getElementById("model-row-model").textContent = name;
-        document.getElementById("model-row-reason").textContent = reason;
+        document.getElementById("model-row-reason").textContent = reason || "—";
         document.getElementById("model-row-speed").textContent = speed;
-        document.getElementById("model-reason-list").innerHTML = [
-          ["minimal", t("reason.min")],
-          ["low", t("reason.low")],
-          ["medium", t("reason.mid")],
-          ["high", t("reason.high")],
-        ]
-          .map(([value, label]) => {
-            const on = (modelCfg.reasoning || "medium") === value ? " on" : "";
+        document.getElementById("model-reason-list").innerHTML = choices
+          .map((value) => {
+            const on = reasonVal === value ? " on" : "";
             const tick = on ? '<span class="tick">✓</span>' : "";
             return (
               '<button type="button" class="model-choice' +
@@ -5476,7 +5592,7 @@
               '" data-reason="' +
               value +
               '">' +
-              label +
+              reasonLabel(value) +
               tick +
               "</button>"
             );

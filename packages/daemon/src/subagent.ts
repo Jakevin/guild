@@ -73,16 +73,21 @@ function agentKey(value: string): string {
   return value.trim().replace(/^\/+/, "").toLowerCase();
 }
 
-/** Parent read_only cannot escalate via spawn. Explorer from full_access keeps run. */
+/**
+ * A child never outruns its parent, and a read-only agent never gets `run`
+ * back: a readOnly child is pinned to read_only even under a full_access
+ * parent (that used to be an escalation hole — CHILD_TOOLS_RO advertised run
+ * and gateTool let a full_access child through it).
+ */
 export function childSpawnPolicy(
   parentSandbox: ToolContext["sandbox"],
   agentReadOnly: boolean,
 ): { sandbox: Sandbox; allowWrite: boolean } {
   const parent = parseSandbox(parentSandbox);
-  if (parent === "read_only") {
+  if (parent === "read_only" || agentReadOnly) {
     return { sandbox: "read_only", allowWrite: false };
   }
-  return { sandbox: parent, allowWrite: !agentReadOnly };
+  return { sandbox: parent, allowWrite: true };
 }
 
 export function resolveSubagent(
@@ -108,8 +113,8 @@ Never say you cannot access this machine. Check [exit code: N] on every run.
 Independent searches: emit multiple tool calls in one round; they run in parallel.`;
 
 const CHILD_TOOLS_RO = `You ARE already running on the user's local computer (Guild).
-Tools: run, read, list, skill. You cannot write files and cannot spawn subagents.
-Read-only. Never edit, patch, or create files. Check [exit code: N] on every run.
+Tools: read, list, skill. You cannot run shell commands, cannot write files, and cannot spawn subagents.
+Read-only. Never edit, patch, or create files.
 Independent searches: emit multiple tool calls in one round; they run in parallel.`;
 
 export const SPAWN_MAX_PARALLEL = 8;

@@ -26,7 +26,11 @@ import { DEFAULT_BOTS } from "./catalog/default-bots.ts";
 import { CATALOG_SKILLS } from "./catalog/skills.ts";
 import { CATALOG_SUBAGENTS } from "./catalog/subagents.ts";
 import { parseAgentFile } from "./agent-file.ts";
-import { parseMentionIds, sanitizeMentionIds } from "./mention.ts";
+import {
+  parseMentionIds,
+  sanitizeMentionIds,
+  withoutDeferredIds,
+} from "./mention.ts";
 
 const MARKDOWN: Record<LibraryKind, string> = {
   souls: "SOUL.md",
@@ -989,11 +993,14 @@ export class GuildStore {
     const now = new Date().toISOString();
     const startedAt = author !== "you" ? usage?.startedAt : undefined;
     const bots = this.listBots();
-    const mentionIds = (
-      mentions !== undefined
+    const mentionIds = withoutDeferredIds(
+      (mentions !== undefined
         ? sanitizeMentionIds(mentions, bots)
         : parseMentionIds(text, bots, author === "you" ? "user" : "bot")
-    ).filter((id) => id !== author);
+      ).filter((id) => id !== author),
+      text,
+      bots,
+    );
     const message: ChatMessage = {
       id: randomUUID(),
       roomId,
@@ -1022,10 +1029,12 @@ export class GuildStore {
     const text = body.trim();
     if (!text) throw new StoreError(400, "message is required");
     const bots = this.listBots();
-    const mentionIds = (
+    const mentionIds = withoutDeferredIds(
       mentions !== undefined
         ? sanitizeMentionIds(mentions, bots)
-        : parseMentionIds(text, bots, "user")
+        : parseMentionIds(text, bots, "user"),
+      text,
+      bots,
     );
     const next = this.db.updateMessageBody(roomId, messageId, text, mentionIds);
     if (!next) throw new StoreError(404, "message not found");

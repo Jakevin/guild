@@ -10,7 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { GUILD_DB_FILE, TRAJECTORY_HOT_CAP } from "../src/db.ts";
+import {
+  GUILD_DB_FILE,
+  SCHEMA_VERSION,
+  TRAJECTORY_HOT_CAP,
+  openGuildDb,
+} from "../src/db.ts";
 import { GuildStore, isFailedAssistantReply } from "../src/store.ts";
 import type { TrajectoryDraft } from "../src/trajectory.ts";
 
@@ -409,4 +414,132 @@ test("legacy trajectory.jsonl over the cap keeps the prefix in the warehouse", (
   } finally {
     again.close();
   }
+});
+
+function schemaMeta(home: string): string {
+  const probe = new DatabaseSync(join(home, GUILD_DB_FILE));
+  try {
+    const row = probe
+      .prepare("SELECT value FROM meta WHERE key = 'schema'")
+      .get() as { value?: string } | undefined;
+    return String(row?.value ?? "");
+  } finally {
+    probe.close();
+  }
+}
+
+test("a fresh GuildStore stamps meta schema at SCHEMA_VERSION", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  store.close();
+  assert.equal(SCHEMA_VERSION, "2");
+  assert.equal(schemaMeta(home), "2");
+});
+
+test("a newer guild.sqlite schema refuses to open and is not downgraded", () => {
+  const home = tempHome();
+  new GuildStore(home).close();
+  const future = new DatabaseSync(join(home, GUILD_DB_FILE));
+  future.prepare("UPDATE meta SET value = ? WHERE key = 'schema'").run("99");
+  future.close();
+  assert.throws(
+    () => openGuildDb(home),
+    /guild\.sqlite schema 99 is newer than this guildd \(2\); upgrade guildd/,
+  );
+  assert.throws(() => new GuildStore(home), /newer than this guildd/);
+  assert.equal(schemaMeta(home), "99");
+});
+
+function stampSchema(home: string, value: string): void {
+  const db = new DatabaseSync(join(home, GUILD_DB_FILE));
+  try {
+    db.prepare(
+      "INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).run(value);
+  } finally {
+    db.close();
+  }
+}
+
+function roomColumns(home: string): string[] {
+  const db = new DatabaseSync(join(home, GUILD_DB_FILE));
+  try {
+    return (
+      db.prepare("PRAGMA table_info(rooms)").all() as { name: string }[]
+    ).map((column) => column.name);
+  } finally {
+    db.close();
+  }
+}
+
+test("a v1-stamped DB that already has parent_id upgrades to SCHEMA_VERSION", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  const written = store.appendMessage(
+    "channel-general",
+    store.listBots()[0].id,
+    "before the downgrade",
+  );
+  store.close();
+  stampSchema(home, "1");
+  assert.equal(schemaMeta(home), "1");
+
+  const again = new GuildStore(home);
+  try {
+    const listed = again.listMessages("channel-general");
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].id, written.id);
+    assert.equal(listed[0].body, "before the downgrade");
+    const room = again.getRoom("channel-general");
+    assert.ok(room);
+    assert.equal(room.parentId, undefined);
+  } finally {
+    again.close();
+  }
+  assert.equal(schemaMeta(home), SCHEMA_VERSION);
+});
+
+test("a pre-branch DB gains rooms.parent_id and keeps its rows", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  const written = store.appendMessage(
+    "channel-general",
+    store.listBots()[0].id,
+    "old guild, no branches",
+  );
+  store.close();
+
+  const old = new DatabaseSync(join(home, GUILD_DB_FILE));
+  try {
+    old.exec("BEGIN");
+    old.prepare("ALTER TABLE rooms DROP COLUMN parent_id").run();
+    old.prepare("ALTER TABLE rooms DROP COLUMN branch_from_id").run();
+    old
+      .prepare(
+        "INSERT INTO meta (key, value) VALUES ('schema', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run();
+    old.exec("COMMIT");
+  } catch (error) {
+    old.exec("ROLLBACK");
+    throw error;
+  } finally {
+    old.close();
+  }
+  assert.ok(!roomColumns(home).includes("parent_id"));
+
+  const again = new GuildStore(home);
+  try {
+    assert.ok(roomColumns(home).includes("parent_id"));
+    assert.ok(roomColumns(home).includes("branch_from_id"));
+    const listed = again.listMessages("channel-general");
+    assert.equal(listed[0].id, written.id);
+    assert.equal(listed[0].body, "old guild, no branches");
+    const branch = again.createBranch("channel-general", written.id, "grown");
+    assert.equal(branch.parentId, "channel-general");
+    assert.equal(branch.branchFromId, written.id);
+  } finally {
+    again.close();
+  }
+  assert.equal(schemaMeta(home), SCHEMA_VERSION);
 });

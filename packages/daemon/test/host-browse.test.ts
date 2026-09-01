@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { hostList, hostRead, hostTree } from "../src/host-browse.ts";
+import {
+  assertHostPathAllowed,
+  hostGit,
+  hostList,
+  hostRead,
+  hostTree,
+} from "../src/host-browse.ts";
+import { StoreError } from "../src/store.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 
 const CHAT_HTML = fileURLToPath(
@@ -59,6 +66,33 @@ test("GET /host/ls and /host/read serve local files", async () => {
   }
 });
 
+test("GET /host/read from a foreign Origin is refused", async () => {
+  const dir = tempDir();
+  const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
+  const { server, origin } = await listenApp(dataDir, {});
+  try {
+    const target = encodeURIComponent(join(dir, "note.txt"));
+    const evil = await fetch(
+      `${origin}/host/read?path=${target}`,
+      { headers: { origin: "https://evil.example" } },
+    ).then(async (res) => ({ status: res.status, body: await res.json() }));
+    assert.equal(evil.status, 403);
+    assert.equal(evil.body.error, "cross-origin refused");
+    assert.ok(!JSON.stringify(evil.body).includes("hello guild host"));
+    const ls = await fetch(`${origin}/host/ls?path=${target}`, {
+      headers: { origin: "https://evil.example" },
+    });
+    assert.equal(ls.status, 403);
+    const same = await fetch(`${origin}/host/read?path=${target}`, {
+      headers: { origin },
+    });
+    assert.equal(same.status, 200);
+    assert.equal((await same.json()).text, "hello guild host");
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test("chat plus menu can attach files skills git rules and commands", () => {
   const html = readFileSync(CHAT_HTML, "utf8");
   assert.match(html, /attach-pop/);
@@ -77,4 +111,107 @@ test("chat plus menu can attach files skills git rules and commands", () => {
   assert.match(html, /data-chip-insert/);
   assert.match(html, /insertAttachToken/);
   assert.match(html, /nextAttachToken/);
+});
+
+/** Returns the thrown "host path refused" error, or fails if anything else. */
+function refused(fn: () => unknown): StoreError {
+  try {
+    fn();
+  } catch (error) {
+    assert.ok(error instanceof StoreError, `expected StoreError, got ${String(error)}`);
+    assert.equal(error.status, 403);
+    assert.match(error.message, /host path refused/);
+    return error;
+  }
+  assert.fail("expected the secret path to be refused");
+}
+
+function notRefused(fn: () => unknown): void {
+  try {
+    fn();
+  } catch (error) {
+    if (error instanceof StoreError && /host path refused/.test(error.message)) {
+      assert.fail("path was refused as a secret");
+    }
+  }
+}
+
+test("hostRead refuses guild secrets before touching the disk", () => {
+  // The deny runs before stat, so these 403 whether or not the file exists.
+  refused(() => hostRead(join(homedir(), ".guild", "oauth.json")));
+  refused(() => hostRead(join(homedir(), ".guild", "models.json")));
+  refused(() => hostRead("~/.guild/oauth.json"));
+  refused(() => hostRead(join(homedir(), ".guild", "browser-profile", "Default", "Cookies")));
+  refused(() => hostList(join(homedir(), ".guild", "browser-profile")));
+  refused(() => hostTree(join(homedir(), ".guild", "browser-profile")));
+  refused(() => assertHostPathAllowed(join(homedir(), ".guild", "oauth.json")));
+  // The rest of ~/.guild stays browsable for the attach picker.
+  notRefused(() => hostList(join(homedir(), ".guild")));
+});
+
+test("hostRead refuses private keys but not public ones", () => {
+  refused(() => hostRead(join(homedir(), ".ssh", "id_rsa")));
+  refused(() => hostRead(join(homedir(), ".ssh", "id_ed25519")));
+  refused(() => hostRead("~/.ssh/config"));
+  refused(() => hostRead(join(homedir(), ".ssh", "authorized_keys")));
+  notRefused(() => hostRead(join(homedir(), ".ssh", "id_rsa.pub")));
+  notRefused(() => hostRead(join(homedir(), ".ssh", "id_ed25519.pub")));
+  notRefused(() => hostList(join(homedir(), ".ssh")));
+
+  const dir = tempDir();
+  const privateCopy = join(dir, "id_rsa");
+  writeFileSync(privateCopy, "-----BEGIN OPENSSH PRIVATE KEY-----");
+  refused(() => hostRead(privateCopy));
+  const pem = join(dir, "server.pem");
+  writeFileSync(pem, "secret");
+  refused(() => hostRead(pem));
+  const pfx = join(dir, "store.pfx");
+  writeFileSync(pfx, "secret");
+  refused(() => hostRead(pfx));
+  const pub = join(dir, "id_ed25519.pub");
+  writeFileSync(pub, "ssh-ed25519 AAAA public");
+  assert.equal(hostRead(pub).text, "ssh-ed25519 AAAA public");
+  // Listing a folder that merely *contains* a key name is not a content leak.
+  assert.ok(hostList(dir).entries.some((entry) => entry.name === "id_ed25519.pub"));
+});
+
+test("/host/* still browses the home folder; only secrets are refused", () => {
+  const dir = tempDir();
+  assert.equal(hostList(dir).path, dir);
+  notRefused(() => hostList(homedir()));
+  if (existsSync("/etc/passwd")) {
+    assert.match(hostRead("/etc/passwd").path, /passwd$/);
+  }
+});
+
+test("GET /host/read refuses a secret path", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
+  const { server, origin } = await listenApp(dataDir, {});
+  try {
+    const secret = encodeURIComponent(join(homedir(), ".guild", "oauth.json"));
+    const res = await fetch(`${origin}/host/read?path=${secret}`).then(
+      async (r) => ({ status: r.status, body: await r.json() }),
+    );
+    assert.equal(res.status, 403);
+    assert.equal(res.body.error, "host path refused");
+    const ls = await fetch(
+      `${origin}/host/ls?path=${encodeURIComponent(join(homedir(), ".guild", "browser-profile"))}`,
+    );
+    assert.equal(ls.status, 403);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("hostGit reads this checkout with a guarded git env", async () => {
+  const repo = fileURLToPath(new URL("../../..", import.meta.url));
+  const info = await hostGit(join(repo, "packages", "daemon"));
+  assert.match(info.text, /repo: /);
+  assert.match(info.text, /## /);
+  const temp = tempDir();
+  await assert.rejects(() => hostGit(temp), /not a git repository/);
+  await assert.rejects(
+    () => hostGit(join(homedir(), ".ssh", "id_rsa")),
+    /host path refused/,
+  );
 });

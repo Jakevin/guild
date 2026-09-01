@@ -8,6 +8,7 @@
   --panel: #10141A;
   --lift: #161C24;
   --card: #161C24;
+  --bubble: #1A222C;
   --you: #242C36;
   --text: #E8E4DC;
   --muted: #8B8F96;
@@ -15,6 +16,10 @@
   --fill: #141A22;
   --ok: #9fdfb2;
   --danger: #f0a8a8;
+  --press: 0.97;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --press-ms: 140ms;
+  --hover-ms: 160ms;
   --tap: 44px;
   --focus: 0 0 0 2px var(--bg), 0 0 0 3px var(--steel);
   --vvh: 100dvh;
@@ -47,6 +52,58 @@ a:focus-visible,
 textarea:focus-visible {
   outline: none;
   box-shadow: var(--focus);
+}
+/* Enamel press language, shared with the hall: paper / steel / ghost. */
+.navlist a,
+.back,
+.turn-stop,
+.turn-steer,
+.steer,
+.send,
+.stop-all,
+.mention-item {
+  transition:
+    background-color var(--hover-ms) ease,
+    border-color var(--hover-ms) ease,
+    color var(--hover-ms) ease,
+    transform var(--press-ms) var(--ease-out),
+    opacity var(--hover-ms) ease;
+}
+.navlist a:active,
+.back:active,
+.turn-stop:active:not(:disabled),
+.turn-steer:active:not(:disabled),
+.steer:active:not(:disabled),
+.send:active:not(:disabled),
+.stop-all:active:not(:disabled),
+.mention-item:active {
+  transform: scale(var(--press));
+}
+@media (prefers-reduced-motion: reduce) {
+  .navlist a,
+  .back,
+  .turn-stop,
+  .turn-steer,
+  .steer,
+  .send,
+  .stop-all,
+  .mention-item {
+    transition:
+      background-color var(--hover-ms) ease,
+      border-color var(--hover-ms) ease,
+      color var(--hover-ms) ease,
+      opacity var(--hover-ms) ease;
+  }
+  .navlist a:active,
+  .back:active,
+  .turn-stop:active,
+  .turn-steer:active,
+  .steer:active,
+  .send:active,
+  .stop-all:active,
+  .mention-item:active {
+    transform: none;
+  }
 }
 .screen {
   display: flex;
@@ -214,6 +271,7 @@ textarea:focus-visible {
   font-weight: 650;
   color: #fff;
   background: var(--steel);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--steel) 38%, transparent);
 }
 .avatar img {
   width: 100%;
@@ -242,6 +300,7 @@ textarea:focus-visible {
   white-space: pre-wrap;
 }
 .msg.you .bubble { background: var(--you); }
+.msg.bot .bubble { background: var(--bubble); }
 .assistant-text {
   margin: 0;
   color: var(--text);
@@ -264,7 +323,7 @@ textarea:focus-visible {
 .assistant-text .md-fence {
   margin: 0.35rem 0 0.7rem;
   border-radius: 12px;
-  background: #1a1a1a;
+  background: var(--fill);
   overflow: auto;
 }
 .assistant-text .md-fence-bar {
@@ -301,11 +360,11 @@ textarea:focus-visible {
   white-space: nowrap;
   background: linear-gradient(
     90deg,
-    #E8E4DC 0%,
-    #E8E4DC 40%,
-    #8B8F96 50%,
-    #E8E4DC 60%,
-    #E8E4DC 100%
+    var(--text) 0%,
+    var(--text) 40%,
+    var(--muted) 50%,
+    var(--text) 60%,
+    var(--text) 100%
   );
   background-position: 100% 0;
   background-size: 250% 100%;
@@ -319,8 +378,8 @@ textarea:focus-visible {
   font-size: 13px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  color: #6f6f6f;
-  -webkit-text-fill-color: #6f6f6f;
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
 }
 @keyframes m-shimmer { to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) {
@@ -343,15 +402,22 @@ textarea:focus-visible {
   line-height: 20px;
   color: var(--muted);
 }
-.live-name { color: #cfcfcf; font-weight: 500; }
+.live-name { color: var(--text); font-weight: 500; }
 .live-detail {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .live-step.running .live-name { color: var(--text); }
-.turn-actions { margin-top: 4px; }
+.turn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
 .turn-stop,
+.turn-steer,
+.steer,
 .send,
 .stop-all {
   display: inline-flex;
@@ -369,19 +435,44 @@ textarea:focus-visible {
   font-weight: 620;
   cursor: pointer;
 }
+/* Stop is ghost steel: --fill at rest, --lift on hover, danger ink only. */
 .turn-stop,
 .stop-all {
   color: var(--danger);
-  background: var(--lift);
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: var(--fill);
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--line));
 }
+.turn-stop:hover,
+.stop-all:hover {
+  background: var(--lift);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+/* Steer rides the steel rail, never a filled danger slab. */
+.turn-steer,
+.steer {
+  color: var(--steel);
+  background: var(--fill);
+  border-color: color-mix(in srgb, var(--steel) 38%, var(--line));
+}
+.turn-steer:hover,
+.steer:hover {
+  background: var(--lift);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--steel) 55%, var(--line));
+}
+/* The one paper CTA on the page. */
 .send {
-  background: var(--steel);
+  background: var(--paper);
   color: var(--ink);
   border-color: transparent;
 }
+.send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--paper) 88%, white);
+}
 .send:disabled,
-.stop-all:disabled {
+.stop-all:disabled,
+.steer:disabled,
+.turn-stop:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -407,9 +498,17 @@ textarea:focus-visible {
   gap: 0.5rem;
 }
 .composer-actions .send,
-.composer-actions .stop-all {
+.composer-actions .stop-all,
+.composer-actions .steer {
   flex: 1;
 }
+.composer-steer {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 0 0.15rem;
+}
+.composer-steer[hidden] { display: none; }
 #draft {
   display: block;
   width: 100%;
@@ -472,6 +571,7 @@ textarea:focus-visible {
   color: #fff;
   background: var(--steel);
   flex: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--steel) 38%, transparent);
 }
 .flash {
   position: fixed;
@@ -489,3 +589,9 @@ textarea:focus-visible {
   z-index: 8;
 }
 .flash.on { opacity: 1; }
+/* Errors read as danger ink on enamel lift, never a filled red slab. */
+.flash.err {
+  background: var(--lift);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+}

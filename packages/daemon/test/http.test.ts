@@ -12,9 +12,10 @@ import {
   DEFAULT_GUILD_PORT,
 } from "@guild/protocol";
 import http from "node:http";
+import type { IncomingMessage } from "node:http";
 import { listenGuildServer } from "../src/server.ts";
 import { healthPayload } from "../src/handlers.ts";
-import { handleRequest } from "../src/router.ts";
+import { handleRequest, isLocalAuthority, sameOrigin } from "../src/router.ts";
 import { writeModelsFile } from "../src/llm.ts";
 import { clipNavPreview, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp, tempHome as makeHome } from "./app.ts";
@@ -121,6 +122,59 @@ test("shipped router health is ready/ok", async () => {
     const { status, body } = await getJson(origin, "/health");
     assert.equal(status, 200);
     assert.deepEqual(body, healthPayload());
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("responses never advertise wildcard CORS", async () => {
+  const { server, origin } = await listen(tempHome());
+  try {
+    const health = await fetch(`${origin}/health`);
+    assert.equal(health.status, 200);
+    assert.notEqual(health.headers.get("access-control-allow-origin"), "*");
+    assert.equal(health.headers.get("access-control-allow-origin"), null);
+    const page = await fetch(`${origin}/`);
+    assert.equal(page.status, 200);
+    assert.equal(page.headers.get("access-control-allow-origin"), null);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("a foreign Origin is refused before any route runs", async () => {
+  const { server, origin } = await listen(tempHome());
+  try {
+    const health = await fetch(`${origin}/health`, {
+      headers: { origin: "https://evil.example" },
+    });
+    assert.equal(health.status, 403);
+    assert.deepEqual(await health.json(), { error: "cross-origin refused" });
+    const preflight = await fetch(`${origin}/bots`, {
+      method: "OPTIONS",
+      headers: { origin: "https://evil.example" },
+    });
+    assert.equal(preflight.status, 403);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("same-origin and no-Origin requests still pass", async () => {
+  const { server, origin } = await listen(tempHome());
+  try {
+    const bare = await fetch(`${origin}/health`);
+    assert.equal(bare.status, 200);
+    const same = await fetch(`${origin}/health`, { headers: { origin } });
+    assert.equal(same.status, 200);
+    const port = new URL(origin).port;
+    const localAlias = await fetch(`${origin}/health`, {
+      headers: { origin: `http://localhost:${port}` },
+    });
+    assert.equal(localAlias.status, 200);
+    const preflight = await fetch(`${origin}/bots`, { method: "OPTIONS" });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), null);
   } finally {
     await closeServer(server);
   }
@@ -1650,5 +1704,174 @@ test("deleting a bot removes it from the bench and does not reseed", async () =>
     assert.ok(!listed.some((bot) => bot.handle === "rd"));
   } finally {
     await closeServer(second.server);
+  }
+});
+
+/**
+ * DNS rebinding: `evil.example` can resolve to 127.0.0.1, so Origin matching
+ * Host is not enough — the authority itself has to be loopback or private.
+ */
+function reqWith(headers: Record<string, string>): IncomingMessage {
+  return { headers } as unknown as IncomingMessage;
+}
+
+test("sameOrigin refuses a rebinding authority that matches its own Host", () => {
+  assert.equal(
+    sameOrigin(reqWith({ origin: "https://evil.example", host: "evil.example" })),
+    false,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({
+        origin: "http://evil.example:7420",
+        host: "evil.example:7420",
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://93.184.216.34:7420", host: "93.184.216.34:7420" }),
+    ),
+    false,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://127.0.0.1:7420", host: "evil.example:7420" }),
+    ),
+    false,
+  );
+});
+
+test("sameOrigin allows loopback, RFC1918, CGNAT and MagicDNS authorities", () => {
+  assert.equal(sameOrigin(reqWith({})), true);
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://127.0.0.1:7420", host: "127.0.0.1:7420" }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameOrigin(reqWith({ origin: "http://localhost:7420", host: "localhost:7420" })),
+    true,
+  );
+  assert.equal(
+    sameOrigin(reqWith({ origin: "http://[::1]:7420", host: "[::1]:7420" })),
+    true,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://100.64.1.2:7420", host: "100.64.1.2:7420" }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({
+        origin: "http://machine.tailxxxx.ts.net:7420",
+        host: "machine.tailxxxx.ts.net:7420",
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({
+        origin: "http://MACHINE.TailXX.ts.net:7420",
+        host: "machine.tailxx.ts.net:7420",
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://192.168.1.10:7420", host: "192.168.1.10:7420" }),
+    ),
+    true,
+  );
+  assert.equal(
+    sameOrigin(reqWith({ origin: "http://10.7.3.9:7420", host: "10.7.3.9:7420" })),
+    true,
+  );
+  assert.equal(
+    sameOrigin(
+      reqWith({ origin: "http://172.16.0.9:7420", host: "172.16.0.9:7420" }),
+    ),
+    true,
+  );
+});
+
+test("isLocalAuthority knows the private ranges and nothing else", () => {
+  assert.equal(isLocalAuthority("127.0.0.1"), true);
+  assert.equal(isLocalAuthority("127.5.5.5"), true);
+  assert.equal(isLocalAuthority("localhost"), true);
+  assert.equal(isLocalAuthority("::1"), true);
+  assert.equal(isLocalAuthority("[::1]"), true);
+  assert.equal(isLocalAuthority("10.0.0.5"), true);
+  assert.equal(isLocalAuthority("172.16.0.5"), true);
+  assert.equal(isLocalAuthority("172.31.255.5"), true);
+  assert.equal(isLocalAuthority("192.168.0.5"), true);
+  assert.equal(isLocalAuthority("100.64.0.1"), true);
+  assert.equal(isLocalAuthority("100.127.255.255"), true);
+  assert.equal(isLocalAuthority("node.tailabcd.ts.net"), true);
+  assert.equal(isLocalAuthority("NODE.TAILABCD.TS.NET"), true);
+  assert.equal(isLocalAuthority("evil.example"), false);
+  assert.equal(isLocalAuthority("evil.com"), false);
+  assert.equal(isLocalAuthority("ts.net"), false);
+  assert.equal(isLocalAuthority("notts.net"), false);
+  assert.equal(isLocalAuthority("172.32.0.5"), false);
+  assert.equal(isLocalAuthority("100.128.0.5"), false);
+  assert.equal(isLocalAuthority("100.63.9.9"), false);
+  assert.equal(isLocalAuthority("8.8.8.8"), false);
+  assert.equal(isLocalAuthority("0.0.0.0"), false);
+  assert.equal(isLocalAuthority("169.254.5.5"), false);
+  assert.equal(isLocalAuthority("2001:4860:4860::8888"), false);
+  assert.equal(isLocalAuthority(""), false);
+  assert.equal(isLocalAuthority("999.1.1.1"), false);
+});
+
+test("a spoofed Host plus matching Origin is refused over the wire", async () => {
+  const dataDir = tempHome();
+  const store = new GuildStore(dataDir);
+  const server = http.createServer((req, res) => {
+    void handleRequest(req, res, store);
+  });
+  const bound = await listenGuildServer(server, "127.0.0.1", 0);
+  const port = bound.port;
+  const probe = (headers: Record<string, string>) =>
+    new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = http.request(
+        { host: "127.0.0.1", port, path: "/host/read?path=/etc/hosts", headers },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk) => chunks.push(chunk as Buffer));
+          res.on("end", () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              body: Buffer.concat(chunks).toString("utf8"),
+            }),
+          );
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  try {
+    const rebind = await probe({
+      host: `evil.example:${port}`,
+      origin: `http://evil.example:${port}`,
+    });
+    assert.equal(rebind.status, 403);
+    assert.deepEqual(JSON.parse(rebind.body), { error: "cross-origin refused" });
+    const local = await probe({
+      host: `127.0.0.1:${port}`,
+      origin: `http://127.0.0.1:${port}`,
+    });
+    assert.equal(local.status, 200);
+    const bare = await probe({ host: `127.0.0.1:${port}` });
+    assert.equal(bare.status, 200);
+  } finally {
+    await closeServer(server);
+    store.close();
   }
 });

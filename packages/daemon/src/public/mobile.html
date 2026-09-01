@@ -9,7 +9,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=away" />
+    <link rel="stylesheet" href="/mobile.css?v=enamel" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -39,17 +39,26 @@
             <div id="mention-results"></div>
           </div>
           <textarea id="draft" rows="1" placeholder="Ask anything" data-i18n-placeholder="askAnything"></textarea>
+          <div class="composer-steer" id="composer-steer" hidden></div>
           <div class="composer-actions">
             <button type="submit" class="send" id="send" data-i18n="send">送出</button>
             <button type="button" class="stop-all" id="stop" hidden data-i18n="live.stop">停止</button>
+            <button type="button" class="steer" id="steer" hidden data-i18n="steer.insert">插入引導</button>
           </div>
         </div>
       </form>
     </section>
-    <div class="flash" id="flash" hidden></div>
+    <div class="flash" id="flash" role="status" aria-live="polite" hidden></div>
     <script>
       (function () {
         const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
+        const SEAT_HUE = {
+          infra: "#5b8def",
+          pm: "#2ea887",
+          rd: "#e07a3d",
+          design: "#7c6af7",
+          marketing: "#d4537e",
+        };
         const state = {
           channels: [],
           bots: [],
@@ -64,6 +73,8 @@
         };
 
         function hue(key) {
+          const seat = SEAT_HUE[String(key).toLowerCase()];
+          if (seat) return seat;
           let n = 0;
           for (const ch of String(key)) n = (n + ch.charCodeAt(0) * 17) % COLORS.length;
           return COLORS[n];
@@ -80,9 +91,18 @@
             .trim()
             .split(/\s+/);
           if (parts[0] && /[A-Za-z]/.test(parts[0][0])) {
-            return parts[0][0].toUpperCase();
+            const letters = parts.slice(0, 2).map((part) => part[0]).filter(Boolean);
+            if (
+              letters.length === 2 &&
+              /[A-Za-z]/.test(letters[0]) &&
+              /[A-Za-z]/.test(letters[1])
+            ) {
+              return letters.join("").toUpperCase();
+            }
+            return letters[0].toUpperCase();
           }
-          return Array.from(String(name).replace(/\s+/g, ""))[0] || "?";
+          const glyph = Array.from(String(name).replace(/\s+/g, ""))[0] || "?";
+          return glyph;
         }
         function portraitUrl(bot) {
           const url = bot && typeof bot.portrait === "string" ? bot.portrait.trim() : "";
@@ -121,6 +141,13 @@
             ? "/dms/" + encodeURIComponent(r.id) + "/abort"
             : "/channels/" + encodeURIComponent(r.id) + "/abort";
         }
+        function steerUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/steer"
+            : "/channels/" + encodeURIComponent(r.id) + "/steer";
+        }
         function parseHash() {
           const raw = location.hash.replace(/^#/, "");
           if (raw.startsWith("d/")) {
@@ -143,15 +170,17 @@
           const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
           document.documentElement.style.setProperty("--vvh", h + "px");
         }
-        function toast(text) {
+        function toast(text, opts) {
           const el = document.getElementById("flash");
+          const ok = Boolean(opts && opts.ok);
           el.hidden = false;
           el.textContent = text;
+          el.classList.toggle("err", !ok);
           el.classList.add("on");
           clearTimeout(toast.timer);
           toast.timer = setTimeout(() => {
             el.classList.remove("on");
-          }, 1800);
+          }, (opts && opts.ms) || 1800);
         }
         function relTime(iso) {
           if (!iso) return t("noActivity");
@@ -206,17 +235,54 @@
             .replace(/```[\s\S]*?```/g, " ")
             .replace(/`[^`]*`/g, " ");
         }
+        function deferredHandles(text) {
+          const raw = String(text || "");
+          const out = [];
+          const add = (name) => {
+            const key = String(name || "").toLowerCase();
+            if (key && out.indexOf(key) < 0) out.push(key);
+          };
+          const scan = raw.replace(/```[\s\S]*?```/g, " ");
+          const cue =
+            /(?:完成後|通過後|最後(?:才|由)?|才需要|才叫|才交)[^@\n]{0,24}@([A-Za-z0-9_-]+)/gi;
+          const bare =
+            /(?:完成後|才需要|才叫)\s*(?:call|ask|由)\s*`?@?([A-Za-z0-9_-]+)`?/gi;
+          let row;
+          while ((row = cue.exec(scan))) add(row[1]);
+          while ((row = bare.exec(scan))) add(row[1]);
+          const later =
+            /^[ \t]*(?:\d+[.)、]\s*|[-*•]\s+)(?:通過後|最後|然後|之後|完成後)\s*`?@([A-Za-z0-9_-]+)`?/i;
+          const lines = raw.split(/\r?\n/);
+          for (let i = 0; i < lines.length; i++) {
+            const hit = lines[i].match(later);
+            if (hit) add(hit[1]);
+          }
+          return out;
+        }
         function summonedBotIds(text) {
           const raw = String(text || "");
+          const deferred = {};
+          deferredHandles(raw).forEach((handle) => {
+            deferred[handle] = true;
+          });
+          const members = new Set(
+            state.kind === "channel"
+              ? ((currentChannel() && currentChannel().memberIds) || [])
+              : state.kind === "dm"
+                ? [state.id]
+                : [],
+          );
           const known = new Map(
-            (state.bots || []).map((bot) => [
-              String(bot.handle).toLowerCase(),
-              bot.id,
-            ]),
+            (state.bots || [])
+              .filter((bot) => !members.size || members.has(bot.id))
+              .map((bot) => [
+                String(bot.handle).toLowerCase(),
+                bot.id,
+              ]),
           );
           const out = [];
-          const push = (id) => {
-            if (id && out.indexOf(id) < 0) out.push(id);
+          const push = (id, handle) => {
+            if (id && !deferred[handle] && out.indexOf(id) < 0) out.push(id);
           };
           let fence = false;
           const lines = raw.split(/\r?\n/);
@@ -233,7 +299,8 @@
             if (!m) continue;
             const names = m[1].match(/@([A-Za-z0-9_-]+)/g) || [];
             for (let n = 0; n < names.length; n++) {
-              push(known.get(names[n].slice(1).toLowerCase()));
+              const handle = names[n].slice(1).toLowerCase();
+              push(known.get(handle), handle);
             }
           }
           if (out.length) return out;
@@ -241,7 +308,8 @@
           const re = /(?:^|\s)@([A-Za-z0-9_-]+)\b/g;
           let row;
           while ((row = re.exec(scan))) {
-            push(known.get(String(row[1]).toLowerCase()));
+            const handle = String(row[1]).toLowerCase();
+            push(known.get(handle), handle);
           }
           return out;
         }
@@ -349,6 +417,10 @@
                 escapeHtml(bot.id) +
                 '">' +
                 t("live.stop") +
+                '</button><button type="button" class="turn-steer" data-live-steer="' +
+                escapeHtml(bot.id) +
+                '">' +
+                t("live.steer") +
                 "</button></div></div></div></article>"
               );
             })
@@ -412,10 +484,28 @@
           root.innerHTML = notice + rows.map(msgHtml).join("") + turnStatusHtml();
           if (pin) root.scrollTop = root.scrollHeight;
         }
+        function steerModLabel() {
+          return /Mac|iPhone|iPad/.test(navigator.platform || "") ? "\u2318" : "Ctrl+";
+        }
+        function syncSteerHint() {
+          const hint = document.getElementById("composer-steer");
+          if (!hint) return;
+          if (!isBusy()) {
+            hint.hidden = true;
+            hint.textContent = "";
+            return;
+          }
+          const hintKey = t("steer.hint", { mod: steerModLabel() });
+          hint.hidden = false;
+          hint.textContent = hintKey === "steer.hint" ? t("live.steer") : hintKey;
+        }
         function syncComposer() {
           const busy = isBusy();
           document.getElementById("send").hidden = busy;
           document.getElementById("stop").hidden = !busy;
+          const steer = document.getElementById("steer");
+          if (steer) steer.hidden = !busy;
+          syncSteerHint();
         }
         function navRow(opts) {
           const live = opts.busy
@@ -681,6 +771,63 @@
           renderThread();
           await loadMessages().catch(() => {});
         }
+        async function sendSteer(raw, botId) {
+          const text = String(raw || "").trim();
+          if (!text || !state.kind) return;
+          const payload = { body: text };
+          if (botId) payload.botId = botId;
+          else {
+            const ids = botsFromSend(text);
+            if (ids.length === 1) payload.botId = ids[0];
+          }
+          const res = await fetch(steerUrl(), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || "steer failed");
+          await loadMessages({ merge: true }).catch(() => {});
+          await pollLive();
+          const who = body.message && body.message.steerBotId
+            ? botById(body.message.steerBotId)
+            : null;
+          toast(
+            who ? t("steer.tagTo", { who: who.name || who.handle }) : t("steer.tag"),
+            { ok: true, ms: 2000 },
+          );
+        }
+        async function steerDraft(botId) {
+          const draft = document.getElementById("draft");
+          const raw = draft.value.trim();
+          if (!raw) {
+            draft.focus();
+            toast(t("live.steer"), { ok: true, ms: 1400 });
+            return;
+          }
+          draft.value = "";
+          fitDraft();
+          hideMention();
+          state.messages = state.messages.concat([
+            {
+              id: "pending-steer-" + Date.now(),
+              author: "you",
+              body: raw,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          renderThread();
+          try {
+            await sendSteer(raw, botId);
+          } catch (err) {
+            draft.value = raw;
+            fitDraft();
+            await loadMessages().catch(() => {});
+            toast(err.message || String(err));
+          }
+          syncComposer();
+          schedule();
+        }
         async function sendDraft() {
           const draft = document.getElementById("draft");
           const raw = draft.value.trim();
@@ -736,11 +883,22 @@
         document.getElementById("stop").addEventListener("click", () => {
           stopTurn();
         });
+        document.getElementById("steer").addEventListener("click", () => {
+          steerDraft().catch((err) => toast(err.message || String(err)));
+        });
         document.getElementById("thread").addEventListener("click", (event) => {
           const stop = event.target.closest("[data-live-stop]");
-          if (!stop) return;
+          if (stop) {
+            event.preventDefault();
+            stopTurn(stop.getAttribute("data-live-stop"));
+            return;
+          }
+          const steer = event.target.closest("[data-live-steer]");
+          if (!steer) return;
           event.preventDefault();
-          stopTurn(stop.getAttribute("data-live-stop"));
+          steerDraft(steer.getAttribute("data-live-steer")).catch((err) =>
+            toast(err.message || String(err)),
+          );
         });
         document.getElementById("draft").addEventListener("input", () => {
           fitDraft();
@@ -748,6 +906,18 @@
         });
         document.getElementById("draft").addEventListener("keydown", (event) => {
           const pop = document.getElementById("mention-pop");
+          if (
+            pop.hidden &&
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            (event.metaKey || event.ctrlKey)
+          ) {
+            if (isBusy()) {
+              event.preventDefault();
+              steerDraft().catch((err) => toast(err.message || String(err)));
+            }
+            return;
+          }
           if (pop.hidden) return;
           if (event.key === "ArrowDown") {
             event.preventDefault();

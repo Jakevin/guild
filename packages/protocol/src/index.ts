@@ -133,9 +133,20 @@ export type LlmApi =
   | "anthropic-messages"
   | "openai-responses";
 
+export type ModelReasoning = {
+  /** Effort strings this model accepts, catalog order. Missing = no effort picker. */
+  supportedEfforts?: string[];
+  defaultEffort?: string;
+  /** When true, do not send `none` — reasoning cannot be turned off. */
+  mandatory?: boolean;
+  defaultEnabled?: boolean;
+  supportsMaxTokens?: boolean;
+};
+
 export type ModelEntry = {
   id: string;
   name?: string;
+  reasoning?: ModelReasoning;
 };
 
 export type ProviderEntry = {
@@ -158,7 +169,8 @@ export type AuxRole =
 
 export type ModelsFile = {
   default?: ModelRef | null;
-  reasoning?: "minimal" | "low" | "medium" | "high";
+  /** Last chosen effort string (catalog-defined: low, high, xhigh, …). */
+  reasoning?: string;
   fast?: boolean;
   aux?: Partial<Record<AuxRole, ModelRef | null>>;
   recent?: ModelRef[];

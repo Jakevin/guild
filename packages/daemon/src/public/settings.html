@@ -64,13 +64,10 @@
         </div>
         <p class="main-now" id="main-now"></p>
         <div class="toggles">
-          <span>Reasoning</span>
-          <select id="reasoning">
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
+          <span id="reasoning-wrap">
+            <span data-i18n="reasoning">推理強度</span>
+            <select id="reasoning"></select>
+          </span>
           <label><input type="checkbox" id="fast" /> Fast</label>
         </div>
         <div class="panel-head" style="margin-top:1rem">
@@ -278,6 +275,51 @@
           )
           .join("");
         if (preferred && preferred.provider === psel.value) msel.value = preferred.model;
+        if (psel.id === "provider") fillReasoning();
+      }
+      function reasonLabel(value) {
+        if (value === "none") return t("reason.none");
+        if (value === "minimal") return t("reason.min");
+        if (value === "low") return t("reason.low");
+        if (value === "medium") return t("reason.mid");
+        if (value === "high") return t("reason.high");
+        if (value === "xhigh") return t("reason.xhigh");
+        if (value === "max") return t("reason.max");
+        return value || "";
+      }
+      function fillReasoning() {
+        const sel = document.getElementById("reasoning");
+        const wrap = document.getElementById("reasoning-wrap");
+        const ref = currentRef();
+        const group = pickerGroups().find((p) => p.id === (ref && ref.provider));
+        const model = ((group && group.models) || []).find(
+          (m) => m.id === (ref && ref.model),
+        );
+        const spec = (model && model.reasoning) || null;
+        const raw = spec && spec.supportedEfforts;
+        const choices = raw && raw.length
+          ? spec.mandatory
+            ? raw.filter((key) => key !== "none")
+            : raw.slice()
+          : [];
+        sel.innerHTML = choices
+          .map(
+            (value) =>
+              '<option value="' +
+              escapeHtml(value) +
+              '">' +
+              escapeHtml(reasonLabel(value)) +
+              "</option>",
+          )
+          .join("");
+        const want = data.reasoning;
+        if (want && choices.indexOf(want) >= 0) sel.value = want;
+        else if (spec && spec.defaultEffort && choices.indexOf(spec.defaultEffort) >= 0) {
+          sel.value = spec.defaultEffort;
+        } else if (choices.length) {
+          sel.value = choices[0];
+        }
+        if (wrap) wrap.hidden = !choices.length;
       }
       function currentRef() {
         const provider = document.getElementById("provider").value;
@@ -359,7 +401,7 @@
       }
       function renderPicker() {
         fillSelect(document.getElementById("provider"), pickerGroups(), data.default);
-        document.getElementById("reasoning").value = data.reasoning || "medium";
+        fillReasoning();
         document.getElementById("fast").checked = Boolean(data.fast);
         const mainNow = document.getElementById("main-now");
         if (mainNow) {
@@ -696,6 +738,7 @@
           data.default,
         );
       });
+      document.getElementById("model").addEventListener("change", fillReasoning);
       document.getElementById("apply").addEventListener("click", () => applyPicker());
       document.getElementById("reset-aux").addEventListener("click", async () => {
         await applyPicker({ aux: {} });

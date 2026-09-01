@@ -7,6 +7,7 @@ import { Type, type Tool } from "@earendil-works/pi-ai";
 import { listHostSkills } from "./host-skills.ts";
 import type { McpToolRef } from "./mcp.ts";
 import {
+  defaultWorkspace,
   gateTool,
   parseSandbox,
   resolveToolPath,
@@ -186,7 +187,9 @@ export function guildTools(
       (tool) => tool.name === "read" || tool.name === "list",
     );
   } else if (sandbox === "workspace_write") {
-    tools = tools.filter((tool) => tool.name !== "image_gen");
+    tools = tools.filter(
+      (tool) => tool.name !== "image_gen" && tool.name !== "browser",
+    );
   }
   tools.push({
     name: "skill",
@@ -465,9 +468,11 @@ export async function builtinExecute(
   ctx: ToolContext = {},
 ): Promise<ToolOutcome> {
   try {
+    // workspace_write resolves relative paths from the workspace root, which
+    // defaults to the guild checkout (same root gateTool checks against).
     const pathBase =
-      parseSandbox(ctx.sandbox) === "workspace_write" && ctx.workspace
-        ? resolveToolPath(ctx.workspace)
+      parseSandbox(ctx.sandbox) === "workspace_write"
+        ? resolveToolPath(ctx.workspace?.trim() || defaultWorkspace())
         : HOME;
     if (name === "run") {
       return await runCommand(

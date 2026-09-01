@@ -3,10 +3,11 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { StoreError } from "./store.ts";
 
@@ -31,6 +32,70 @@ function resolveUserPath(input: string): string {
   return resolve(HOME, trimmed);
 }
 
+/** Guild data dirs: `~/.guild` plus an explicit `GUILD_HOME` if set. */
+function guildHomes(): string[] {
+  const homes = [join(HOME, ".guild")];
+  const extra = process.env.GUILD_HOME?.trim();
+  if (extra) homes.push(resolveUserPath(extra));
+  return homes;
+}
+
+const SSH_DIR = join(HOME, ".ssh");
+/** Files whose *contents* are credentials, wherever the guild home lives. */
+const SECRET_GUILD_FILES = new Set(["oauth.json", "models.json"]);
+const SSH_KEY_NAME = /^(id_rsa|id_dsa|id_ecdsa|id_ed25519|id_xmss)$/i;
+const SECRET_SUFFIXES = [".pem", ".p12", ".pfx"];
+
+function under(path: string, dir: string): boolean {
+  const prefix = dir.endsWith(sep) ? dir : `${dir}${sep}`;
+  return path === dir || path.startsWith(prefix);
+}
+
+/** Longest existing ancestor resolved through symlinks, tail re-joined. */
+function canonicalPath(target: string): string {
+  let abs = resolve(target);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = realpathSync(abs);
+      return tail.length ? resolve(real, ...tail) : real;
+    } catch {
+      const parent = dirname(abs);
+      if (parent === abs) return tail.length ? resolve(abs, ...tail) : abs;
+      tail.unshift(basename(abs));
+      abs = parent;
+    }
+  }
+}
+
+function isSecretPath(abs: string): boolean {
+  const name = basename(abs);
+  const lower = name.toLowerCase();
+  const publicKey = lower.endsWith(".pub");
+  for (const home of guildHomes()) {
+    if (under(abs, join(home, "browser-profile"))) return true;
+    if (under(abs, home) && SECRET_GUILD_FILES.has(lower)) return true;
+  }
+  if (under(abs, SSH_DIR) && abs !== SSH_DIR && !publicKey) return true;
+  if (SSH_KEY_NAME.test(name)) return true;
+  if (!publicKey && SECRET_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * The attach picker browses `$HOME` on purpose, so /host/* is not confined to a
+ * workspace. Secrets still have to stay shut: OAuth tokens, model keys, the
+ * cloned browser profile, and private keys.
+ */
+export function assertHostPathAllowed(target: string): void {
+  const abs = isAbsolute(target) ? resolve(target) : resolveUserPath(target);
+  if (isSecretPath(canonicalPath(abs))) {
+    throw new StoreError(403, "host path refused");
+  }
+}
+
 function parentOf(path: string): string | null {
   const parent = dirname(path);
   if (parent === path) return null;
@@ -52,6 +117,7 @@ export function hostList(rawPath: string): {
 } {
   try {
     const target = resolveUserPath(rawPath);
+    assertHostPathAllowed(target);
     const st = statSync(target);
     if (!st.isDirectory()) throw new StoreError(400, "not a directory");
     const entries = readdirSync(target, { withFileTypes: true })
@@ -94,6 +160,7 @@ export function hostRead(rawPath: string): {
 } {
   try {
     const target = resolveUserPath(rawPath);
+    assertHostPathAllowed(target);
     const st = statSync(target);
     if (!st.isFile()) throw new StoreError(400, "not a file");
     const raw = readFileSync(target);
@@ -146,6 +213,7 @@ function walkTree(
 export function hostTree(rawPath: string): { path: string; text: string } {
   try {
     const target = resolveUserPath(rawPath);
+    assertHostPathAllowed(target);
     const st = statSync(target);
     if (!st.isDirectory()) throw new StoreError(400, "not a directory");
     const lines = [target];
@@ -157,6 +225,25 @@ export function hostTree(rawPath: string): { path: string; text: string } {
     asHostError(error, "tree failed");
   }
 }
+
+/**
+ * Git runs inside the user's tree: ignore their global/system config (hooks,
+ * fsmonitor, credential helpers) and never prompt on a TTY-less daemon.
+ */
+const GIT_GUARD = [
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "core.untrackedCache=false",
+  "--no-optional-locks",
+] as const;
+
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_TERMINAL_PROMPT: "0",
+};
 
 function findGitRoot(start: string): string | null {
   let dir = start;
@@ -176,14 +263,25 @@ export async function hostGit(rawPath: string): Promise<{
 }> {
   try {
     const start = resolveUserPath(rawPath);
+    assertHostPathAllowed(start);
     const base = statSync(start).isDirectory() ? start : dirname(start);
     const root = findGitRoot(base);
     if (!root) throw new StoreError(404, "not a git repository");
-    const opts = { cwd: root, timeout: 8_000, maxBuffer: GIT_CAP * 2 };
-    const status = await execFileAsync("git", ["status", "-sb"], opts);
+    assertHostPathAllowed(root);
+    const opts = {
+      cwd: root,
+      timeout: 8_000,
+      maxBuffer: GIT_CAP * 2,
+      env: GIT_ENV,
+    };
+    const status = await execFileAsync("git", [...GIT_GUARD, "status", "-sb"], opts);
     let diff = "";
     try {
-      const out = await execFileAsync("git", ["diff", "--stat", "HEAD"], opts);
+      const out = await execFileAsync(
+        "git",
+        [...GIT_GUARD, "diff", "--stat", "HEAD"],
+        opts,
+      );
       diff = String(out.stdout || "");
     } catch {
       diff = "";
