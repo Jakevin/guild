@@ -24,6 +24,8 @@ import {
   getBotDetail,
   getLiveTurn,
   abortLiveTurn,
+  pauseLiveTurn,
+  continueLiveTurn,
   healthPayload,
   importSkills,
   mergeModelsFile,
@@ -271,7 +273,8 @@ function modelRefFrom(value: unknown): ModelRef | null {
   const provider = str(rec, "provider").trim();
   const model = str(rec, "model").trim();
   if (!provider || !model) return null;
-  return { provider, model };
+  const reasoning = str(rec, "reasoning").trim();
+  return reasoning ? { provider, model, reasoning } : { provider, model };
 }
 
 function strList(record: Record<string, unknown>, key: string): string[] {
@@ -705,6 +708,66 @@ export async function handleRequest(
         res,
         200,
         abortLiveTurn(store, room.id, str(body, "botId") || undefined),
+      );
+      return;
+    }
+
+    const channelPause = path.match(/^\/channels\/([^/]+)\/pause$/);
+    if (channelPause && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        pauseLiveTurn(
+          store,
+          decodeURIComponent(channelPause[1]),
+          str(body, "botId") || undefined,
+        ),
+      );
+      return;
+    }
+    const dmPause = path.match(/^\/dms\/([^/]+)\/pause$/);
+    if (dmPause && method === "POST") {
+      const room = openDm(store, decodeURIComponent(dmPause[1]));
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        pauseLiveTurn(store, room.id, str(body, "botId") || undefined),
+      );
+      return;
+    }
+
+    const channelContinue = path.match(/^\/channels\/([^/]+)\/continue$/);
+    if (channelContinue && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        await continueLiveTurn(
+          store,
+          decodeURIComponent(channelContinue[1]),
+          str(body, "botId"),
+          env,
+          extras,
+        ),
+      );
+      return;
+    }
+    const dmContinue = path.match(/^\/dms\/([^/]+)\/continue$/);
+    if (dmContinue && method === "POST") {
+      const room = openDm(store, decodeURIComponent(dmContinue[1]));
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        await continueLiveTurn(
+          store,
+          room.id,
+          str(body, "botId"),
+          env,
+          extras,
+        ),
       );
       return;
     }

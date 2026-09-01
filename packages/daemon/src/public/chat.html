@@ -1292,8 +1292,8 @@
       }
       function botModelMeta(bot) {
         const model = botModelLabel(bot) || "—";
+        const ref = botModelRef(bot);
         const spec = (() => {
-          const ref = botModelRef(bot);
           if (!ref) return null;
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
@@ -1301,7 +1301,7 @@
           return (hit && hit.reasoning) || null;
         })();
         const reasonVal = clampEffort(
-          modelCfg && modelCfg.reasoning,
+          ref && ref.reasoning,
           spec,
           Boolean(modelCfg && modelCfg.fast),
         );
@@ -1713,6 +1713,7 @@
             thinking: row.thinking || "",
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
+            paused: Boolean(row.paused),
           }));
       }
       function rebuildBusyBots() {
@@ -1741,6 +1742,7 @@
             thinking: row.thinking || "",
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
+            paused: Boolean(row.paused),
             room: { kind: r.kind, id: r.id },
           }));
         state.lives = others.concat(tagged);
@@ -1791,24 +1793,38 @@
             ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
             : "";
         const botId = live && live.botId ? live.botId : "";
+        const paused = Boolean(live && live.paused);
         const actions = botId
           ? '<div class="turn-actions">' +
+            (paused
+              ? '<button type="button" class="turn-continue" data-live-continue="' +
+                escapeHtml(botId) +
+                '">' +
+                t("live.continue") +
+                "</button>"
+              : '<button type="button" class="turn-pause" data-live-pause="' +
+                escapeHtml(botId) +
+                '">' +
+                t("live.pause") +
+                "</button>") +
             '<button type="button" class="turn-stop" data-live-stop="' +
             escapeHtml(botId) +
             '">' +
             t("live.stop") +
             "</button>" +
-            '<button type="button" class="turn-steer" data-live-steer="' +
-            escapeHtml(botId) +
-            '">' +
-            t("live.steer") +
-            "</button>" +
+            (paused
+              ? ""
+              : '<button type="button" class="turn-steer" data-live-steer="' +
+                escapeHtml(botId) +
+                '">' +
+                t("live.steer") +
+                "</button>") +
             "</div>"
           : "";
         return (
           '<div class="turn-live">' +
           '<div class="turn-status">' +
-          t("deepDiving") +
+          (paused ? t("live.paused") : t("deepDiving")) +
           clock +
           "</div>" +
           liveStepsHtml(live && live.steps) +
@@ -1829,7 +1845,9 @@
             return (
               '<article class="msg bot live" data-bot-id="' +
               escapeHtml(bot.id) +
-              '" role="status">' +
+              '"' +
+              (live.paused ? ' data-paused="1"' : "") +
+              ' role="status">' +
               actor.av +
               '<div class="msg-main">' +
               actor.head +
@@ -1866,6 +1884,11 @@
           const block = article.querySelector(".turn-live");
           if (!block) return;
           const status = block.querySelector(".turn-status");
+          const paused = Boolean(live.paused);
+          if ((article.getAttribute("data-paused") === "1") !== paused) {
+            renderThread();
+            return;
+          }
           if (status) {
             const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
             const elapsed = Number.isFinite(started)
@@ -1875,7 +1898,7 @@
               elapsed >= 15000
                 ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
                 : "";
-            status.innerHTML = t("deepDiving") + clock;
+            status.innerHTML = (paused ? t("live.paused") : t("deepDiving")) + clock;
           }
           const html = liveStepsHtml(live.steps);
           const existing = block.querySelector(".live-steps");
@@ -2328,6 +2351,18 @@
           ? "/dms/" + encodeURIComponent(r.id) + "/abort"
           : "/channels/" + encodeURIComponent(r.id) + "/abort";
       }
+      function pauseUrl(room) {
+        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        return r.kind === "dm"
+          ? "/dms/" + encodeURIComponent(r.id) + "/pause"
+          : "/channels/" + encodeURIComponent(r.id) + "/pause";
+      }
+      function continueUrl(room) {
+        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        return r.kind === "dm"
+          ? "/dms/" + encodeURIComponent(r.id) + "/continue"
+          : "/channels/" + encodeURIComponent(r.id) + "/continue";
+      }
       function stopTurn(botId) {
         const room = currentRoomRef();
         (state.aborts || []).forEach((item) => {
@@ -2352,6 +2387,30 @@
           body: JSON.stringify(botId ? { botId: botId } : {}),
         }).catch(() => {});
         setBusy(false, botId ? [botId] : [], { room: room });
+      }
+      function pauseTurn(botId) {
+        const room = currentRoomRef();
+        fetch(pauseUrl(room), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(botId ? { botId: botId } : {}),
+        }).catch(() => {});
+        (state.lives || []).forEach((row) => {
+          if (!botId || row.botId === botId) row.paused = true;
+        });
+        if (state.live && (!botId || state.live.botId === botId)) {
+          state.live.paused = true;
+        }
+        renderThread();
+      }
+      async function continueTurn(botId) {
+        const room = currentRoomRef();
+        (state.lives || []).forEach((row) => {
+          if (row.botId === botId) row.paused = false;
+        });
+        if (state.live && state.live.botId === botId) state.live.paused = false;
+        renderThread();
+        await postChat(continueUrl(room), { botId: botId }, room, [botId]);
       }
       async function insertIntoBotTurn(botId) {
         if (!composerHasPayload()) {
@@ -2817,6 +2876,22 @@
             stopTurn(liveStop.getAttribute("data-live-stop"));
             return;
           }
+          const livePause = event.target.closest("[data-live-pause]");
+          if (livePause) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            pauseTurn(livePause.getAttribute("data-live-pause"));
+            return;
+          }
+          const liveContinue = event.target.closest("[data-live-continue]");
+          if (liveContinue) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            continueTurn(liveContinue.getAttribute("data-live-continue")).catch(
+              (err) => alert(err.message),
+            );
+            return;
+          }
           const liveSteer = event.target.closest("[data-live-steer]");
           if (liveSteer) {
             event.preventDefault();
@@ -3084,7 +3159,12 @@
         if (bot) showBotCard(bot, event.currentTarget);
       });
       document.getElementById("thread").addEventListener("click", (event) => {
-        if (event.target.closest("[data-live-stop], [data-live-steer]")) return;
+        if (
+          event.target.closest(
+            "[data-live-stop], [data-live-pause], [data-live-continue], [data-live-steer]",
+          )
+        )
+          return;
         const av = event.target.closest(
           ".avatar[data-bot-id], button.name[data-bot-id]",
         );
@@ -4452,6 +4532,9 @@
           }
           setBusy(false, botIds, { room: sent });
         }
+        if (state.kind === sent.kind && state.id === sent.id) {
+          await resumeCurrentLive().catch(() => {});
+        }
         if (ok) await flushQueued(sent);
       }
       async function flushQueued(sent) {
@@ -5550,8 +5633,9 @@
         document.getElementById("model-fast").checked = Boolean(modelCfg.fast);
         const spec = activeReasoningSpec();
         const choices = effortChoices(spec);
+        const currentRef = activeModelRef();
         const reasonVal = clampEffort(
-          modelCfg.reasoning,
+          currentRef && currentRef.reasoning,
           spec,
           Boolean(modelCfg.fast),
         );
@@ -5621,11 +5705,24 @@
       async function applyChatModel(ref) {
         if (state.kind !== "dm") return;
         const bot = botById(state.id);
-        if (!bot) return;
+        if (!bot || !ref || !ref.provider || !ref.model) return;
+        const spec = (() => {
+          const hit = allModels().find(
+            (row) => row.provider === ref.provider && row.model === ref.model,
+          );
+          return (hit && hit.reasoning) || null;
+        })();
+        const reason = clampEffort(
+          document.getElementById("model-reasoning").value || ref.reasoning,
+          spec,
+          Boolean(document.getElementById("model-fast").checked),
+        );
+        const next = { provider: ref.provider, model: ref.model };
+        if (reason) next.reasoning = reason;
         const res = await fetch("/bots/" + encodeURIComponent(bot.id), {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: ref }),
+          body: JSON.stringify({ model: next }),
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -5635,16 +5732,16 @@
         const updated = await res.json();
         const i = state.bots.findIndex((item) => item.id === bot.id);
         if (i >= 0) state.bots[i] = { ...state.bots[i], model: updated.model };
-        await fetch("/settings/models", {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            reasoning: document.getElementById("model-reasoning").value,
-            fast: document.getElementById("model-fast").checked,
-          }),
-        }).then(async (r) => {
-          if (r.ok) modelCfg = await r.json();
-        });
+        const fast = document.getElementById("model-fast").checked;
+        if (Boolean(modelCfg.fast) !== Boolean(fast)) {
+          await fetch("/settings/models", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ fast: fast }),
+          }).then(async (r) => {
+            if (r.ok) modelCfg = await r.json();
+          });
+        }
         renderModelList();
         renderNav();
       }

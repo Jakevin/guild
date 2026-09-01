@@ -496,7 +496,7 @@ export async function llmComplete(input: {
   };
   const file = readModelsFile(input.dataDir);
   const effort = clampEffort(
-    file.fast ? "low" : file.reasoning,
+    file.fast ? "low" : input.prefer ? input.prefer.reasoning : file.reasoning,
     reasoningFor(target.providerId, target.model),
     Boolean(file.fast),
   );

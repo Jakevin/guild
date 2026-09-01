@@ -8,8 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
-const { renderMarkdown } = require("../src/public/md.js") as {
+const { renderMarkdown, hydrateHtmlPreviews } = require("../src/public/md.js") as {
   renderMarkdown: (raw: string) => string;
+  hydrateHtmlPreviews: (root: { querySelectorAll: (sel: string) => unknown }) => void;
 };
 const CHAT_HTML = fileURLToPath(
   new URL("../src/public/chat.html", import.meta.url),
@@ -65,6 +66,33 @@ test("html fences expose a sandboxed preview", () => {
   assert.match(html, /放大預覽/);
   assert.match(html, /&lt;h1&gt;Hi&lt;\/h1&gt;/);
   assert.doesNotMatch(html, /sandbox="[^"]*allow-same-origin/);
+});
+
+test("hydrateHtmlPreviews fills srcdoc from the escaped textarea", () => {
+  assert.equal(typeof hydrateHtmlPreviews, "function");
+  const frames = [];
+  const boxes = [
+    {
+      querySelector(sel) {
+        if (sel === ".md-html-src") return { value: "<h1>Hi</h1>" };
+        if (sel === ".md-html-frame") {
+          const frame = { dataset: {}, srcdoc: "" };
+          frames.push(frame);
+          return frame;
+        }
+        if (sel === ".md-fence-lang") return { textContent: "html" };
+        return null;
+      },
+    },
+  ];
+  hydrateHtmlPreviews({
+    querySelectorAll(sel) {
+      assert.equal(sel, ".md-html-preview");
+      return boxes;
+    },
+  });
+  assert.equal(frames[0].srcdoc, "<h1>Hi</h1>");
+  assert.equal(frames[0].dataset.ready, "1");
 });
 
 test("renderMarkdown escapes HTML", () => {

@@ -1894,6 +1894,10 @@ a.invite-btn:hover { text-decoration: none; }
 .turn-actions .turn-stop {
   color: var(--danger);
 }
+.turn-actions .turn-pause,
+.turn-actions .turn-continue {
+  color: var(--steel);
+}
 .turn-actions .turn-steer {
   color: #b4c8e8;
 }
@@ -1907,6 +1911,8 @@ body.grok .turn-actions button:hover {
   color: #f2eadf;
 }
 body.grok .turn-actions .turn-stop { color: #d4a090; }
+body.grok .turn-actions .turn-pause,
+body.grok .turn-actions .turn-continue { color: #c4b090; }
 body.grok .turn-actions .turn-steer { color: #c4b090; }
 .turn-status .clock {
   margin-left: 8px;

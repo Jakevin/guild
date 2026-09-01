@@ -725,13 +725,19 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /trajFollow/);
   assert.match(home, /resumeCurrentLive/);
   assert.match(home, /function stopTurn/);
+  assert.match(home, /function pauseTurn/);
+  assert.match(home, /function continueTurn/);
   assert.match(home, /data-live-stop/);
+  assert.match(home, /data-live-pause/);
+  assert.match(home, /data-live-continue/);
   assert.match(home, /data-live-steer/);
   assert.match(home, /function insertIntoBotTurn/);
   assert.match(home, /function ingestFiles/);
   assert.match(home, /filesFromClipboard/);
   assert.match(home, /live\.steer/);
   assert.match(home, /\/abort/);
+  assert.match(home, /\/pause/);
+  assert.match(home, /\/continue/);
   assert.match(home, /\/live/);
   assert.match(home, /steer\.queue/);
   assert.match(home, /steer\.tag/);
@@ -1455,14 +1461,19 @@ test("PATCH bot updates name, oneLiner, skills, and soul markdown", async () => 
       soul: { body: string };
     };
     const modeled = await patchJson(origin, "/bots/bot-rd", {
-      model: { provider: "ollama", model: "llama3.1:8b" },
+      model: { provider: "ollama", model: "llama3.1:8b", reasoning: "max" },
     });
     assert.equal(modeled.status, 200);
     const withModel = (await getJson(origin, "/bots/bot-rd")).body as {
-      model: { provider: string; model: string };
+      model: { provider: string; model: string; reasoning?: string };
     };
     assert.equal(withModel.model.provider, "ollama");
     assert.equal(withModel.model.model, "llama3.1:8b");
+    assert.equal(withModel.model.reasoning, "max");
+    const pm = (await getJson(origin, "/bots/bot-pm")).body as {
+      model?: { reasoning?: string };
+    };
+    assert.notEqual(pm.model?.reasoning, "max");
     assert.equal(after.name, "資深 RD");
     assert.equal(after.oneLiner, "寫能過 review 的最小 diff");
     assert.ok(after.skillIds.includes(extra.id));
@@ -1637,10 +1648,25 @@ test("GET live returns in-memory think/tool steps", async () => {
       live: { id: string; botId: string }[];
     };
     assert.ok(space.live.some((row) => row.id === "channel-general" && row.botId === "bot-x"));
+    const paused = await postJson(origin, "/channels/channel-general/pause", {
+      botId: "bot-x",
+    });
+    assert.equal(paused.status, 200);
+    const pausedLive = await getJson(origin, "/channels/channel-general/live");
+    assert.equal(pausedLive.status, 200);
+    assert.equal((pausedLive.body as { paused?: boolean }).paused, true);
+    const idleContinue = await postJson(
+      origin,
+      "/channels/channel-general/continue",
+      {},
+    );
+    assert.equal(idleContinue.status, 400);
     const stopped = await postJson(origin, "/channels/channel-general/abort", {});
     assert.equal(stopped.status, 200);
     const idleAbort = await postJson(origin, "/channels/channel-general/abort", {});
     assert.equal(idleAbort.status, 409);
+    const idlePause = await postJson(origin, "/channels/channel-general/pause", {});
+    assert.equal(idlePause.status, 409);
     const bots = (await getJson(origin, "/bots")).body as { id: string }[];
     const dm = await getJson(origin, `/dms/${bots[0].id}/live`);
     assert.equal(dm.status, 200);

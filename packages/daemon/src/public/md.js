@@ -327,6 +327,23 @@ function renderMarkdown(raw) {
   return html.join("");
 }
 
+function hydrateHtmlPreviews(root) {
+  if (!root || typeof root.querySelectorAll !== "function") return;
+  root.querySelectorAll(".md-html-preview").forEach((box) => {
+    const src = box.querySelector(".md-html-src");
+    const frame = box.querySelector(".md-html-frame");
+    if (!src || !frame || frame.dataset.ready) return;
+    frame.dataset.ready = "1";
+    const raw = src.value;
+    const lang = (box.querySelector(".md-fence-lang") || {}).textContent || "";
+    frame.srcdoc = /svg/i.test(lang)
+      ? '<!doctype html><html><body style="margin:0;background:#fff">' +
+        raw +
+        "</body></html>"
+      : raw;
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { renderMarkdown, inlineMd };
+  module.exports = { renderMarkdown, inlineMd, hydrateHtmlPreviews };
 }

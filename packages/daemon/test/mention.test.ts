@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
 import {
+  continueLiveTurn,
   parseAttachments,
   postUserMessage,
   retryMessage,
@@ -1547,6 +1548,92 @@ test("retry of a follow-up without @mention plants live before MCP", async () =>
   const redone = await pending;
   assert.equal(redone.replies.length, 1);
   assert.equal(redone.replies[0].author, design.id);
+});
+
+test("pause keeps the live row; continue resumes on a new signal", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("pause-continue");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  assert.ok(marketing);
+  store.addMember(room.id, marketing.id);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const signals: AbortSignal[] = [];
+  const first = postUserMessage(
+    store,
+    room.id,
+    "@marketing 慢慢來",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.signal) signals.push(input.signal);
+        const abort = new Promise<never>((_, reject) => {
+          const fail = () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          };
+          if (input.signal?.aborted) fail();
+          input.signal?.addEventListener("abort", fail, { once: true });
+        });
+        await Promise.race([gate, abort]);
+        return {
+          body: `${input.handle} resumed`,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 80; i++) {
+    if (store.getLiveBotTurn(room.id, marketing.id)?.asked) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(store.getLiveBotTurn(room.id, marketing.id)?.asked);
+  assert.equal(store.pauseTurn(room.id, marketing.id), true);
+  const paused = store.getLiveBotTurn(room.id, marketing.id);
+  assert.ok(paused?.paused);
+  release();
+  const stopped = await first;
+  assert.equal(stopped.replies.length, 0);
+  assert.ok(store.getLiveBotTurn(room.id, marketing.id)?.paused);
+  const idlePause = store.pauseTurn(room.id, marketing.id);
+  assert.equal(idlePause, true);
+  const second = continueLiveTurn(
+    store,
+    room.id,
+    marketing.id,
+    process.env,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        if (input.signal) signals.push(input.signal);
+        assert.equal(input.signal?.aborted, false);
+        return {
+          body: `${input.handle} after pause`,
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  const continued = await second;
+  assert.equal(continued.replies.length, 1);
+  assert.equal(continued.replies[0].author, marketing.id);
+  assert.match(continued.replies[0].body, /after pause/);
+  assert.equal(store.getLiveBotTurn(room.id, marketing.id), null);
+  assert.ok(signals.length >= 2);
+  assert.notEqual(signals[0], signals[signals.length - 1]);
 });
 
 test("endTurn aborts the turn signal so leftover background spawns stop", () => {

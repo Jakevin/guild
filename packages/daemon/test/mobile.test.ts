@@ -41,6 +41,10 @@ test("GET /m serves a dedicated away page, not the hall", async () => {
     assert.match(html, /mentions/);
     assert.match(html, /\/live/);
     assert.match(html, /\/abort/);
+    assert.match(html, /\/pause/);
+    assert.match(html, /\/continue/);
+    assert.match(html, /data-live-pause/);
+    assert.match(html, /data-live-continue/);
     assert.match(html, /tailscale/i);
     assert.doesNotMatch(html, /href="\/studio"/);
     assert.doesNotMatch(html, /href="\/library"/);
@@ -66,6 +70,13 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /deepDiving/);
   assert.match(html, /live\.stop/);
   assert.match(html, /summonedBotIds|botsFromSend/);
+  assert.match(html, /hydrateHtmlPreviews/);
+  assert.match(html, /id="html-zoom"/);
+  assert.match(html, /data-html-view/);
+  assert.match(html, /openHtmlZoom/);
+  assert.doesNotMatch(html, /cleaned\.length > 8000/);
+  assert.match(css, /\.md-html-frame/);
+  assert.match(css, /\.html-zoom/);
   assert.match(css, /--tap:\s*44px/);
   assert.match(css, /min-height:\s*var\(--tap\)/);
   assert.match(css, /safe-area-inset/);
@@ -127,7 +138,7 @@ test("away page locks the five seats and can steer a live turn", () => {
   assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /classList\.toggle\("err"/);
-  assert.match(html, /mobile\.css\?v=enamel/);
+  assert.match(html, /mobile\.css\?v=html-preview/);
   assert.doesNotMatch(html, /WebSocket/);
   assert.doesNotMatch(html, /fonts\.googleapis/);
   assert.doesNotMatch(html, /inn-street|#16100B/);

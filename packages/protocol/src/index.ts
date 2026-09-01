@@ -6,7 +6,12 @@ export type HealthResponse = {
 
 export type BotStatus = "bench" | "staffed" | "running" | "retired";
 
-export type ModelRef = { provider: string; model: string };
+export type ModelRef = {
+  provider: string;
+  model: string;
+  /** Seat-specific effort. Missing → that model's catalog default. */
+  reasoning?: string;
+};
 
 export type LibraryKind =
   | "souls"
@@ -169,7 +174,7 @@ export type AuxRole =
 
 export type ModelsFile = {
   default?: ModelRef | null;
-  /** Last chosen effort string (catalog-defined: low, high, xhigh, …). */
+  /** Guild-default effort when a seat has no `model.reasoning`. */
   reasoning?: string;
   fast?: boolean;
   aux?: Partial<Record<AuxRole, ModelRef | null>>;

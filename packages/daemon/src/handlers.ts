@@ -522,6 +522,7 @@ export function workspace(store: GuildStore) {
         startedAt: turn.startedAt || "",
         thinking: turn.thinking,
         steps: turn.steps,
+        ...(turn.paused ? { paused: true } : {}),
       },
     ];
   });
@@ -996,6 +997,7 @@ function publicLiveTurn(live: LiveTurn): LiveTurn {
     thinking: live.thinking,
     steps: live.steps,
     startedAt: live.startedAt,
+    ...(live.paused ? { paused: true } : {}),
   };
 }
 
@@ -1085,6 +1087,84 @@ export function abortLiveTurn(
   return { ok: true };
 }
 
+export function pauseLiveTurn(
+  store: GuildStore,
+  roomId: string,
+  botId?: string,
+) {
+  if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
+  const live = botId
+    ? store.getLiveBotTurn(roomId, botId)
+    : store.getLiveTurn(roomId);
+  if (live?.paused) return { ok: true, paused: true as const };
+  const had = store.pauseTurn(roomId, botId);
+  if (!live && !had) throw new StoreError(409, "no live turn");
+  return { ok: true, paused: true as const };
+}
+
+function resumeSteer(live: LiveTurn): string {
+  const lines = [
+    "Paused mid-turn so the user could switch models. Continue from here. Do not redo finished tools unless you need a different result.",
+  ];
+  const thinking = (live.thinking || "").trim();
+  if (thinking) lines.push(`Thinking so far:\n${thinking.slice(0, 6000)}`);
+  const tools = (live.traces || []).filter((tr) => tr.name && tr.name !== "think");
+  if (tools.length) {
+    lines.push(
+      "Tools already run:\n" +
+        tools
+          .slice(-20)
+          .map((tr) => {
+            const bit = String(tr.text || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 400);
+            return `- ${tr.name}${bit ? `: ${bit}` : ""}`;
+          })
+          .join("\n"),
+    );
+  }
+  return lines.join("\n\n");
+}
+
+export async function continueLiveTurn(
+  store: GuildStore,
+  roomId: string,
+  botId: string,
+  env: NodeJS.ProcessEnv = process.env,
+  extras: HandlerExtras = {},
+) {
+  if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
+  const id = botId.trim();
+  if (!id) throw new StoreError(400, "botId is required");
+  const live = store.getLiveBotTurn(roomId, id);
+  if (!live?.paused) throw new StoreError(409, "no paused turn");
+  const messages = store.listMessages(roomId);
+  let userIndex = messages.length - 1;
+  while (userIndex >= 0 && messages[userIndex].author !== "you") userIndex -= 1;
+  if (userIndex < 0) throw new StoreError(400, "no user message to continue");
+  const userMessage = messages[userIndex];
+  const asked = live.asked?.trim() || userMessage.body.trim();
+  if (!asked) throw new StoreError(409, "nothing to continue");
+  const history = messages.slice(0, userIndex).map(toHistoryItem);
+  const parent = parentMessage(messages.slice(0, userIndex), userMessage.replyTo);
+  const room = store.getRoom(roomId);
+  store.setLiveTurn(roomId, { ...live, paused: false });
+  store.pushSteer(roomId, resumeSteer(live), id);
+  const replies = await generateReplies(
+    store,
+    roomId,
+    room?.memberIds ?? [id],
+    { ...userMessage, body: asked },
+    history,
+    id,
+    env,
+    parent,
+    extras,
+  );
+  return { replies };
+}
+
 function isAbortError(err: unknown): boolean {
   return Boolean(
     err &&
@@ -1169,14 +1249,19 @@ async function generateReplies(
     if (!memberIds.includes(botId)) return;
     if (signal.aborted) return;
     const prev = store.getLiveBotTurn(roomId, botId);
+    if (!prev || prev.paused) return;
     const startedAt = prev?.startedAt || new Date().toISOString();
     store.dropLastFailedReply(roomId, botId);
     store.setLiveTurn(roomId, {
       botId,
       thinking: prev?.thinking || "",
       steps: prev?.steps || [],
+      traces: prev?.traces,
+      asked: turnAsked,
       startedAt,
+      paused: false,
     });
+    const botSignal = store.armBotTurn(roomId, botId, signal);
     let generated;
     try {
       generated = await (extras.turn ?? chatReply)({
@@ -1189,10 +1274,11 @@ async function generateReplies(
           userMessage.body,
         ),
         env,
-        signal,
+        signal: botSignal,
         mcpTools,
         onProgress: (update) => {
           const prev = store.getLiveBotTurn(roomId, botId);
+          if (prev?.paused) return;
           const next = toLiveTurn(botId, update);
           const handoff = (prev?.steps || []).find((step) => step.name === "handoff");
           const pendingSteers = store.peekSteers(roomId, botId).map((text) => ({
@@ -1209,14 +1295,16 @@ async function generateReplies(
           );
           store.setLiveTurn(roomId, {
             ...next,
+            asked: prev?.asked || turnAsked,
             startedAt: prev?.startedAt || startedAt,
+            paused: false,
             steps: [...(handoff ? [handoff] : []), ...keptSteer, ...rest].slice(0, 5),
           });
         },
         pullSteers: () => store.drainSteers(roomId, botId),
       });
     } catch (err) {
-      if (isAbortError(err) || signal.aborted) return;
+      if (isAbortError(err) || botSignal.aborted || signal.aborted) return;
       throw err;
     }
     const usage = { ...(generated.usage || {}), startedAt };
@@ -1406,11 +1494,15 @@ function plantLiveTurns(
     if (!botId) continue;
     if (!memberIds.includes(botId)) continue;
     store.dropLastFailedReply(roomId, botId);
+    const prev = store.getLiveBotTurn(roomId, botId);
     store.setLiveTurn(roomId, {
       botId,
-      thinking: "",
-      steps: [],
-      startedAt,
+      thinking: prev?.thinking || "",
+      steps: prev?.steps || [],
+      traces: prev?.traces,
+      asked: prev?.asked,
+      startedAt: prev?.startedAt || startedAt,
+      paused: false,
     });
   }
   return startedAt;

@@ -9,7 +9,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=enamel" />
+    <link rel="stylesheet" href="/mobile.css?v=html-preview" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -49,6 +49,13 @@
       </form>
     </section>
     <div class="flash" id="flash" role="status" aria-live="polite" hidden></div>
+    <div class="html-zoom" id="html-zoom" hidden>
+      <div class="html-zoom-bar">
+        <strong data-i18n="html.zoom">HTML 預覽</strong>
+        <button type="button" class="html-zoom-close" id="html-zoom-close" title="關閉" aria-label="關閉" data-i18n-title="close" data-i18n-aria="close">×</button>
+      </div>
+      <iframe class="html-zoom-frame" id="html-zoom-frame" sandbox="allow-scripts" title="HTML preview large"></iframe>
+    </div>
     <script>
       (function () {
         const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
@@ -141,6 +148,20 @@
             ? "/dms/" + encodeURIComponent(r.id) + "/abort"
             : "/channels/" + encodeURIComponent(r.id) + "/abort";
         }
+        function pauseUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/pause"
+            : "/channels/" + encodeURIComponent(r.id) + "/pause";
+        }
+        function continueUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/continue"
+            : "/channels/" + encodeURIComponent(r.id) + "/continue";
+        }
         function steerUrl() {
           const r = currentRoomRef();
           if (!r) return "";
@@ -225,6 +246,7 @@
               thinking: row.thinking || "",
               steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
               startedAt: row.startedAt || "",
+              paused: Boolean(row.paused),
             }));
         }
         function isBusy() {
@@ -342,10 +364,11 @@
         }
         function formatBody(text) {
           const cleaned = visibleAssistantText(text);
-          if (cleaned.length > 8000) return escapeHtml(cleaned.slice(-8000));
+          const clipped =
+            cleaned.length > 48000 ? cleaned.slice(0, 48000) + "\n…" : cleaned;
           return typeof renderMarkdown === "function"
-            ? renderMarkdown(cleaned)
-            : escapeHtml(cleaned);
+            ? renderMarkdown(clipped)
+            : escapeHtml(clipped);
         }
         function liveStepLabel(name) {
           if (name === "think") return t("think");
@@ -409,19 +432,35 @@
                 '</span><span class="handle">@' +
                 escapeHtml(bot.handle) +
                 '</span></div><div class="turn-live"><div class="turn-status">' +
-                t("deepDiving") +
+                (live.paused ? t("live.paused") : t("deepDiving")) +
                 clock +
                 "</div>" +
                 liveStepsHtml(live.steps) +
-                '<div class="turn-actions"><button type="button" class="turn-stop" data-live-stop="' +
+                '<div class="turn-actions">' +
+                (live.paused
+                  ? '<button type="button" class="turn-continue" data-live-continue="' +
+                    escapeHtml(bot.id) +
+                    '">' +
+                    t("live.continue") +
+                    "</button>"
+                  : '<button type="button" class="turn-pause" data-live-pause="' +
+                    escapeHtml(bot.id) +
+                    '">' +
+                    t("live.pause") +
+                    "</button>") +
+                '<button type="button" class="turn-stop" data-live-stop="' +
                 escapeHtml(bot.id) +
                 '">' +
                 t("live.stop") +
-                '</button><button type="button" class="turn-steer" data-live-steer="' +
-                escapeHtml(bot.id) +
-                '">' +
-                t("live.steer") +
-                "</button></div></div></div></article>"
+                "</button>" +
+                (live.paused
+                  ? ""
+                  : '<button type="button" class="turn-steer" data-live-steer="' +
+                    escapeHtml(bot.id) +
+                    '">' +
+                    t("live.steer") +
+                    "</button>") +
+                "</div></div></div></article>"
               );
             })
             .join("");
@@ -482,7 +521,23 @@
               "</div>"
             : "";
           root.innerHTML = notice + rows.map(msgHtml).join("") + turnStatusHtml();
+          if (typeof hydrateHtmlPreviews === "function") {
+            hydrateHtmlPreviews(root);
+          }
           if (pin) root.scrollTop = root.scrollHeight;
+        }
+        function openHtmlZoom(raw) {
+          const wrap = document.getElementById("html-zoom");
+          const frame = document.getElementById("html-zoom-frame");
+          if (!wrap || !frame) return;
+          frame.srcdoc = raw || "";
+          wrap.hidden = false;
+        }
+        function closeHtmlZoom() {
+          const wrap = document.getElementById("html-zoom");
+          const frame = document.getElementById("html-zoom-frame");
+          if (frame) frame.srcdoc = "";
+          if (wrap) wrap.hidden = true;
         }
         function steerModLabel() {
           return /Mac|iPhone|iPad/.test(navigator.platform || "") ? "\u2318" : "Ctrl+";
@@ -771,6 +826,48 @@
           renderThread();
           await loadMessages().catch(() => {});
         }
+        async function pauseTurn(botId) {
+          try {
+            await fetch(pauseUrl(), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(botId ? { botId: botId } : {}),
+            });
+          } catch {
+            /* ignore */
+          }
+          (state.lives || []).forEach((row) => {
+            if (!botId || row.botId === botId) row.paused = true;
+          });
+          renderThread();
+          await pollLive().catch(() => {});
+        }
+        async function continueTurn(botId) {
+          (state.lives || []).forEach((row) => {
+            if (row.botId === botId) row.paused = false;
+          });
+          state.posting = true;
+          syncComposer();
+          renderThread();
+          try {
+            const res = await fetch(continueUrl(), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ botId: botId }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.error || "continue failed");
+            await loadMessages();
+            await pollLive();
+          } catch (err) {
+            toast(err.message || String(err));
+            await pollLive().catch(() => {});
+          } finally {
+            state.posting = false;
+            syncComposer();
+            schedule();
+          }
+        }
         async function sendSteer(raw, botId) {
           const text = String(raw || "").trim();
           if (!text || !state.kind) return;
@@ -886,11 +983,66 @@
         document.getElementById("steer").addEventListener("click", () => {
           steerDraft().catch((err) => toast(err.message || String(err)));
         });
+        document.getElementById("html-zoom-close").addEventListener("click", () => {
+          closeHtmlZoom();
+        });
+        document.getElementById("html-zoom").addEventListener("click", (event) => {
+          if (event.target.id === "html-zoom") closeHtmlZoom();
+        });
         document.getElementById("thread").addEventListener("click", (event) => {
+          const htmlExpand = event.target.closest("[data-html-expand]");
+          if (htmlExpand) {
+            event.preventDefault();
+            const box = htmlExpand.closest(".md-html-preview");
+            const src = box && box.querySelector(".md-html-src");
+            if (src) openHtmlZoom(src.value);
+            return;
+          }
+          const htmlView = event.target.closest("[data-html-view]");
+          if (htmlView) {
+            event.preventDefault();
+            const box = htmlView.closest(".md-html-preview");
+            if (!box) return;
+            const view = htmlView.getAttribute("data-html-view");
+            box.setAttribute("data-view", view);
+            const frame = box.querySelector(".md-html-frame");
+            const pre = box.querySelector(".md-pre");
+            if (frame) frame.hidden = view !== "preview";
+            if (pre) pre.hidden = view !== "code";
+            box.querySelectorAll("[data-html-view]").forEach((tab) => {
+              tab.classList.toggle("on", tab.getAttribute("data-html-view") === view);
+            });
+            return;
+          }
+          const fenceCopy = event.target.closest("[data-fence-copy]");
+          if (fenceCopy) {
+            event.preventDefault();
+            const box = fenceCopy.closest(".md-fence");
+            const src = box && (box.querySelector(".md-html-src") || box.querySelector("code"));
+            const text = src && "value" in src ? src.value : src ? src.textContent : "";
+            if (text && navigator.clipboard) {
+              navigator.clipboard.writeText(text).catch(() => {});
+            }
+            return;
+          }
           const stop = event.target.closest("[data-live-stop]");
           if (stop) {
             event.preventDefault();
             stopTurn(stop.getAttribute("data-live-stop"));
+            return;
+          }
+          const pause = event.target.closest("[data-live-pause]");
+          if (pause) {
+            event.preventDefault();
+            pauseTurn(pause.getAttribute("data-live-pause"));
+            return;
+          }
+          const cont = event.target.closest("[data-live-continue]");
+          if (cont) {
+            event.preventDefault();
+            continueTurn(cont.getAttribute("data-live-continue")).catch((err) =>
+              toast(err.message || String(err)),
+            );
             return;
           }
           const steer = event.target.closest("[data-live-steer]");

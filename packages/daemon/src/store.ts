@@ -101,6 +101,9 @@ export type LiveTurn = {
   startedAt?: string;
   /** Full-ish tool history for Trajectory. Stripped from GET /live. */
   traces?: LiveTrace[];
+  /** Seat assignment text, kept so Continue can resume after Pause. */
+  asked?: string;
+  paused?: boolean;
 };
 
 export class GuildStore {
@@ -366,7 +369,6 @@ export class GuildStore {
   beginTurn(roomId: string, botIds: string[] = [""]): AbortSignal {
     const controller = new AbortController();
     const ids = botIds.length ? botIds : [""];
-    for (const botId of ids) this.bindBotAbort(roomId, botId, controller);
     this.turnGroups.set(controller.signal, {
       roomId,
       botIds: new Set(ids),
@@ -375,43 +377,54 @@ export class GuildStore {
     return controller.signal;
   }
 
+  /**
+   * Per-seat AbortController, child of the turn group. Pause/Stop one bot
+   * without taking the rest of the wave down.
+   */
+  armBotTurn(roomId: string, botId: string, parent: AbortSignal): AbortSignal {
+    const controller = new AbortController();
+    const onParent = () => {
+      if (!controller.signal.aborted) controller.abort();
+    };
+    if (parent.aborted) onParent();
+    else parent.addEventListener("abort", onParent, { once: true });
+    this.bindBotAbort(roomId, botId, controller);
+    const group = this.turnGroups.get(parent);
+    if (group && group.roomId === roomId) group.botIds.add(botId);
+    return controller.signal;
+  }
+
   adoptTurn(roomId: string, botId: string, signal: AbortSignal): void {
     const group = this.turnGroups.get(signal);
     if (!group || group.roomId !== roomId) return;
-    this.bindBotAbort(roomId, botId, group.controller);
     group.botIds.add(botId);
+  }
+
+  private dropBotLive(roomId: string, botId: string): boolean {
+    const live = this.liveTurns.get(roomId);
+    const steers = this.pendingSteers.get(roomId);
+    const room = this.botAborts.get(roomId);
+    const hadLive = Boolean(live?.delete(botId));
+    steers?.delete(botId);
+    room?.delete(botId);
+    if (live && live.size === 0) this.liveTurns.delete(roomId);
+    if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
+    if (room && room.size === 0) this.botAborts.delete(roomId);
+    for (const [sig, group] of this.turnGroups) {
+      if (group.roomId !== roomId || !group.botIds.has(botId)) continue;
+      group.botIds.delete(botId);
+      if (group.botIds.size === 0) this.turnGroups.delete(sig);
+    }
+    return hadLive;
   }
 
   abortTurn(roomId: string, botId?: string): boolean {
     if (botId) {
-      const room = this.botAborts.get(roomId);
-      const controller = room?.get(botId);
-      if (!controller) {
-        const live = this.liveTurns.get(roomId);
-        const steers = this.pendingSteers.get(roomId);
-        const hadLive = Boolean(live?.delete(botId));
-        steers?.delete(botId);
-        if (live && live.size === 0) this.liveTurns.delete(roomId);
-        if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
-        this.spillTrajectoryIfIdle(roomId);
-        return hadLive;
-      }
-      const group = this.turnGroups.get(controller.signal);
-      const ids = group ? [...group.botIds] : [botId];
-      this.turnGroups.delete(controller.signal);
-      const live = this.liveTurns.get(roomId);
-      const steers = this.pendingSteers.get(roomId);
-      for (const id of ids) {
-        room?.delete(id);
-        live?.delete(id);
-        steers?.delete(id);
-      }
-      if (room && room.size === 0) this.botAborts.delete(roomId);
-      if (live && live.size === 0) this.liveTurns.delete(roomId);
-      if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
-      if (!controller.signal.aborted) controller.abort();
+      const controller = this.botAborts.get(roomId)?.get(botId);
+      const hadLive = this.dropBotLive(roomId, botId);
+      if (controller && !controller.signal.aborted) controller.abort();
       this.spillTrajectoryIfIdle(roomId);
-      return true;
+      return hadLive || Boolean(controller);
     }
     const room = this.botAborts.get(roomId);
     this.botAborts.delete(roomId);
@@ -419,10 +432,18 @@ export class GuildStore {
     this.pendingSteers.delete(roomId);
     let aborted = false;
     const seen = new Set<AbortController>();
+    for (const [sig, group] of [...this.turnGroups]) {
+      if (group.roomId !== roomId) continue;
+      this.turnGroups.delete(sig);
+      if (!group.controller.signal.aborted) {
+        group.controller.abort();
+        aborted = true;
+      }
+      seen.add(group.controller);
+    }
     for (const controller of room?.values() ?? []) {
       if (seen.has(controller)) continue;
       seen.add(controller);
-      this.turnGroups.delete(controller.signal);
       if (!controller.signal.aborted) {
         controller.abort();
         aborted = true;
@@ -430,6 +451,37 @@ export class GuildStore {
     }
     this.spillTrajectoryIfIdle(roomId);
     return aborted || Boolean(room);
+  }
+
+  pauseTurn(roomId: string, botId?: string): boolean {
+    const ids = botId
+      ? [botId]
+      : [...(this.liveTurns.get(roomId)?.keys() ?? [])];
+    let any = false;
+    for (const id of ids) {
+      if (!id) continue;
+      const live = this.getLiveBotTurn(roomId, id);
+      if (!live) continue;
+      const traces = (live.traces || []).map((tr) =>
+        tr.running ? { ...tr, running: false, text: tr.text || "paused" } : tr,
+      );
+      const steps = (live.steps || []).map((step) =>
+        step.running ? { ...step, running: false } : step,
+      );
+      this.setLiveTurn(roomId, {
+        ...live,
+        traces,
+        steps,
+        paused: true,
+      });
+      const controller = this.botAborts.get(roomId)?.get(id);
+      this.botAborts.get(roomId)?.delete(id);
+      const room = this.botAborts.get(roomId);
+      if (room && room.size === 0) this.botAborts.delete(roomId);
+      if (controller && !controller.signal.aborted) controller.abort();
+      any = true;
+    }
+    return any;
   }
 
   endTurn(roomId: string, signal?: AbortSignal): void {
@@ -440,7 +492,11 @@ export class GuildStore {
       const live = this.liveTurns.get(roomId);
       const steers = this.pendingSteers.get(roomId);
       for (const botId of group.botIds) {
-        if (room?.get(botId) === group.controller) room.delete(botId);
+        if (live?.get(botId)?.paused) {
+          room?.delete(botId);
+          continue;
+        }
+        room?.delete(botId);
         live?.delete(botId);
         steers?.delete(botId);
       }
@@ -449,8 +505,14 @@ export class GuildStore {
       if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
       if (!group.controller.signal.aborted) group.controller.abort();
     } else {
+      const live = this.liveTurns.get(roomId);
+      const kept = new Map<string, LiveTurn>();
+      for (const [id, turn] of live ?? []) {
+        if (turn.paused) kept.set(id, turn);
+      }
       this.botAborts.delete(roomId);
-      this.clearLiveTurn(roomId);
+      if (kept.size) this.liveTurns.set(roomId, kept);
+      else this.clearLiveTurn(roomId);
     }
     this.spillTrajectoryIfIdle(roomId);
   }

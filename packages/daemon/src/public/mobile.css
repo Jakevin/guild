@@ -57,6 +57,8 @@ textarea:focus-visible {
 .navlist a,
 .back,
 .turn-stop,
+.turn-pause,
+.turn-continue,
 .turn-steer,
 .steer,
 .send,
@@ -72,6 +74,8 @@ textarea:focus-visible {
 .navlist a:active,
 .back:active,
 .turn-stop:active:not(:disabled),
+.turn-pause:active:not(:disabled),
+.turn-continue:active:not(:disabled),
 .turn-steer:active:not(:disabled),
 .steer:active:not(:disabled),
 .send:active:not(:disabled),
@@ -83,6 +87,8 @@ textarea:focus-visible {
   .navlist a,
   .back,
   .turn-stop,
+  .turn-pause,
+  .turn-continue,
   .turn-steer,
   .steer,
   .send,
@@ -97,6 +103,8 @@ textarea:focus-visible {
   .navlist a:active,
   .back:active,
   .turn-stop:active,
+  .turn-pause:active,
+  .turn-continue:active,
   .turn-steer:active,
   .steer:active,
   .send:active,
@@ -326,6 +334,7 @@ textarea:focus-visible {
   background: var(--fill);
   overflow: auto;
 }
+.assistant-text .md-html-preview { overflow: hidden; }
 .assistant-text .md-fence-bar {
   display: flex;
   align-items: center;
@@ -336,11 +345,101 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 0.75rem;
 }
+.assistant-text .md-fence-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  margin-right: 4px;
+}
+.assistant-text .md-fence-tab {
+  margin: 0;
+  min-height: var(--tap);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.assistant-text .md-fence-tab.on,
+.assistant-text .md-fence-tab:hover { background: var(--lift); color: var(--text); }
+.assistant-text .md-fence-acts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.assistant-text .md-fence-btn {
+  margin: 0;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.assistant-text .md-html-frame {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  height: 52vh;
+  border: 0;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+}
+.assistant-text .md-html-preview[data-view="code"] .md-html-frame { display: none; }
+.assistant-text .md-html-preview[data-view="preview"] .md-pre { display: none; }
 .assistant-text .md-pre {
   margin: 0;
   padding: 0.6rem 0.8rem 0.8rem;
   overflow: auto;
   font-size: 0.82rem;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.html-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.72);
+}
+.html-zoom[hidden] { display: none !important; }
+.html-zoom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+.html-zoom-close {
+  margin: 0;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--text);
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+.html-zoom-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
 }
 .assistant-text img.md-img {
   max-width: 100%;
@@ -416,6 +515,8 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 .turn-stop,
+.turn-pause,
+.turn-continue,
 .turn-steer,
 .steer,
 .send,
@@ -447,13 +548,16 @@ textarea:focus-visible {
   background: var(--lift);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
 }
-/* Steer rides the steel rail, never a filled danger slab. */
+.turn-pause,
+.turn-continue,
 .turn-steer,
 .steer {
   color: var(--steel);
   background: var(--fill);
   border-color: color-mix(in srgb, var(--steel) 38%, var(--line));
 }
+.turn-pause:hover,
+.turn-continue:hover,
 .turn-steer:hover,
 .steer:hover {
   background: var(--lift);

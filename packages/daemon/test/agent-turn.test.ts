@@ -118,8 +118,12 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.match(html, /resumeCurrentLive/);
   assert.match(html, /stopTurn/);
   assert.match(html, /function stopTurn\(botId\)/);
+  assert.match(html, /function pauseTurn\(botId\)/);
+  assert.match(html, /function continueTurn\(botId\)/);
   assert.match(html, /setBusy\(false, botId \? \[botId\] : \[\], \{ room: room \}\)/);
   assert.match(html, /data-live-stop/);
+  assert.match(html, /data-live-pause/);
+  assert.match(html, /data-live-continue/);
   assert.match(html, /data-live-steer/);
   assert.match(html, /insertIntoBotTurn/);
   assert.match(html, /stopImmediatePropagation/);

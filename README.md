@@ -42,7 +42,7 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 
 **Who answers.** A `@handle` at the **start of a line** is the assignment. Two lines, two handles — two adventurers, each getting your preamble plus their own line. With nothing at a line start, the **first** `@handle` in the body is the assignee and gets the whole message; a later one is only a mention. Name nobody and the last adventurer who spoke continues. `@all` / `@channel` / `@here` wake every seat in the hall in parallel — usually the wrong move. `@` someone who is not in the hall and they are pulled in before they answer. A hall holds 6 seats (`#general` aside): reuse the roster before you hire.
 
-**The composer.** Reply to one message to aim at that adventurer and show which line you mean. While a turn is running, Enter queues your next line; Cmd/Ctrl+↩ inserts it into the live turn. Stop pulls that one adventurer out of the turn. Retry re-asks one question. Delete removes one message and its trajectory. Rename a channel from the sidebar.
+**The composer.** Reply to one message to aim at that adventurer and show which line you mean. While a turn is running, Enter queues your next line; Cmd/Ctrl+↩ inserts it into the live turn. Pause holds that adventurer so you can switch models and Continue; Stop pulls them out of the turn. Retry re-asks one question. Delete removes one message and its trajectory. Rename a channel from the sidebar.
 
 **Bring context.** Drag files into the composer, paste them, or pick them from the attachment menu — up to 12 per message. An image gets a hover preview; the preview is UI only, the model gets the text body. Too big to embed and Guild sends the path so the adventurer can `read` it.
 
@@ -98,7 +98,7 @@ One turn, one process: `@handle` → `chatReply` → `HarnessService.turn` → `
 
 **Loop.** `runAgentLoop` (`harness.ts`) asks the model with the tool catalog. No tool call — that text is the answer. Tool calls — they run in parallel (`Promise.all`), every result goes back into the message list, and the model is asked again. The loop is bounded; at the bound it asks for a final answer instead of more tools.
 
-**You stay in it.** A mid-turn reply queues; Cmd/Ctrl+↩ injects it into the live turn and it reaches the model next round as `<user_steer>`. Stop aborts the turn's `AbortSignal` — the provider fetch and any `spawn` child hold that same signal. Stop is the only thing that ends a turn early. There is no approval step; nothing asks you first.
+**You stay in it.** A mid-turn reply queues; Cmd/Ctrl+↩ injects it into the live turn and it reaches the model next round as `<user_steer>`. Pause aborts the in-flight `AbortSignal` but keeps the live bubble so you can switch models and Continue (the next round sees thinking and tools so far). Stop aborts that seat's signal and ends the turn. There is no approval step; nothing asks you first.
 
 **The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `full_access` (default) lets everything through, `read_only` keeps `read` / `list` / `skill` / `spawn`, `workspace_write` confines `write` / `run` to the workspace and refuses MCP and `image_gen`. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
 

@@ -207,6 +207,12 @@ test("chat and settings pickers fill efforts from the model, not four hardcoded 
   assert.match(chat, /function effortChoices/);
   assert.match(chat, /supportedEfforts/);
   assert.match(chat, /activeReasoningSpec/);
+  assert.match(chat, /next\.reasoning = reason/);
+  assert.match(chat, /ref && ref.reasoning/);
+  assert.doesNotMatch(
+    chat.slice(chat.indexOf("async function applyChatModel"), chat.indexOf("const modelPop")),
+    /reasoning:\s*document\.getElementById\("model-reasoning"\)/,
+  );
   assert.doesNotMatch(
     chat.slice(chat.indexOf("model-reason-list"), chat.indexOf("model-speed-list")),
     /\["minimal", t\("reason.min"\)\]/,
