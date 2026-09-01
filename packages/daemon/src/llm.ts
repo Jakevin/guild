@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   AuxRole,
@@ -15,12 +15,16 @@ import {
   formatOAuthError,
   listSubscriptions,
   OAUTH_PICKER_IDS,
+  STREAM_IDLE_TIMEOUT_MS,
   storedAccessToken,
   subscriptionByPicker,
+  withTransientRetries,
 } from "./oauth.ts";
 import {
+  emitProgress,
   openaiTools,
   roundSignal,
+  throwIfAborted,
   TOOL_LOOP_WRAP,
   type SkillRef,
   type ToolContext,
@@ -35,24 +39,39 @@ import {
   fromOpenAiUsage,
   withDuration,
 } from "./usage.ts";
+import {
+  OPENCODE_FREE_DEFAULT_MODEL,
+  OPENCODE_FREE_PROVIDER_ID,
+  fetchOpenCodeFreeModels,
+  isKeylessProvider,
+  llmRequestHeaders,
+  openCodeFreeModels,
+  openCodeFreeProvider,
+  probeOpenCodeFreeModels,
+  selectOpenCodeFreeIds,
+  usesZenResponses,
+  type OpenCodeFreeProbe,
+} from "./opencode-free.ts";
 
 export const AUX_ROLES: { id: AuxRole; name: string; hint: string }[] = [
   { id: "vision", name: "Vision", hint: "Image analysis" },
   { id: "web", name: "Web extract", hint: "Page summarization" },
-  { id: "compression", name: "Compression", hint: "Context compaction" },
-  { id: "skills", name: "Skills hub", hint: "Skill search" },
-  { id: "approval", name: "Approval", hint: "Command risk scoring" },
-  { id: "title", name: "Title", hint: "Session titles" },
-  { id: "generate", name: "Generate", hint: "Soul / Agent / Skill markdown" },
+  { id: "spawn", name: "SubAgent", hint: "explorer / worker / reviewer" },
 ];
 
+const CONFIGURABLE_AUX = new Set(AUX_ROLES.map((role) => role.id));
+
 export const DEFAULT_MODELS: ModelsFile = {
-  default: null,
+  default: {
+    provider: OPENCODE_FREE_PROVIDER_ID,
+    model: OPENCODE_FREE_DEFAULT_MODEL,
+  },
   reasoning: "medium",
   fast: false,
   aux: {},
   recent: [],
   providers: {
+    [OPENCODE_FREE_PROVIDER_ID]: openCodeFreeProvider(),
     openai: {
       name: "OpenAI",
       baseUrl: "https://api.openai.com/v1",
@@ -119,15 +138,48 @@ export function readModelsFile(dataDir: string): ModelsFile {
     if (!parsed || typeof parsed !== "object" || !parsed.providers) {
       return structuredClone(DEFAULT_MODELS);
     }
-    return parsed;
+    if (Object.keys(parsed.providers).length === 0) return parsed;
+    return withOpenCodeFree(parsed);
   } catch {
     return structuredClone(DEFAULT_MODELS);
   }
 }
 
+function pinOpenCodeFree(file: ModelsFile): ModelsFile {
+  const current = file.providers[OPENCODE_FREE_PROVIDER_ID];
+  if (!current) return file;
+  const keys = Object.keys(file.providers);
+  if (keys[0] === OPENCODE_FREE_PROVIDER_ID) return file;
+  const rest: ModelsFile["providers"] = {};
+  for (const [id, provider] of Object.entries(file.providers)) {
+    if (id === OPENCODE_FREE_PROVIDER_ID) continue;
+    rest[id] = provider;
+  }
+  return {
+    ...file,
+    providers: {
+      [OPENCODE_FREE_PROVIDER_ID]: current,
+      ...rest,
+    },
+  };
+}
+
+function withOpenCodeFree(file: ModelsFile): ModelsFile {
+  if (file.providers[OPENCODE_FREE_PROVIDER_ID]) return pinOpenCodeFree(file);
+  return pinOpenCodeFree({
+    ...file,
+    providers: {
+      [OPENCODE_FREE_PROVIDER_ID]: openCodeFreeProvider(),
+      ...file.providers,
+    },
+  });
+}
+
 export function writeModelsFile(dataDir: string, file: ModelsFile): ModelsFile {
-  const cleaned = sanitizeModels(file);
-  writeFileSync(modelsPath(dataDir), `${JSON.stringify(cleaned, null, 2)}\n`);
+  const cleaned = pinOpenCodeFree(sanitizeModels(file));
+  const path = modelsPath(dataDir);
+  writeFileSync(path, `${JSON.stringify(cleaned, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
   return cleaned;
 }
 
@@ -162,7 +214,7 @@ export function mergeModelsFile(
     providersIn[id] = { ...provider, apiKey };
   }
   next.providers = providersIn;
-  return writeModelsFile(dataDir, next);
+  return writeModelsFile(dataDir, withOpenCodeFree(next));
 }
 
 function pushRecent(list: ModelRef[] | undefined, ref: ModelRef): ModelRef[] {
@@ -187,8 +239,51 @@ export function maskApiKey(value: string): string {
   return key.slice(0, 5) + "…" + key.slice(-5);
 }
 
-export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.env) {
+export async function refreshOpenCodeFreeCatalog(
+  dataDir: string,
+  force = false,
+): Promise<{
+  models: { id: string; name?: string }[];
+  updated: boolean;
+  probe?: OpenCodeFreeProbe[];
+}> {
   const file = readModelsFile(dataDir);
+  const prev = file.providers[OPENCODE_FREE_PROVIDER_ID] ?? openCodeFreeProvider();
+  if (!force) {
+    return { models: prev.models, updated: false };
+  }
+  const live = await fetchOpenCodeFreeModels(4_000, true);
+  if (!live?.length) {
+    throw new StoreError(502, "couldn't sync OpenCode Free");
+  }
+  const probe = await probeOpenCodeFreeModels(live);
+  const keepId =
+    file.default?.provider === OPENCODE_FREE_PROVIDER_ID
+      ? file.default.model
+      : undefined;
+  const usable = selectOpenCodeFreeIds(live, probe, keepId);
+  if (!usable.length) {
+    return { models: prev.models, updated: false, probe };
+  }
+  const ids = usable;
+  const models = openCodeFreeModels(ids);
+  const same =
+    models.length === prev.models.length &&
+    models.every((row, i) => row.id === prev.models[i]?.id);
+  if (!same) {
+    writeModelsFile(dataDir, {
+      ...file,
+      providers: {
+        ...file.providers,
+        [OPENCODE_FREE_PROVIDER_ID]: { ...prev, models },
+      },
+    });
+  }
+  return { models, updated: !same, probe };
+}
+
+export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.env) {
+  const file = withOpenCodeFree(readModelsFile(dataDir));
   const providers: PublicProvider[] = Object.entries(file.providers).map(
     ([id, provider]) => {
       const key = provider.apiKey ?? "";
@@ -208,8 +303,10 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     ...providers.map((p) => ({
       id: p.id,
       name: p.name || p.id,
-      kind: "key" as const,
-      ready: Boolean(resolveApiKey(p.apiKey, env) || p.stored === "literal"),
+      kind: (isKeylessProvider(p.id) ? "keyless" : "key") as "key" | "keyless",
+      ready:
+        isKeylessProvider(p.id) ||
+        Boolean(resolveApiKey(p.apiKey, env) || p.stored === "literal"),
       models: p.models,
     })),
     ...subscriptions.map((s) => ({
@@ -292,18 +389,21 @@ export function resolveLlm(
   const file = readModelsFile(dataDir);
   const ref: ModelRef | null | undefined =
     prefer ??
-    (role && role !== "chat" ? file.aux?.[role] : file.default);
+    (role && CONFIGURABLE_AUX.has(role as AuxRole)
+      ? file.aux?.[role as AuxRole]
+      : file.default);
   const tryProvider = (id: string, modelId?: string): LlmTarget | null => {
     const oauth = oauthTarget(dataDir, id, modelId);
     if (oauth) return oauth;
-    const provider = file.providers[id];
+    const providerId = isKeylessProvider(id) ? OPENCODE_FREE_PROVIDER_ID : id;
+    const provider = file.providers[providerId];
     if (!provider) return null;
     const apiKey = resolveApiKey(provider.apiKey, env);
-    if (!apiKey) return null;
+    if (!apiKey && !isKeylessProvider(providerId)) return null;
     const model = modelId || provider.models[0]?.id || "";
     if (!model) return null;
     return {
-      providerId: id,
+      providerId,
       model,
       baseUrl: provider.baseUrl.replace(/\/+$/, ""),
       apiKey,
@@ -455,6 +555,11 @@ async function dispatchComplete(
   tools: boolean,
   ctx: ToolContext,
 ): Promise<DispatchResult | null> {
+  if (isKeylessProvider(target.providerId) && usesZenResponses(target.model)) {
+    return tools
+      ? completeZenResponsesTools(target, system, messages, ctx)
+      : wrapText(await completeZenResponses(target, system, messages));
+  }
   if (target.api === "openai-responses") {
     const text = await completeCodex(target, system, messages);
     return text ? { text, traces: [], thinking: "" } : null;
@@ -518,29 +623,48 @@ async function completeOpenAiTools(
       if (fitted.length < msgs.length) {
         msgs.splice(0, msgs.length, ...fitted);
       }
-      const response = await fetch(`${target.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${target.apiKey}`,
-          "content-type": "application/json",
-          ...(target.headers ?? {}),
+      const response = await withTransientRetries(
+        async () => {
+          throwIfAborted(ctx);
+          const res = await fetch(`${target.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: llmRequestHeaders(target),
+            body: JSON.stringify({
+              model: target.model,
+              temperature,
+              messages: msgs,
+              tools: catalog,
+              tool_choice: "auto",
+            }),
+            signal: roundSignal(ctx),
+          });
+          if (res.ok) return res;
+          const err = new Error(`HTTP ${res.status}`);
+          if (res.status === 429 || res.status >= 500) throw err;
+          return res;
         },
-        body: JSON.stringify({
-          model: target.model,
-          temperature,
-          messages: msgs,
-          tools: catalog,
-          tool_choice: "auto",
-        }),
-        signal: roundSignal(ctx),
-      });
-      if (!response.ok) return null;
+        {
+          signal: ctx.signal,
+          onRetry: () => {
+            emitProgress(ctx, traces, "連線中斷，重試中…");
+          },
+        },
+      );
+      if (!response.ok) {
+        return {
+          calls: [],
+          text: `模型請求失敗：HTTP ${response.status}`,
+          thinking: "",
+        };
+      }
       const data = (await response.json()) as {
         choices?: { message?: ChatMsg; finish_reason?: string }[];
         usage?: {
           prompt_tokens?: number;
           completion_tokens?: number;
           total_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+          input_tokens_details?: { cached_tokens?: number };
         };
       };
       const message = data.choices?.[0]?.message;
@@ -629,26 +753,52 @@ async function completeAnthropicTools(
       if (fitted.length < msgs.length) {
         msgs.splice(0, msgs.length, ...fitted);
       }
-      const response = await fetch(
-        `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
+      const response = await withTransientRetries(
+        async () => {
+          throwIfAborted(ctx);
+          const res = await fetch(
+            `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                model: target.model,
+                max_tokens: 2048,
+                system,
+                messages: msgs,
+                tools,
+              }),
+              signal: roundSignal(ctx),
+            },
+          );
+          if (res.ok) return res;
+          const err = new Error(`HTTP ${res.status}`);
+          if (res.status === 429 || res.status >= 500) throw err;
+          return res;
+        },
         {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: target.model,
-            max_tokens: 2048,
-            system,
-            messages: msgs,
-            tools,
-          }),
-          signal: roundSignal(ctx),
+          signal: ctx.signal,
+          onRetry: () => {
+            emitProgress(ctx, traces, "連線中斷，重試中…");
+          },
         },
       );
-      if (!response.ok) return null;
+      if (!response.ok) {
+        return {
+          calls: [],
+          text: `模型請求失敗：HTTP ${response.status}`,
+          thinking: "",
+        };
+      }
       const data = (await response.json()) as {
         stop_reason?: string;
         content?: Part[];
-        usage?: { input_tokens?: number; output_tokens?: number };
+        usage?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
       };
       const parts = data.content ?? [];
       lastParts = parts;
@@ -718,6 +868,203 @@ function anthropicHeaders(target: LlmTarget): Record<string, string> {
   return headers;
 }
 
+type ZenInput =
+  | { role: "user" | "assistant"; content: string }
+  | { type: "function_call"; call_id: string; name: string; arguments: string }
+  | { type: "function_call_output"; call_id: string; output: string };
+
+function zenResponsesTools(
+  catalog: ReturnType<typeof openaiTools>,
+): { type: "function"; name: string; description: string; parameters: unknown }[] {
+  return catalog.map((tool) => ({
+    type: "function" as const,
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters,
+  }));
+}
+
+async function postZenResponses(
+  target: LlmTarget,
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<Response> {
+  return fetch(`${target.baseUrl.replace(/\/+$/, "")}/responses`, {
+    method: "POST",
+    headers: llmRequestHeaders(target),
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+async function completeZenResponses(
+  target: LlmTarget,
+  system: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+): Promise<string | null> {
+  const response = await postZenResponses(
+    target,
+    {
+      model: target.model,
+      instructions: system,
+      input: messages,
+    },
+    AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
+  );
+  if (!response.ok) return null;
+  const data = (await response.json()) as Record<string, unknown>;
+  return extractResponsesText(data);
+}
+
+async function completeZenResponsesTools(
+  target: LlmTarget,
+  system: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+  ctx: ToolContext,
+): Promise<DispatchResult | null> {
+  const input: ZenInput[] = messages.map((item) => ({
+    role: item.role,
+    content: item.content,
+  }));
+  const traces: ToolTrace[] = [];
+  const thinkingChunks: string[] = [];
+  const catalog = openaiTools(ctx.skills ?? [], ctx);
+  const tools = zenResponsesTools(catalog);
+  const usage = blankUsage();
+  const started = Date.now();
+  let lastCalls: Extract<ZenInput, { type: "function_call" }>[] = [];
+  const looped = await runAgentLoop({
+    toolCtx: ctx,
+    traces,
+    thinkingChunks,
+    nullIfNoTraces: true,
+    ask: async ({ wrap, steer }) => {
+      if (wrap) input.push({ role: "user", content: TOOL_LOOP_WRAP });
+      if (steer) input.push({ role: "user", content: steer });
+      const extra =
+        estimateSendTokens(system) +
+        estimateSendTokens(JSON.stringify(tools)) +
+        2048;
+      const fitted = trimSendMessages(input, extra);
+      if (fitted.length < input.length) {
+        input.splice(0, input.length, ...fitted);
+      }
+      const response = await withTransientRetries(
+        async () => {
+          throwIfAborted(ctx);
+          const res = await postZenResponses(
+            target,
+            {
+              model: target.model,
+              instructions: system,
+              input,
+              tools,
+              tool_choice: "auto",
+            },
+            roundSignal(ctx),
+          );
+          if (res.ok) return res;
+          const err = new Error(`HTTP ${res.status}`);
+          if (res.status === 429 || res.status >= 500) throw err;
+          return res;
+        },
+        {
+          signal: ctx.signal,
+          onRetry: () => {
+            emitProgress(ctx, traces, "連線中斷，重試中…");
+          },
+        },
+      );
+      if (!response.ok) {
+        return {
+          calls: [],
+          text: `模型請求失敗：HTTP ${response.status}`,
+          thinking: "",
+        };
+      }
+      const data = (await response.json()) as {
+        output?: Record<string, unknown>[];
+        usage?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          total_tokens?: number;
+          input_tokens_details?: { cached_tokens?: number };
+        };
+      };
+      addUsage(
+        usage,
+        fromOpenAiUsage({
+          prompt_tokens: data.usage?.input_tokens,
+          completion_tokens: data.usage?.output_tokens,
+          total_tokens: data.usage?.total_tokens,
+          prompt_tokens_details: {
+            cached_tokens: data.usage?.input_tokens_details?.cached_tokens,
+          },
+        }),
+      );
+      lastCalls = [];
+      const calls: { id: string; name: string; args: Record<string, unknown> }[] =
+        [];
+      for (const item of data.output ?? []) {
+        if (item?.type !== "function_call") continue;
+        const callId = String(item.call_id || item.id || "");
+        const name = String(item.name || "");
+        if (!callId || !name) continue;
+        lastCalls.push({
+          type: "function_call",
+          call_id: callId,
+          name,
+          arguments: String(item.arguments || "{}"),
+        });
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(String(item.arguments || "{}")) as Record<
+            string,
+            unknown
+          >;
+        } catch {
+          args = {};
+        }
+        calls.push({ id: callId, name, args });
+      }
+      return {
+        calls,
+        text: extractResponsesText(data as Record<string, unknown>) ?? "",
+        thinking: "",
+      };
+    },
+    onRetry: (late) => {
+      input.push({ role: "user", content: late });
+    },
+    onTools: (calls, outcomes) => {
+      for (let i = 0; i < calls.length; i++) {
+        const raw = lastCalls[i];
+        if (raw) input.push(raw);
+        else {
+          input.push({
+            type: "function_call",
+            call_id: calls[i].id,
+            name: calls[i].name,
+            arguments: JSON.stringify(calls[i].args ?? {}),
+          });
+        }
+        input.push({
+          type: "function_call_output",
+          call_id: calls[i].id,
+          output: outcomes[i]?.text ?? "",
+        });
+      }
+    },
+  });
+  if (!looped) return null;
+  return {
+    text: looped.text,
+    traces: looped.traces,
+    thinking: looped.thinking,
+    usage: withDuration(usage, started),
+  };
+}
+
 async function completeOpenAi(
   target: LlmTarget,
   system: string,
@@ -725,20 +1072,15 @@ async function completeOpenAi(
   temperature: number,
 ): Promise<string | null> {
   const url = `${target.baseUrl}/chat/completions`;
-  const headers: Record<string, string> = {
-    authorization: `Bearer ${target.apiKey}`,
-    "content-type": "application/json",
-    ...(target.headers ?? {}),
-  };
   const response = await fetch(url, {
     method: "POST",
-    headers,
+    headers: llmRequestHeaders(target),
     body: JSON.stringify({
       model: target.model,
       temperature,
       messages: [{ role: "system", content: system }, ...messages],
     }),
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
   if (!response.ok) return null;
   const data = (await response.json()) as {
@@ -776,7 +1118,7 @@ async function completeAnthropic(
       system,
       messages,
     }),
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
   if (!response.ok) return null;
   const data = (await response.json()) as {
@@ -818,7 +1160,7 @@ async function completeCodex(
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(40_000),
+    signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
   if (response.ok) {
     const data = (await response.json()) as Record<string, unknown>;
@@ -829,7 +1171,7 @@ async function completeCodex(
     method: "POST",
     headers,
     body: JSON.stringify({ ...body, stream: true }),
-    signal: AbortSignal.timeout(40_000),
+    signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
   if (!streamed.ok || !streamed.body) return null;
   return readSseText(streamed);

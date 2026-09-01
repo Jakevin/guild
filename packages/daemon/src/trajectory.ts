@@ -38,6 +38,49 @@ export function clip(text: string, n = CLIP): string {
   return one.slice(0, n - 1) + "…";
 }
 
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+/** Old rows logged spawn as TOOL "spawn spawn". Present them as spawn. */
+export function promoteSpawnEvent<T extends { kind: string; summary: string; payload?: unknown }>(
+  event: T,
+): T & { kind: TrajectoryKind; summary: string } {
+  if (event.kind === "spawn") return event as T & { kind: TrajectoryKind; summary: string };
+  const payload = recordOf(event.payload);
+  const toolName = String(payload?.name || "");
+  const looksSpawn =
+    event.kind === "tool" &&
+    (toolName === "spawn" ||
+      toolName === "read_spawn" ||
+      /^\s*spawn(\s+spawn)?\s*$/i.test(event.summary || ""));
+  if (!looksSpawn) return event as T & { kind: TrajectoryKind; summary: string };
+  const args = recordOf(payload?.args) || payload || {};
+  if (toolName === "read_spawn") {
+    const waitId = String(args.agent_id || args.id || "").trim();
+    return {
+      ...event,
+      kind: "spawn",
+      summary: clip(`read ${waitId}`),
+    };
+  }
+  const agent = String(args.name || args.profile || "worker").trim() || "worker";
+  const label = String(args.title || args.description || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const prompt = String(args.prompt || args.task || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    ...event,
+    kind: "spawn",
+    summary: clip(
+      `${agent}${label ? " · " + label : ""}${prompt ? " — " + prompt : ""}`,
+    ),
+  };
+}
+
 function cap(value: unknown): unknown {
   if (typeof value === "string") {
     return value.length > FIELD_CAP ? value.slice(0, FIELD_CAP) : value;
@@ -140,17 +183,34 @@ export function turnTrajectoryEvents(input: {
       });
       continue;
     }
-    if (trace.name === "spawn") {
-      const agent = String(trace.args.name || "worker").trim() || "worker";
-      const label = String(trace.args.description || "").replace(/\s+/g, " ").trim();
-      const prompt = String(trace.args.prompt || "").replace(/\s+/g, " ").trim();
+    if (trace.name === "spawn" || trace.name === "read_spawn") {
+      const agent =
+        String(
+          trace.args.profile ||
+            trace.args.name ||
+            trace.args.agent ||
+            "worker",
+        ).trim() || "worker";
+      const label = String(trace.args.title || trace.args.description || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const prompt = String(trace.args.prompt || trace.args.task || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const bg =
+        trace.args.background === true || trace.args.is_background === true
+          ? " (bg)"
+          : "";
+      const waitId = String(trace.args.agent_id || trace.args.id || "").trim();
       events.push({
         ts,
         turnId,
         botId,
         kind: "spawn",
         summary: clip(
-          `${agent}${label ? " · " + label : ""}${prompt ? " — " + prompt : ""}${trace.running ? " …" : ""}`,
+          trace.name === "read_spawn"
+            ? `read ${waitId || agent}${trace.running ? " …" : ""}`
+            : `${agent}${bg}${label ? " · " + label : ""}${prompt ? " — " + prompt : ""}${trace.running ? " …" : ""}`,
         ),
         payload: cap(trace.args),
         result: String(cap(trace.text ?? "")),
@@ -261,16 +321,19 @@ export function synthesizeTrajectory(messages: ChatMessage[]): TrajectoryEvent[]
         continue;
       }
       if (part.type === "tool") {
+        const spawnish = part.name === "spawn" || part.name === "read_spawn";
         events.push({
           seq: seq++,
           ts,
           turnId,
           botId: msg.author,
-          kind: part.name === "spawn" ? "spawn" : "tool",
+          kind: spawnish ? "spawn" : "tool",
           summary: clip(
-            part.name === "spawn"
-              ? part.detail || part.label || "spawn"
-              : `${part.name} ${part.detail}`,
+            part.name === "read_spawn"
+              ? `read ${part.detail || ""}`
+              : part.name === "spawn"
+                ? part.detail || part.label || "spawn"
+                : `${part.name} ${part.detail}`,
           ),
           payload: { name: part.name, detail: part.detail },
           result: part.output,

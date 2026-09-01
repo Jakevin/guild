@@ -16,7 +16,9 @@ import {
   summonedHandles,
   mentionedHandles,
   assignmentFor,
+  handoffHandles,
   isBroadcastMention,
+  messageMentionIds,
 } from "../src/mention.ts";
 
 const CHAT_HTML = fileURLToPath(
@@ -91,6 +93,75 @@ test("prose @handles are references; line-start @handles all summon", () => {
     ),
     ["pm", "marketing", "rd"],
   );
+  const designClose =
+    "fixture 行為（`@pm` / `@rd` / `Ship it:`）。\n硬重整看 `site/index.html`。要上 Pages 再叫 `@infra` 收 `site/` 一刀。";
+  assert.deepEqual(summonedHandles(designClose, handles), []);
+  assert.deepEqual(handoffHandles(designClose, handles), ["infra"]);
+  assert.deepEqual(
+    handoffHandles(
+      "舊版是卡片牆。fixture 行為（`@pm` / `@rd` / `Ship it:`）。沒 commit。",
+      handles,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    handoffHandles("site 好了，call `@infra` to ship Pages.", handles),
+    ["infra"],
+  );
+  assert.deepEqual(
+    handoffHandles("@design\nGoal: 圖\n要上版再叫 `@infra`。", handles),
+    ["design", "infra"],
+  );
+  assert.deepEqual(
+    handoffHandles("照 @marketing 的方案，再請 @rd 改一行", handles),
+    ["marketing"],
+  );
+  const pmPlan = [
+    "已排定重錄流程：",
+    "",
+    "1. `@design` 錄製 live 英文 GIF／MP4。",
+    "2. `@pm` 驗收畫面、時長、OCR、真實 `@mention` 流程。",
+    "3. 通過後 `@marketing` 更新三語 README。",
+    "4. 最後 `@infra` 測試、選檔、push、建立新 Release。",
+    "",
+    "在 PM 放行前：不替換既有 GIF、不改 README、不重啟 daemon、不上版。",
+  ].join("\n");
+  assert.deepEqual(summonedHandles(pmPlan, handles), [
+    "design",
+    "pm",
+    "marketing",
+    "infra",
+  ]);
+  assert.deepEqual(handoffHandles(pmPlan, handles), [
+    "design",
+    "pm",
+    "marketing",
+    "infra",
+  ]);
+  assert.match(assignmentFor(pmPlan, "design", handles), /不替換既有 GIF/);
+  assert.match(assignmentFor(pmPlan, "infra", handles), /不替換既有 GIF/);
+  assert.deepEqual(
+    summonedHandles("1. @design 錄 GIF\n2. @infra 上版", handles),
+    ["design", "infra"],
+  );
+  assert.deepEqual(
+    summonedHandles(
+      "@infra\n- Goal：上版\n- Constraints: wait for @pm\n- Files: see @rd",
+      handles,
+    ),
+    ["infra"],
+  );
+  const marketingSpec = [
+    "@infra",
+    "",
+    "- Goal：上版",
+    "",
+    "---",
+    "",
+    "1. **重量。** 請 `@design` 出一版 ≤5MB。",
+  ].join("\n");
+  assert.deepEqual(summonedHandles(marketingSpec, handles), ["infra"]);
+  assert.deepEqual(handoffHandles(marketingSpec, handles), ["infra"]);
   const spec =
     "我這輪不改 README。\n@design\nGoal: 四張圖\nFiles: docs/a.png\n@infra\nGoal: push\nFiles: README.md";
   const designAsk = assignmentFor(spec, "design", handles);
@@ -256,6 +327,12 @@ test("article @handles do not dispatch every named bot", async () => {
   }
 });
 
+test("empty hall without a model points at settings", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  assert.match(html, /href="\/settings"/);
+  assert.match(html, /window.location.href = "\/settings"/);
+});
+
 test("chat composer lists @ mentions including outsiders", () => {
   const html = readFileSync(CHAT_HTML, "utf8");
   assert.match(html, new RegExp(`CHANNEL_ROSTER_CAP = ${CHANNEL_ROSTER_CAP}`));
@@ -306,6 +383,16 @@ test("thread prompt rail jumps to a user message", () => {
   assert.match(html, /data-prompt-jump/);
   assert.match(html, /article\.msg\.you\[data-id\]/);
   assert.match(css, /\.prompt-rail/);
+  assert.match(css, /\.prompt-rail \{[\s\S]*?left:\s*4px/);
+  assert.doesNotMatch(
+    css.slice(css.indexOf(".prompt-rail {"), css.indexOf(".prompt-tick {")),
+    /right:\s*\d+px/,
+  );
+  assert.match(css, /\.prompt-tip \{[\s\S]*?left:\s*18px/);
+  assert.match(css, /\.prompt-tip-when/);
+  assert.match(html, /data-at=/);
+  assert.match(html, /formatMsgWhen/);
+  assert.match(html, /prompt-tip-when/);
   assert.match(css, /\.prompt-tick/);
   assert.match(css, /\.msg\.you\.is-jump/);
   assert.match(i18n, /promptRail/);
@@ -352,6 +439,7 @@ test("retry keeps optimistic live while POST is in flight", () => {
   );
   assert.match(html, /typeof body === "string"/);
   assert.match(html, /payload\.assigneeId = botIds\[0\]/);
+  assert.match(html, /payload\.mentions = botIds/);
   assert.match(
     html,
     /current && current\.author !== "you" && botById\(current\.author\)/,
@@ -512,6 +600,63 @@ test("replyTo a bot message in a channel asks that bot without @", async () => {
   }
 });
 
+test("reply to design is not stolen by last speaker infra", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("h2-reply");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(design && infra);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, infra.id);
+  const spoken: string[] = [];
+  const extras = {
+    harvest: false,
+    mcp: false,
+    turn: stubTurn((input) => {
+      spoken.push(input.handle);
+      if (String(input.userMessage || "").includes("H2")) {
+        return "H2 改成 Pixelify。沒 commit。";
+      }
+      if (input.handle === "design") {
+        return "手機兩行守住了。要上 Pages 再叫 `@infra` 收 site/index.html。";
+      }
+      return `${input.handle} shipped`;
+    }),
+  };
+  await postUserMessage(
+    store,
+    room.id,
+    "@design 改 H1",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    extras,
+  );
+  assert.ok(spoken.includes("design"));
+  assert.ok(spoken.includes("infra"));
+  const designMsg = store
+    .listMessages(room.id)
+    .filter((msg) => msg.author === design.id)
+    .at(-1);
+  assert.ok(designMsg);
+  spoken.length = 0;
+  const out = await postUserMessage(
+    store,
+    room.id,
+    "H2 也要換",
+    process.env,
+    designMsg.id,
+    undefined,
+    infra.id,
+    extras,
+  );
+  assert.deepEqual(spoken, ["design"]);
+  assert.equal(out.replies.length, 1);
+  assert.equal(out.replies[0].author, design.id);
+  assert.match(String(out.replies[0].body), /H2/);
+});
+
 function staffBot(store: GuildStore, handle: string) {
   const skill = store.listLibrary("skills")[0];
   assert.ok(skill);
@@ -621,6 +766,62 @@ test("bot line-start specs hand off to each named seat in parallel", async () =>
   const hopStarts = starts.slice(1);
   assert.equal(hopStarts.length, 2);
   assert.ok(Math.max(...hopStarts) - Math.min(...hopStarts) < 80);
+  assert.deepEqual(posted.replies[0].mentions, [design.id, infra.id]);
+});
+
+test("stored mentions list dispatches without @handles in the body", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("mentions-list");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  assert.ok(design && marketing);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, marketing.id);
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "請照上面的做",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      mentions: [design.id, marketing.id],
+      turn: stubTurn((input) => `收到 ${input.handle}`),
+    },
+  );
+  assert.equal(posted.message.mentions?.slice().sort().join(), [design.id, marketing.id].sort().join());
+  const authors = posted.replies.map((row) => row.author).sort();
+  assert.deepEqual(authors, [design.id, marketing.id].sort());
+});
+
+test("messageMentionIds prefers the stored list over the body", () => {
+  const store = new GuildStore(tempHome());
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  assert.ok(design && infra && pm);
+  const bots = store.listBots();
+  assert.deepEqual(
+    messageMentionIds(
+      { author: pm.id, body: "沒有 at-handle", mentions: [design.id] },
+      bots,
+    ),
+    [design.id],
+  );
+  assert.deepEqual(
+    messageMentionIds(
+      { author: pm.id, body: "@infra 上版", mentions: [] },
+      bots,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    messageMentionIds({ author: "you", body: "@design 請做" }, bots),
+    [design.id],
+  );
 });
 
 test("finished speaker drops live before handoff seats start", async () => {
@@ -688,6 +889,196 @@ test("finished speaker drops live before handoff seats start", async () => {
   assert.equal(done.replies.length, 2);
   assert.equal(done.replies[0].author, marketing.id);
   assert.equal(done.replies[1].author, design.id);
+});
+
+test("bot numbered list with backtick @handles hands off each seat", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("gif");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(pm && design && marketing && infra);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, marketing.id);
+  store.addMember(room.id, infra.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@pm gif檔要重新錄了",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        if (input.handle === "pm") {
+          return [
+            "已排定重錄流程：",
+            "1. `@design` 錄製 live 英文 GIF／MP4。",
+            "2. `@pm` 驗收畫面、時長、OCR、真實 `@mention` 流程。",
+            "3. 通過後 `@marketing` 更新三語 README。",
+            "4. 最後 `@infra` 測試、選檔、push、建立新 Release。",
+            "在 PM 放行前：不替換既有 GIF、不改 README、不上版。",
+          ].join("\n");
+        }
+        return "收到 " + input.handle;
+      }),
+    },
+  );
+  const authors = posted.replies.map((row) => row.author);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.ok(authors.includes(design.id));
+  assert.ok(authors.includes(marketing.id));
+  assert.ok(authors.includes(infra.id));
+  assert.equal(posted.replies.length, 4);
+  assert.ok(asked.includes("design"));
+  assert.ok(asked.includes("marketing"));
+  assert.ok(asked.includes("infra"));
+  const designAsk = asked.filter((name) => name === "design");
+  assert.equal(designAsk.length, 1);
+});
+
+test("bot 「再叫 `@infra`」 in prose still hands off", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("pages");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  assert.ok(design && infra && pm);
+  store.addMember(room.id, design.id);
+  store.addMember(room.id, infra.id);
+  store.addMember(room.id, pm.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@design 那個靜態網站太醜了",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(`${input.handle}:${input.userMessage}`);
+        if (input.handle === "design") {
+          return [
+            "琺瑯夜班 token 沒換。",
+            "fixture 行為（`@pm` / `@rd` / `Ship it:`）。沒 commit。",
+            "硬重整看 `site/index.html`。要上 Pages 再叫 `@infra` 收 `site/` 一刀。",
+          ].join("\n");
+        }
+        return "收到 " + input.handle;
+      }),
+    },
+  );
+  assert.equal(posted.replies.length, 2);
+  assert.equal(posted.replies[0].author, design.id);
+  assert.equal(posted.replies[1].author, infra.id);
+  assert.ok(!posted.replies.some((row) => row.author === pm.id));
+  const infraAsk = asked.find((row) => row.startsWith("infra:"));
+  assert.ok(infraAsk && /交棒給 @infra/.test(infraAsk));
+  assert.match(infraAsk, /收 `site\/` 一刀/);
+});
+
+test("bot handoff chains a second hop (pm → marketing → infra)", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("ship");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  assert.ok(pm && marketing && infra && design);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, marketing.id);
+  store.addMember(room.id, infra.id);
+  store.addMember(room.id, design.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@pm 可以上版了嗎",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        if (input.handle === "pm") {
+          return "@marketing\nGoal: 改 README\n行銷完成後，才交 @infra 上版。";
+        }
+        if (input.handle === "marketing") {
+          return [
+            "@infra",
+            "- Goal：上版",
+            "1. **重量。** 請 `@design` 出一版 ≤5MB。",
+          ].join("\n");
+        }
+        return "收到 " + input.handle;
+      }),
+    },
+  );
+  const authors = posted.replies.map((row) => row.author);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.ok(authors.includes(marketing.id));
+  assert.ok(authors.includes(infra.id));
+  assert.ok(!authors.includes(design.id));
+  assert.equal(posted.replies.length, 3);
+  assert.deepEqual(asked, ["pm", "marketing", "infra"]);
+});
+
+test("bot report-back resumes the seat that handed off (pm → infra → pm)", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("report");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(pm && infra);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, infra.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@pm 來安排上版",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        const pmTurns = asked.filter((handle) => handle === "pm").length;
+        if (input.handle === "pm" && pmTurns === 1) {
+          return "@infra\nGoal: 盤點\nDone when: 回報能不能切版";
+        }
+        if (input.handle === "infra") {
+          return "@pm\n- Goal：閘要不要切版\n- Done when：你選 A 或 B";
+        }
+        if (input.handle === "pm") {
+          return "收到報告，先不切版。";
+        }
+        return "不該輪到我";
+      }),
+    },
+  );
+  assert.deepEqual(asked, ["pm", "infra", "pm"]);
+  assert.equal(posted.replies.length, 3);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.equal(posted.replies[1].author, infra.id);
+  assert.equal(posted.replies[2].author, pm.id);
+  assert.match(posted.replies[2].body, /先不切版/);
 });
 
 test("bot @handle spec hands off once to that member", async () => {
@@ -1044,6 +1435,15 @@ test("retry of a follow-up without @mention plants live before MCP", async () =>
   const redone = await pending;
   assert.equal(redone.replies.length, 1);
   assert.equal(redone.replies[0].author, design.id);
+});
+
+test("endTurn aborts the turn signal so leftover background spawns stop", () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("end-abort");
+  const signal = store.beginTurn(room.id, ["bot-x"]);
+  assert.equal(signal.aborted, false);
+  store.endTurn(room.id, signal);
+  assert.equal(signal.aborted, true);
 });
 
 test("abortTurn clears a leftover live row even without a controller", () => {

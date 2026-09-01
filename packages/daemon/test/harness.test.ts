@@ -71,7 +71,41 @@ test("read_only refuses run/write/mcp and allows read", async () => {
   assert.equal(read.isError, false);
   assert.equal(read.text, "hello");
   const names = guildTools([], ctx).map((tool) => tool.name);
-  assert.deepEqual(names.sort(), ["list", "read", "skill"].sort());
+  assert.deepEqual(
+    names.sort(),
+    ["list", "read", "read_spawn", "skill", "spawn"].sort(),
+  );
+  assert.equal(gateTool("spawn", { prompt: "survey the tree" }, ctx), null);
+  assert.equal(gateTool("read_spawn", { agent_id: "x" }, ctx), null);
+});
+
+test("runAgentLoop runs a round's tools in parallel", async () => {
+  const started: number[] = [];
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async (name) => {
+        started.push(Date.now());
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return { text: `did:${name}`, isError: false };
+      },
+    },
+    ask: async ({ round }) => {
+      if (round === 0) {
+        return {
+          calls: [
+            { id: "1", name: "read", args: { path: "a" } },
+            { id: "2", name: "list", args: { path: "b" } },
+          ],
+          text: "",
+        };
+      }
+      return { calls: [], text: "ok" };
+    },
+  });
+  assert.equal(result?.text, "ok");
+  assert.equal(result?.traces.length, 2);
+  assert.ok(started.length === 2);
+  assert.ok(Math.abs(started[1] - started[0]) < 50);
 });
 
 test("workspace_write allows write inside and refuses outside", async () => {

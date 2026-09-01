@@ -4,9 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildChatSystem, localGenerate } from "../src/generate.ts";
-import { IMAGE_GEN_TIMEOUT_MS, isSafeGeneratedName } from "../src/image-gen.ts";
+import { buildChatSystem, HALL_RULES, localGenerate } from "../src/generate.ts";
 import {
+  childSpawnPolicy,
+  readSpawn,
+  runSpawnJobs,
+  spawnJobs,
+  spawnProfile,
+} from "../src/subagent.ts";
+import { IMAGE_GEN_TIMEOUT_MS, isSafeGeneratedName } from "../src/image-gen.ts";
+import { AUX_ROLES, resolveLlm, writeModelsFile } from "../src/llm.ts";
+import {
+  builtinExecute,
   executeTool,
   formatToolTranscript,
   hostContext,
@@ -16,6 +25,7 @@ import {
   takeSteers,
   TOOL_LOOP_EXHAUSTED,
   TOOL_SYSTEM,
+  type ToolContext,
 } from "../src/tools.ts";
 import { assembleParts, bodyFromParts } from "../src/chat-parts.ts";
 
@@ -86,7 +96,40 @@ test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /exit code/);
   assert.match(TOOL_SYSTEM, /image_gen/);
   assert.match(TOOL_SYSTEM, /spawn/);
+  assert.match(TOOL_SYSTEM, /read_only seat can still spawn/);
+  assert.match(TOOL_SYSTEM, /run in parallel/i);
+  assert.match(TOOL_SYSTEM, /read_spawn/);
   assert.match(hostContext(), /home=/);
+});
+
+test("SubAgent aux role is on the models page and resolveLlm uses it", () => {
+  assert.ok(AUX_ROLES.some((role) => role.id === "spawn" && role.name === "SubAgent"));
+  const dir = mkdtempSync(join(tmpdir(), "guild-spawn-model-"));
+  const env = { XAI_API_KEY: "xai-test" };
+  const providers = {
+    xai: {
+      name: "xAI",
+      baseUrl: "https://api.x.ai/v1" as const,
+      api: "openai-completions" as const,
+      apiKey: "xai-test",
+      models: [{ id: "grok-4.6" }, { id: "grok-4.5" }],
+    },
+  };
+  writeModelsFile(dir, {
+    default: { provider: "xai", model: "grok-4.6" },
+    aux: {},
+    providers,
+  });
+  assert.equal(resolveLlm(dir, env, "spawn")?.model, "grok-4.6");
+  writeModelsFile(dir, {
+    default: { provider: "xai", model: "grok-4.6" },
+    aux: { spawn: { provider: "xai", model: "grok-4.5" } },
+    providers,
+  });
+  assert.equal(resolveLlm(dir, env, "chat")?.model, "grok-4.6");
+  assert.equal(resolveLlm(dir, env, "spawn")?.model, "grok-4.5");
+  assert.equal(resolveLlm(dir, env, "generate")?.model, "grok-4.6");
+  assert.equal(resolveLlm(dir, env, "compression")?.model, "grok-4.6");
 });
 
 test("image_gen without credentials fails fast", async () => {
@@ -116,6 +159,10 @@ test("generated file names reject traversal", () => {
 
 test("image_gen timeout is separate from the LLM round", () => {
   assert.equal(IMAGE_GEN_TIMEOUT_MS, 300_000);
+  const oauth = readFileSync(new URL("../src/oauth.ts", import.meta.url), "utf8");
+  assert.match(oauth, /STREAM_IDLE_TIMEOUT_MS = 300_000/);
+  assert.match(oauth, /not a turn wall clock/);
+  assert.doesNotMatch(oauth, /LLM_ROUND_TIMEOUT_MS/);
 });
 
 test("roundSignal is user Stop only", () => {
@@ -189,6 +236,7 @@ test("chat system lists spawnable subagents", () => {
   assert.doesNotMatch(system, /SECRET_INSTRUCTIONS/);
   assert.match(system, /spawn/);
   assert.match(system, /\/name matching a subagent/);
+  assert.match(system, /Skipping spawn and reading the whole tree yourself is the wrong default/);
 });
 
 test("chat system owns a seat and hands off with a spec", () => {
@@ -204,8 +252,28 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /start of a line/);
   assert.match(system, /Stay quiet/);
   assert.match(system, /Do not @all/);
+  assert.match(system, /even if the human only named you this turn/);
   assert.match(system, /Channel.md is the task/);
   assert.match(system, /catalog is availability/);
+  assert.match(system, /<available_subagents>/);
+  assert.match(system, /`explorer`/);
+  assert.match(HALL_RULES, /Spawn first when/);
+  assert.match(HALL_RULES, /Do not skip spawn/);
+});
+
+test("child spawn cannot escalate a read_only parent", () => {
+  assert.deepEqual(childSpawnPolicy("read_only", false), {
+    sandbox: "read_only",
+    allowWrite: false,
+  });
+  assert.deepEqual(childSpawnPolicy("full_access", true), {
+    sandbox: "full_access",
+    allowWrite: false,
+  });
+  assert.deepEqual(childSpawnPolicy("full_access", false), {
+    sandbox: "full_access",
+    allowWrite: true,
+  });
 });
 
 test("local agent markdown has Memory Plan Act Skills harness sections", () => {
@@ -219,6 +287,114 @@ test("local agent markdown has Memory Plan Act Skills harness sections", () => {
 
 test("spawn without dataDir fails fast", async () => {
   const result = await executeTool("spawn", { prompt: "find auth" });
+  assert.equal(result.isError, true);
+  assert.match(result.text, /dataDir/);
+});
+
+test("spawnJobs accepts Pi task/agent and tasks[]", () => {
+  assert.deepEqual(spawnJobs({ task: "find x", agent: "explorer" }), [
+    { prompt: "find x", name: "explorer", description: "" },
+  ]);
+  const jobs = spawnJobs({
+    tasks: [
+      { prompt: "survey auth", name: "explorer" },
+      { task: "critique the diff", agent: "reviewer" },
+    ],
+  });
+  assert.equal(jobs.length, 2);
+  assert.equal(jobs[0].name, "explorer");
+  assert.equal(jobs[1].prompt, "critique the diff");
+});
+
+test("spawnProfile maps Devin luna profiles", () => {
+  assert.equal(spawnProfile("luna-explore"), "explorer");
+  assert.equal(spawnProfile("luna-general"), "worker");
+  assert.equal(spawnProfile("explorer"), "explorer");
+  assert.deepEqual(
+    spawnJobs({
+      title: "trace lights",
+      task: "read-only survey",
+      profile: "luna-explore",
+    }),
+    [
+      {
+        prompt: "read-only survey",
+        name: "explorer",
+        description: "trace lights",
+      },
+    ],
+  );
+});
+
+test("background spawn returns agent_id without waiting; read_spawn waits", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "guild-bg-"));
+  const ctx = { dataDir: dir, env: {} };
+  const started = Date.now();
+  const launched = await runSpawnJobs(
+    {
+      task: "find auth",
+      profile: "luna-explore",
+      title: "survey auth",
+      is_background: true,
+    },
+    ctx,
+  );
+  assert.equal(launched.isError, false);
+  assert.ok(Date.now() - started < 400);
+  assert.match(launched.text, /agent_id:/);
+  const id = /agent_id: (\S+)/.exec(launched.text)?.[1];
+  assert.ok(id);
+  const peek = await readSpawn({ agent_id: id, block: false }, ctx);
+  assert.match(peek.text, /running|completed|failed/);
+  const waited = await readSpawn({ agent_id: id, block: true }, ctx);
+  assert.match(waited.text, /survey auth/);
+  assert.match(waited.text, /no model|empty|failed|completed/i);
+});
+
+test("read_spawn finds a background spawn after dispatch clones ctx", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "guild-bg-dispatch-"));
+  const root: ToolContext = { dataDir: dir, env: {} };
+  root.dispatch = (name, args, rest) => builtinExecute(name, args, rest);
+  const launched = await executeTool(
+    "spawn",
+    {
+      task: "find auth",
+      profile: "luna-explore",
+      title: "survey auth",
+      background: true,
+    },
+    root,
+  );
+  assert.equal(launched.isError, false);
+  const id = /agent_id: (\S+)/.exec(launched.text)?.[1];
+  assert.ok(id);
+  const waited = await executeTool(
+    "read_spawn",
+    { agent_id: id, block: true },
+    root,
+  );
+  assert.doesNotMatch(waited.text, /unknown agent_id/);
+  assert.match(waited.text, /survey auth/);
+});
+
+test("background spawn child abort follows the parent signal", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "guild-bg-abort-"));
+  const parent = new AbortController();
+  const ctx: ToolContext = { dataDir: dir, env: {}, signal: parent.signal };
+  const launched = await runSpawnJobs(
+    { task: "find auth", background: true, title: "x" },
+    ctx,
+  );
+  const id = /agent_id: (\S+)/.exec(launched.text)?.[1];
+  assert.ok(id);
+  const handle = ctx.spawnHandles?.get(id);
+  assert.ok(handle?.abort);
+  parent.abort();
+  assert.equal(handle.abort.signal.aborted, true);
+});
+
+test("spawn accepts Pi task alias", async () => {
+  const result = await executeTool("spawn", { task: "find auth", agent: "explorer" });
   assert.equal(result.isError, true);
   assert.match(result.text, /dataDir/);
 });
@@ -315,6 +491,7 @@ test("formatToolTranscript prefixes 本機", () => {
   assert.match(text, /\$ sysctl hw.memsize/);
   assert.match(text, /hw\.memsize: 1/);
 });
+
 
 test("README documents the Hermes-shaped harness without claiming 128 or Hermes itself", () => {
   const root = fileURLToPath(new URL("../../..", import.meta.url));

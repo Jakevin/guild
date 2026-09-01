@@ -1,9 +1,15 @@
 import {
+  appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -17,7 +23,10 @@ import type {
 import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 
 export const GUILD_DB_FILE = "guild.sqlite";
-const SCHEMA_VERSION = "1";
+/** Per-room hot window in SQLite. Older rows spill to rooms/<id>/trajectory.jsonl. */
+export const TRAJECTORY_HOT_CAP = 1000;
+const SCHEMA_VERSION = "2";
+const WAREHOUSE_TAIL = 1024 * 1024;
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -34,7 +43,9 @@ CREATE TABLE IF NOT EXISTS rooms (
   kind TEXT NOT NULL CHECK (kind IN ('channel', 'dm')),
   name TEXT NOT NULL,
   member_ids TEXT NOT NULL DEFAULT '[]',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  parent_id TEXT,
+  branch_from_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -51,6 +62,7 @@ CREATE TABLE IF NOT EXISTS messages (
   finished_at TEXT,
   steer INTEGER NOT NULL DEFAULT 0,
   steer_bot_id TEXT,
+  mentions TEXT,
   UNIQUE (room_id, seq)
 );
 
@@ -138,12 +150,61 @@ function parseJsonlTrajectory(raw: string): TrajectoryEvent[] {
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as TrajectoryEvent;
-      if (parsed && typeof parsed.kind === "string") out.push(parsed);
+      if (!parsed || typeof parsed.kind !== "string") continue;
+      if (typeof parsed.seq !== "number" || !Number.isFinite(parsed.seq)) {
+        parsed.seq = out.length;
+      }
+      out.push(parsed);
     } catch {
       /* skip */
     }
   }
   return out;
+}
+
+function lastJsonlSeq(path: string): number {
+  if (!existsSync(path)) return -1;
+  const stat = statSync(path);
+  if (stat.size === 0) return -1;
+  const fd = openSync(path, "r");
+  try {
+    const size = Math.min(stat.size, WAREHOUSE_TAIL);
+    const buf = Buffer.alloc(size);
+    readSync(fd, buf, 0, size, stat.size - size);
+    const lines = buf.toString("utf8").split("\n");
+    const start = stat.size > size ? 1 : 0;
+    for (let i = lines.length - 1; i >= start; i--) {
+      const trimmed = lines[i]!.trim();
+      if (!trimmed) continue;
+      try {
+        const parsed = JSON.parse(trimmed) as { seq?: unknown };
+        if (typeof parsed.seq === "number" && Number.isFinite(parsed.seq)) {
+          return parsed.seq;
+        }
+      } catch {
+        /* skip */
+      }
+    }
+    return -1;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function trajectoryValues(roomId: string, event: TrajectoryEvent) {
+  return [
+    roomId,
+    event.seq,
+    event.ts,
+    event.turnId,
+    event.botId ?? null,
+    event.kind,
+    event.summary,
+    event.payload === undefined ? null : JSON.stringify(event.payload),
+    event.result ?? null,
+    event.durationMs ?? null,
+    event.isError ? 1 : 0,
+  ] as const;
 }
 
 function messageFromRow(row: Record<string, unknown>): ChatMessage {
@@ -167,12 +228,18 @@ function messageFromRow(row: Record<string, unknown>): ChatMessage {
   if (asNumber(row.steer) === 1) message.steer = true;
   const steerBotId = asString(row.steer_bot_id);
   if (steerBotId) message.steerBotId = steerBotId;
+  if (typeof row.mentions === "string" && row.mentions) {
+    const mentions = parseJson<string[]>(row.mentions, []);
+    if (Array.isArray(mentions)) {
+      message.mentions = mentions.filter((id) => typeof id === "string");
+    }
+  }
   return message;
 }
 
 function roomFromRow(row: Record<string, unknown>): Room {
   const memberIds = parseJson<string[]>(row.member_ids, []);
-  return {
+  const room: Room = {
     id: asString(row.id),
     kind: asString(row.kind) === "dm" ? "dm" : "channel",
     name: asString(row.name),
@@ -181,6 +248,11 @@ function roomFromRow(row: Record<string, unknown>): Room {
       : [],
     createdAt: asString(row.created_at),
   };
+  const parentId = asString(row.parent_id);
+  if (parentId) room.parentId = parentId;
+  const branchFromId = asString(row.branch_from_id);
+  if (branchFromId) room.branchFromId = branchFromId;
+  return room;
 }
 
 function trajectoryFromRow(row: Record<string, unknown>): TrajectoryEvent {
@@ -215,8 +287,23 @@ export class GuildDb {
     } catch {
       /* column already exists on fresh schema */
     }
+    try {
+      this.sqlite.exec("ALTER TABLE messages ADD COLUMN mentions TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
+    try {
+      this.sqlite.exec("ALTER TABLE rooms ADD COLUMN parent_id TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
+    try {
+      this.sqlite.exec("ALTER TABLE rooms ADD COLUMN branch_from_id TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
     this.sqlite.prepare(
-      "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', ?)",
+      "INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     ).run(SCHEMA_VERSION);
   }
 
@@ -226,23 +313,27 @@ export class GuildDb {
 
   importLegacyFiles(dataDir: string): void {
     const root = join(dataDir, "rooms");
-    if (!existsSync(root)) return;
-    const ids = readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-    for (const id of ids) this.importRoomDir(join(root, id), id);
+    if (existsSync(root)) {
+      const ids = readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+      for (const id of ids) this.importRoomDir(join(root, id), id);
+    }
+    for (const room of this.listRooms()) this.spillColdTrajectory(room.id);
   }
 
   upsertRoom(room: Room): void {
     this.sqlite
       .prepare(
-        `INSERT INTO rooms (id, kind, name, member_ids, created_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, kind, name, member_ids, created_at, parent_id, branch_from_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            kind = excluded.kind,
            name = excluded.name,
            member_ids = excluded.member_ids,
-           created_at = excluded.created_at`,
+           created_at = excluded.created_at,
+           parent_id = excluded.parent_id,
+           branch_from_id = excluded.branch_from_id`,
       )
       .run(
         room.id,
@@ -250,6 +341,8 @@ export class GuildDb {
         room.name,
         JSON.stringify(room.memberIds),
         room.createdAt,
+        room.parentId ?? null,
+        room.branchFromId ?? null,
       );
   }
 
@@ -304,10 +397,22 @@ export class GuildDb {
     }
   }
 
-  updateMessageBody(roomId: string, messageId: string, body: string): ChatMessage | null {
+  updateMessageBody(
+    roomId: string,
+    messageId: string,
+    body: string,
+    mentions?: string[],
+  ): ChatMessage | null {
     const result = this.sqlite
-      .prepare("UPDATE messages SET body = ? WHERE room_id = ? AND id = ?")
-      .run(body, roomId, messageId);
+      .prepare(
+        "UPDATE messages SET body = ?, mentions = ? WHERE room_id = ? AND id = ?",
+      )
+      .run(
+        body,
+        mentions ? JSON.stringify(mentions) : null,
+        roomId,
+        messageId,
+      );
     if (!result.changes) return null;
     return this.getMessage(roomId, messageId);
   }
@@ -321,12 +426,13 @@ export class GuildDb {
       usage?: ChatUsage;
       createdAt: string;
       finishedAt: string;
+      mentions?: string[];
     },
   ): ChatMessage | null {
     const result = this.sqlite
       .prepare(
         `UPDATE messages
-         SET body = ?, parts = ?, usage = ?, created_at = ?, finished_at = ?
+         SET body = ?, parts = ?, usage = ?, created_at = ?, finished_at = ?, mentions = ?
          WHERE room_id = ? AND id = ?`,
       )
       .run(
@@ -335,6 +441,7 @@ export class GuildDb {
         patch.usage ? JSON.stringify(patch.usage) : null,
         patch.createdAt,
         patch.finishedAt,
+        patch.mentions ? JSON.stringify(patch.mentions) : null,
         roomId,
         messageId,
       );
@@ -348,6 +455,7 @@ export class GuildDb {
     this.sqlite
       .prepare("DELETE FROM messages WHERE room_id = ? AND id = ?")
       .run(roomId, messageId);
+    /* Hot window only. Warehouse jsonl stays append-only. */
     this.sqlite
       .prepare("DELETE FROM trajectory WHERE room_id = ? AND turn_id = ?")
       .run(roomId, messageId);
@@ -385,19 +493,7 @@ export class GuildDb {
       for (const draft of drafts) {
         seq += 1;
         const event: TrajectoryEvent = { ...draft, seq };
-        insert.run(
-          roomId,
-          event.seq,
-          event.ts,
-          event.turnId,
-          event.botId ?? null,
-          event.kind,
-          event.summary,
-          event.payload === undefined ? null : JSON.stringify(event.payload),
-          event.result ?? null,
-          event.durationMs ?? null,
-          event.isError ? 1 : 0,
-        );
+        insert.run(...trajectoryValues(roomId, event));
         written.push(event);
       }
       this.sqlite.exec("COMMIT");
@@ -462,7 +558,39 @@ export class GuildDb {
     const row = this.sqlite
       .prepare("SELECT COALESCE(MAX(seq), -1) AS seq FROM trajectory WHERE room_id = ?")
       .get(roomId) as { seq?: number } | undefined;
-    return asNumber(row?.seq, -1);
+    return Math.max(asNumber(row?.seq, -1), lastJsonlSeq(this.warehousePath(roomId)));
+  }
+
+  private warehousePath(roomId: string): string {
+    return join(dirname(this.path), "rooms", roomId, "trajectory.jsonl");
+  }
+
+  spillColdTrajectory(roomId: string): void {
+    const extra = this.trajectoryCount(roomId) - TRAJECTORY_HOT_CAP;
+    if (extra <= 0) return;
+    const rows = this.sqlite
+      .prepare(
+        "SELECT * FROM trajectory WHERE room_id = ? ORDER BY seq ASC LIMIT ?",
+      )
+      .all(roomId, extra) as Record<string, unknown>[];
+    if (!rows.length) return;
+    const events = rows.map(trajectoryFromRow);
+    const path = this.warehousePath(roomId);
+    const lastArchived = lastJsonlSeq(path);
+    const fresh = events.filter((event) => event.seq > lastArchived);
+    if (fresh.length) {
+      mkdirSync(dirname(path), { recursive: true });
+      appendFileSync(
+        path,
+        fresh.map((event) => `${JSON.stringify(event)}\n`).join(""),
+        "utf8",
+      );
+    }
+    const lastSeq = events[events.length - 1]?.seq;
+    if (typeof lastSeq !== "number") return;
+    this.sqlite
+      .prepare("DELETE FROM trajectory WHERE room_id = ? AND seq <= ?")
+      .run(roomId, lastSeq);
   }
 
   private insertMessage(message: ChatMessage, seq: number): void {
@@ -470,8 +598,8 @@ export class GuildDb {
       .prepare(
         `INSERT INTO messages (
            id, room_id, seq, author, body, parts, reply_to, attachments, usage,
-           created_at, finished_at, steer, steer_bot_id
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           created_at, finished_at, steer, steer_bot_id, mentions
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         message.id,
@@ -487,6 +615,7 @@ export class GuildDb {
         message.finishedAt ?? null,
         message.steer ? 1 : 0,
         message.steerBotId ?? null,
+        message.mentions ? JSON.stringify(message.mentions) : null,
       );
   }
 
@@ -507,6 +636,12 @@ export class GuildDb {
               typeof parsed.createdAt === "string"
                 ? parsed.createdAt
                 : "2026-01-01T00:00:00.000Z",
+            ...(typeof parsed.parentId === "string" && parsed.parentId
+              ? { parentId: parsed.parentId }
+              : {}),
+            ...(typeof parsed.branchFromId === "string" && parsed.branchFromId
+              ? { branchFromId: parsed.branchFromId }
+              : {}),
           });
         }
       } catch {
@@ -536,34 +671,20 @@ export class GuildDb {
       const path = join(dir, "trajectory.jsonl");
       if (existsSync(path)) {
         const events = parseJsonlTrajectory(readFileSync(path, "utf8"));
-        if (events.length) {
-          this.sqlite.exec("BEGIN");
-          try {
-            const insert = this.sqlite.prepare(
-              `INSERT INTO trajectory (
-                 room_id, seq, ts, turn_id, bot_id, kind, summary, payload, result, duration_ms, is_error
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            );
-            for (const event of events) {
-              insert.run(
-                id,
-                event.seq,
-                event.ts,
-                event.turnId,
-                event.botId ?? null,
-                event.kind,
-                event.summary,
-                event.payload === undefined ? null : JSON.stringify(event.payload),
-                event.result ?? null,
-                event.durationMs ?? null,
-                event.isError ? 1 : 0,
-              );
-            }
-            this.sqlite.exec("COMMIT");
-          } catch (error) {
-            this.sqlite.exec("ROLLBACK");
-            throw error;
-          }
+        if (events.length <= TRAJECTORY_HOT_CAP) {
+          if (events.length) this.insertTrajectoryRows(id, events);
+          rmIfExists(path);
+        } else {
+          const cut = events.length - TRAJECTORY_HOT_CAP;
+          this.insertTrajectoryRows(id, events.slice(cut));
+          writeFileSync(
+            path,
+            events
+              .slice(0, cut)
+              .map((event) => `${JSON.stringify(event)}\n`)
+              .join(""),
+            "utf8",
+          );
         }
       }
     }
@@ -597,10 +718,24 @@ export class GuildDb {
       rmIfExists(join(dir, "messages.json"));
       rmIfExists(join(dir, "messages.jsonl"));
     }
-    if (this.trajectoryCount(id) > 0) {
-      rmIfExists(join(dir, "trajectory.jsonl"));
-    }
     if (this.readCompact(id)) rmIfExists(join(dir, "compact.json"));
+  }
+
+  private insertTrajectoryRows(roomId: string, events: TrajectoryEvent[]): void {
+    if (!events.length) return;
+    this.sqlite.exec("BEGIN");
+    try {
+      const insert = this.sqlite.prepare(
+        `INSERT INTO trajectory (
+           room_id, seq, ts, turn_id, bot_id, kind, summary, payload, result, duration_ms, is_error
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const event of events) insert.run(...trajectoryValues(roomId, event));
+      this.sqlite.exec("COMMIT");
+    } catch (error) {
+      this.sqlite.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private messageCount(roomId: string): number {

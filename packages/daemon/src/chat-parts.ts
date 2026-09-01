@@ -40,11 +40,16 @@ export function assembleParts(input: {
             ? String(trace.args.prompt ?? "")
             : trace.name === "spawn"
               ? String(
-                  trace.args.description ||
+                  trace.args.title ||
+                    trace.args.description ||
+                    trace.args.profile ||
                     trace.args.name ||
+                    trace.args.task ||
                     trace.args.prompt ||
                     "",
                 )
+              : trace.name === "read_spawn"
+                ? String(trace.args.agent_id || trace.args.id || "")
               : String(trace.args.path ?? ""),
       output: trace.text,
       isError: trace.isError,

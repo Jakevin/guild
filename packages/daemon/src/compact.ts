@@ -1,5 +1,6 @@
 import type { ChatPart, ModelRef } from "@guild/protocol";
 import { llmComplete } from "./llm.ts";
+import type { ToolProgress } from "./tools.ts";
 
 /** Cheap char/4 estimate, same ballpark Codex uses before a real tokenizer. */
 export const CHARS_PER_TOKEN = 4;
@@ -251,6 +252,8 @@ async function summarizeOld(input: {
   dataDir: string;
   env?: NodeJS.ProcessEnv;
   prefer?: ModelRef | null;
+  onProgress?: (update: ToolProgress) => void;
+  signal?: AbortSignal;
 }): Promise<string> {
   const transcript = input.old
     .map((item) => {
@@ -275,6 +278,14 @@ async function summarizeOld(input: {
     prefer: input.prefer,
     tools: false,
     temperature: 0.1,
+    toolCtx: {
+      dataDir: input.dataDir,
+      env: input.env,
+      spawnDepth: 0,
+      allowWrite: false,
+      onProgress: input.onProgress,
+      signal: input.signal,
+    },
     system:
       "You compact a conversation so work can continue. Output only the summary.",
     messages: [
@@ -305,6 +316,8 @@ export async function packHistory(input: {
   prefer?: ModelRef | null;
   checkpoint?: CompactCheckpoint | null;
   tokenLimit?: number;
+  onProgress?: (update: ToolProgress) => void;
+  signal?: AbortSignal;
 }): Promise<PackedHistory> {
   const user = { role: "user" as const, content: input.userMessage };
   const history = input.history.map(clipHistoryItem);
@@ -328,12 +341,26 @@ export async function packHistory(input: {
     summary = input.checkpoint!.summary;
     checkpoint = input.checkpoint!;
   } else {
+    input.onProgress?.({
+      thinking: "整理上文…",
+      traces: [
+        {
+          name: "context",
+          args: {},
+          text: "",
+          isError: false,
+          running: true,
+        },
+      ],
+    });
     summary = await summarizeOld({
       old: plan.old,
       previous: input.checkpoint?.summary,
       dataDir: input.dataDir,
       env: input.env,
       prefer: input.prefer,
+      onProgress: input.onProgress,
+      signal: input.signal,
     });
     checkpoint = {
       throughId: lastId(plan.old),

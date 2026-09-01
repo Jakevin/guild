@@ -95,7 +95,12 @@
           return;
         }
         const button = document.getElementById("ai-generate");
+        if (button.disabled || button.getAttribute("aria-busy") === "true") return;
         button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.classList.add("is-busy");
+        const idle = button.textContent;
+        button.textContent = t("studio.generating");
         try {
           const response = await fetch("/generate", {
             method: "POST",
@@ -115,6 +120,9 @@
           );
         } finally {
           button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.classList.remove("is-busy");
+          button.textContent = idle;
         }
       });
 

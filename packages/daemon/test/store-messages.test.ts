@@ -3,16 +3,36 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { GUILD_DB_FILE } from "../src/db.ts";
+import { GUILD_DB_FILE, TRAJECTORY_HOT_CAP } from "../src/db.ts";
 import { GuildStore, isFailedAssistantReply } from "../src/store.ts";
+import type { TrajectoryDraft } from "../src/trajectory.ts";
 
 function tempHome(): string {
   return mkdtempSync(join(tmpdir(), "guild-messages-"));
+}
+
+function trajDraft(i: number): TrajectoryDraft {
+  return {
+    ts: new Date(1_700_000_000_000 + i * 1000).toISOString(),
+    turnId: `t${i}`,
+    kind: "tool",
+    summary: `row ${i}`,
+  };
+}
+
+function readJsonl(path: string): { seq: number; summary: string }[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as { seq: number; summary: string });
 }
 
 test("appendMessage persists in sqlite across reopen", () => {
@@ -213,5 +233,180 @@ test("appendTrajectory assigns seq in sqlite", () => {
     );
   } finally {
     store.close();
+  }
+});
+
+test("appendTrajectory waits until the room is idle before spilling to jsonl", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  const extra = 5;
+  const total = TRAJECTORY_HOT_CAP + extra;
+  const warehouse = join(home, "rooms", "channel-general", "trajectory.jsonl");
+  try {
+    const signal = store.beginTurn("channel-general", ["bot-a", "bot-b"]);
+    const written = store.appendTrajectory(
+      "channel-general",
+      Array.from({ length: total }, (_, i) => trajDraft(i)),
+    );
+    assert.equal(written.length, total);
+    assert.equal(written[0]?.seq, 0);
+    assert.equal(written[total - 1]?.seq, total - 1);
+    assert.equal(store.listTrajectory("channel-general").length, total);
+    assert.equal(existsSync(warehouse), false);
+
+    store.appendTrajectory("channel-general", [trajDraft(total)]);
+    assert.equal(store.listTrajectory("channel-general").length, total + 1);
+    assert.equal(existsSync(warehouse), false);
+
+    store.endTurn("channel-general", signal);
+    const listed = store.listTrajectory("channel-general");
+    assert.equal(listed.length, TRAJECTORY_HOT_CAP);
+    assert.deepEqual(
+      listed.map((item) => item.seq),
+      Array.from({ length: TRAJECTORY_HOT_CAP }, (_, i) => extra + 1 + i),
+    );
+    assert.deepEqual(
+      readJsonl(warehouse).map((item) => item.seq),
+      Array.from({ length: extra + 1 }, (_, i) => i),
+    );
+    assert.equal(listed[listed.length - 1]?.seq, total);
+
+    const next = store.appendTrajectory("channel-general", [trajDraft(total + 1)]);
+    assert.equal(next[0]?.seq, total + 1);
+    assert.equal(store.listTrajectory("channel-general").length, TRAJECTORY_HOT_CAP + 1);
+    assert.deepEqual(
+      readJsonl(warehouse).map((item) => item.seq),
+      Array.from({ length: extra + 1 }, (_, i) => i),
+    );
+    store.endTurn("channel-general");
+    const after = store.listTrajectory("channel-general");
+    assert.equal(after.length, TRAJECTORY_HOT_CAP);
+    assert.equal(after[0]?.seq, extra + 2);
+    assert.equal(after[after.length - 1]?.seq, total + 1);
+    assert.deepEqual(
+      readJsonl(warehouse).map((item) => item.seq),
+      Array.from({ length: extra + 2 }, (_, i) => i),
+    );
+
+    const other = store.createChannel("warehouse-other");
+    store.appendTrajectory(other.id, [trajDraft(0), trajDraft(1)]);
+    store.endTurn(other.id);
+    assert.equal(store.listTrajectory(other.id).length, 2);
+    assert.equal(
+      existsSync(join(home, "rooms", other.id, "trajectory.jsonl")),
+      false,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test("opening the store spills sqlite overflow that predated the warehouse", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  try {
+    store.appendTrajectory("channel-general", [trajDraft(0)]);
+  } finally {
+    store.close();
+  }
+
+  const sqlite = new DatabaseSync(join(home, GUILD_DB_FILE));
+  const insert = sqlite.prepare(
+    `INSERT INTO trajectory (
+       room_id, seq, ts, turn_id, bot_id, kind, summary, payload, result, duration_ms, is_error
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const extra = 5;
+  for (let i = 1; i < TRAJECTORY_HOT_CAP + extra; i++) {
+    const draft = trajDraft(i);
+    insert.run(
+      "channel-general",
+      i,
+      draft.ts,
+      draft.turnId,
+      null,
+      draft.kind,
+      draft.summary,
+      null,
+      null,
+      null,
+      0,
+    );
+  }
+  sqlite.close();
+
+  const again = new GuildStore(home);
+  try {
+    const listed = again.listTrajectory("channel-general");
+    assert.equal(listed.length, TRAJECTORY_HOT_CAP);
+    assert.equal(listed[0]?.seq, extra);
+    assert.equal(listed[listed.length - 1]?.seq, TRAJECTORY_HOT_CAP + extra - 1);
+    assert.deepEqual(
+      readJsonl(join(home, "rooms", "channel-general", "trajectory.jsonl")).map(
+        (item) => item.seq,
+      ),
+      Array.from({ length: extra }, (_, i) => i),
+    );
+  } finally {
+    again.close();
+  }
+});
+
+test("legacy trajectory.jsonl under the cap imports into sqlite and is deleted", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  store.close();
+
+  const path = join(home, "rooms", "channel-general", "trajectory.jsonl");
+  mkdirSync(join(home, "rooms", "channel-general"), { recursive: true });
+  writeFileSync(
+    path,
+    [0, 1]
+      .map((i) => JSON.stringify({ ...trajDraft(i), seq: i }) + "\n")
+      .join(""),
+  );
+
+  const again = new GuildStore(home);
+  try {
+    assert.deepEqual(
+      again.listTrajectory("channel-general").map((item) => item.seq),
+      [0, 1],
+    );
+    assert.equal(existsSync(path), false);
+  } finally {
+    again.close();
+  }
+});
+
+test("legacy trajectory.jsonl over the cap keeps the prefix in the warehouse", () => {
+  const home = tempHome();
+  const store = new GuildStore(home);
+  store.close();
+
+  const extra = 7;
+  const total = TRAJECTORY_HOT_CAP + extra;
+  const path = join(home, "rooms", "channel-general", "trajectory.jsonl");
+  mkdirSync(join(home, "rooms", "channel-general"), { recursive: true });
+  writeFileSync(
+    path,
+    Array.from({ length: total }, (_, i) =>
+      JSON.stringify({ ...trajDraft(i), seq: i }),
+    ).join("\n") + "\n",
+  );
+
+  const again = new GuildStore(home);
+  try {
+    const listed = again.listTrajectory("channel-general");
+    assert.equal(listed.length, TRAJECTORY_HOT_CAP);
+    assert.equal(listed[0]?.seq, extra);
+    assert.equal(listed[listed.length - 1]?.seq, total - 1);
+    assert.deepEqual(
+      readJsonl(path).map((item) => item.seq),
+      Array.from({ length: extra }, (_, i) => i),
+    );
+    const next = again.appendTrajectory("channel-general", [trajDraft(total)]);
+    assert.equal(next[0]?.seq, total);
+  } finally {
+    again.close();
   }
 });

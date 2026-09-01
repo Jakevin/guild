@@ -37,6 +37,8 @@ export type Bot = {
   skillIds: string[];
   defaultPositionId: string;
   oneLiner?: string;
+  /** Public /generated/… sprite. Missing → procedural tavern buddy. */
+  portrait?: string;
   /** Chat model for this bot. Missing → guild default. */
   model?: ModelRef | null;
   createdAt: string;
@@ -53,6 +55,10 @@ export type Room = {
   name: string;
   memberIds: string[];
   createdAt: string;
+  /** Parent channel id when this is a branched side quest. */
+  parentId?: string;
+  /** Message id in the parent room that opened this branch. */
+  branchFromId?: string;
 };
 
 export type ChatPart =
@@ -114,6 +120,12 @@ export type ChatMessage = {
   steer?: boolean;
   /** Live bot this steer was aimed at. */
   steerBotId?: string;
+  /**
+   * Bot ids this message dispatches.
+   * User @mentions and bot handoffs. Missing on older rows (parse the body).
+   * Empty array means nobody — do not fall back to parsing.
+   */
+  mentions?: string[];
 };
 
 export type LlmApi =
@@ -141,7 +153,8 @@ export type AuxRole =
   | "skills"
   | "approval"
   | "title"
-  | "generate";
+  | "generate"
+  | "spawn";
 
 export type ModelsFile = {
   default?: ModelRef | null;

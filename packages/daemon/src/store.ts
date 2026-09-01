@@ -26,6 +26,7 @@ import { DEFAULT_BOTS } from "./catalog/default-bots.ts";
 import { CATALOG_SKILLS } from "./catalog/skills.ts";
 import { CATALOG_SUBAGENTS } from "./catalog/subagents.ts";
 import { parseAgentFile } from "./agent-file.ts";
+import { parseMentionIds, sanitizeMentionIds } from "./mention.ts";
 
 const MARKDOWN: Record<LibraryKind, string> = {
   souls: "SOUL.md",
@@ -39,6 +40,10 @@ const GENERAL_CHANNEL_ID = "channel-general";
 const NAV_PREVIEW_CAP = 120;
 /** Project channels (not #general). Reuse seats first; human adds specialists. */
 export const CHANNEL_ROSTER_CAP = 6;
+/** Parent → child → grandchild. Deeper than this hides in the sidebar. */
+export const BRANCH_DEPTH_CAP = 3;
+/** Messages copied from the parent, ending at the branched row. */
+export const BRANCH_CONTEXT_CAP = 20;
 
 export function isGeneralChannel(room: { id: string; name: string }): boolean {
   return room.id === GENERAL_CHANNEL_ID || room.name === "general";
@@ -384,6 +389,7 @@ export class GuildStore {
         steers?.delete(botId);
         if (live && live.size === 0) this.liveTurns.delete(roomId);
         if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
+        this.spillTrajectoryIfIdle(roomId);
         return hadLive;
       }
       const group = this.turnGroups.get(controller.signal);
@@ -400,6 +406,7 @@ export class GuildStore {
       if (live && live.size === 0) this.liveTurns.delete(roomId);
       if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
       if (!controller.signal.aborted) controller.abort();
+      this.spillTrajectoryIfIdle(roomId);
       return true;
     }
     const room = this.botAborts.get(roomId);
@@ -417,6 +424,7 @@ export class GuildStore {
         aborted = true;
       }
     }
+    this.spillTrajectoryIfIdle(roomId);
     return aborted || Boolean(room);
   }
 
@@ -435,10 +443,19 @@ export class GuildStore {
       if (room && room.size === 0) this.botAborts.delete(roomId);
       if (live && live.size === 0) this.liveTurns.delete(roomId);
       if (steers && steers.size === 0) this.pendingSteers.delete(roomId);
-      return;
+      if (!group.controller.signal.aborted) group.controller.abort();
+    } else {
+      this.botAborts.delete(roomId);
+      this.clearLiveTurn(roomId);
     }
-    this.botAborts.delete(roomId);
-    this.clearLiveTurn(roomId);
+    this.spillTrajectoryIfIdle(roomId);
+  }
+
+  /** Warehouse overflow once, after every bot in the room has stopped. */
+  private spillTrajectoryIfIdle(roomId: string): void {
+    if (this.botAborts.get(roomId)?.size) return;
+    if (this.liveTurns.get(roomId)?.size) return;
+    this.db.spillColdTrajectory(roomId);
   }
 
   pushSteer(roomId: string, text: string, botId?: string): void {
@@ -580,6 +597,9 @@ export class GuildStore {
     if (room.id === GENERAL_CHANNEL_ID || room.name === "general") {
       throw new StoreError(400, "cannot delete #general");
     }
+    for (const child of this.listChannels().filter((item) => item.parentId === id)) {
+      this.deleteChannel(child.id);
+    }
     this.removeRoomDir(room.id);
     return { ok: true, id: room.id };
   }
@@ -605,6 +625,7 @@ export class GuildStore {
       name?: string;
       handle?: string;
       oneLiner?: string;
+      portrait?: string | null;
       skillIds?: string[];
       soul?: { name: string; body: string };
       agent?: { name: string; body: string };
@@ -646,6 +667,9 @@ export class GuildStore {
       handle,
       skillIds,
       oneLiner: input.oneLiner?.trim() || bot.oneLiner,
+      portrait: Object.hasOwn(input, "portrait")
+        ? normalizePortrait(input.portrait)
+        : bot.portrait,
       model: Object.hasOwn(input, "model") ? input.model ?? null : bot.model,
     };
     this.writeBot(next);
@@ -789,6 +813,48 @@ export class GuildStore {
     return room;
   }
 
+  createBranch(parentId: string, messageId: string, name?: string): Room {
+    const parent = this.getRoom(parentId);
+    if (!parent) throw new StoreError(404, "channel not found");
+    if (parent.kind !== "channel") {
+      throw new StoreError(400, "can only branch a channel");
+    }
+    const source = this.listMessages(parentId).find((item) => item.id === messageId);
+    if (!source) throw new StoreError(404, "message not found");
+    if (branchDepth(this, parent) >= BRANCH_DEPTH_CAP) {
+      throw new StoreError(400, "too many nested branches");
+    }
+    const trimmed = String(name || "").replace(/^#/, "").trim() || clipBranchName(source.body);
+    if (trimmed === "general") {
+      throw new StoreError(400, "cannot create #general");
+    }
+    const taken = this.listChannels().map((room) => room.name);
+    const uniqueName = uniqueChannelName(trimmed, taken);
+    const existingIds = this.listChannels().map((room) => room.id);
+    const slug = slugify(uniqueName);
+    const baseId =
+      slug && slug !== "item" && slug !== "general"
+        ? `channel-${slug}`
+        : `channel-${randomUUID().slice(0, 8)}`;
+    const room: Room = {
+      id: uniqueSlug(baseId, existingIds),
+      kind: "channel",
+      name: uniqueName,
+      memberIds: [...parent.memberIds],
+      createdAt: new Date().toISOString(),
+      parentId: parent.id,
+      branchFromId: source.id,
+    };
+    this.writeRoom(room);
+    this.writeChannelMd(room.id, this.readChannelMd(parent.id));
+    const history = this.listMessages(parent.id);
+    const at = history.findIndex((item) => item.id === source.id);
+    const from = Math.max(0, at + 1 - BRANCH_CONTEXT_CAP);
+    const window = at < 0 ? [source] : history.slice(from, at + 1);
+    this.writeMessages(room.id, cloneBranchMessages(window, room.id));
+    return room;
+  }
+
   renameChannel(id: string, name: string): Room {
     const trimmed = String(name || "").trim();
     if (!trimmed) throw new StoreError(400, "channel name is required");
@@ -914,6 +980,7 @@ export class GuildStore {
     usage?: ChatUsage,
     steer?: boolean,
     steerBotId?: string,
+    mentions?: string[],
   ): ChatMessage {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
@@ -921,6 +988,12 @@ export class GuildStore {
     if (!text) throw new StoreError(400, "message is required");
     const now = new Date().toISOString();
     const startedAt = author !== "you" ? usage?.startedAt : undefined;
+    const bots = this.listBots();
+    const mentionIds = (
+      mentions !== undefined
+        ? sanitizeMentionIds(mentions, bots)
+        : parseMentionIds(text, bots, author === "you" ? "user" : "bot")
+    ).filter((id) => id !== author);
     const message: ChatMessage = {
       id: randomUUID(),
       roomId,
@@ -934,15 +1007,27 @@ export class GuildStore {
       ...(author !== "you" ? { finishedAt: now } : {}),
       ...(steer ? { steer: true } : {}),
       ...(steer && steerBotId ? { steerBotId } : {}),
+      mentions: mentionIds,
     };
     this.db.appendMessage(message);
     return message;
   }
 
-  updateMessage(roomId: string, messageId: string, body: string): ChatMessage {
+  updateMessage(
+    roomId: string,
+    messageId: string,
+    body: string,
+    mentions?: string[],
+  ): ChatMessage {
     const text = body.trim();
     if (!text) throw new StoreError(400, "message is required");
-    const next = this.db.updateMessageBody(roomId, messageId, text);
+    const bots = this.listBots();
+    const mentionIds = (
+      mentions !== undefined
+        ? sanitizeMentionIds(mentions, bots)
+        : parseMentionIds(text, bots, "user")
+    );
+    const next = this.db.updateMessageBody(roomId, messageId, text, mentionIds);
     if (!next) throw new StoreError(404, "message not found");
     return next;
   }
@@ -957,12 +1042,18 @@ export class GuildStore {
     const text = body.trim();
     if (!text) throw new StoreError(400, "message is required");
     const now = new Date().toISOString();
+    const current = this.listMessages(roomId).find((item) => item.id === messageId);
+    const bots = this.listBots();
+    const mentionIds = parseMentionIds(text, bots, "bot").filter(
+      (id) => id !== current?.author,
+    );
     const next = this.db.replaceMessage(roomId, messageId, {
       body: text,
       parts: parts && parts.length ? parts : undefined,
       usage,
       createdAt: usage?.startedAt || now,
       finishedAt: now,
+      mentions: mentionIds,
     });
     if (!next) throw new StoreError(404, "message not found");
     return next;
@@ -1169,6 +1260,16 @@ export class GuildStore {
   }
 }
 
+function normalizePortrait(raw: string | null | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (!/^\/generated\/[A-Za-z0-9._-]+$/.test(value)) {
+    throw new StoreError(400, "invalid portrait");
+  }
+  return value;
+}
+
 export class StoreError extends Error {
   constructor(
     readonly status: number,
@@ -1191,4 +1292,59 @@ export function slugify(name: string): string {
 function uniqueSlug(base: string, existing: string[]): string {
   if (!existing.includes(base)) return base;
   return `${base}-${randomUUID().slice(0, 8)}`;
+}
+
+function cloneBranchMessages(items: ChatMessage[], roomId: string): ChatMessage[] {
+  const idMap = new Map<string, string>();
+  return items.map((item) => {
+    const id = randomUUID();
+    idMap.set(item.id, id);
+    const next: ChatMessage = {
+      id,
+      roomId,
+      author: item.author,
+      body: item.body,
+      createdAt: item.createdAt,
+    };
+    if (item.parts?.length) next.parts = item.parts;
+    if (item.attachments?.length) next.attachments = item.attachments;
+    if (item.usage) next.usage = item.usage;
+    if (item.finishedAt) next.finishedAt = item.finishedAt;
+    if (item.mentions) next.mentions = item.mentions;
+    if (item.steer) next.steer = true;
+    if (item.steerBotId) next.steerBotId = item.steerBotId;
+    const replyTo = item.replyTo ? idMap.get(item.replyTo) : undefined;
+    if (replyTo) next.replyTo = replyTo;
+    return next;
+  });
+}
+
+function clipBranchName(body: string): string {
+  return String(body || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 28) || "branch";
+}
+
+function uniqueChannelName(name: string, taken: string[]): string {
+  if (!taken.includes(name)) return name;
+  for (let i = 2; i < 50; i++) {
+    const next = `${name} ${i}`;
+    if (!taken.includes(next)) return next;
+  }
+  return `${name} ${randomUUID().slice(0, 4)}`;
+}
+
+function branchDepth(store: GuildStore, room: Room): number {
+  let depth = 0;
+  let current: Room | null = room;
+  const seen = new Set<string>();
+  while (current?.parentId) {
+    if (seen.has(current.id)) break;
+    seen.add(current.id);
+    depth += 1;
+    current = store.getRoom(current.parentId);
+    if (depth > 16) break;
+  }
+  return depth;
 }

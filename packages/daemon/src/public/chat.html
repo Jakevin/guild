@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=press-enamel" />
+    <link rel="stylesheet" href="/chat.css?v=quest-nest" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -340,6 +340,15 @@
         }
         const glyph = Array.from(String(name).replace(/\s+/g, ""))[0] || "?";
         return glyph;
+      }
+      function portraitUrl(bot) {
+        const url = bot && typeof bot.portrait === "string" ? bot.portrait.trim() : "";
+        return url.indexOf("/generated/") === 0 ? url : "";
+      }
+      function avatarFace(bot) {
+        const src = portraitUrl(bot);
+        if (src) return '<img alt="" src="' + escapeHtml(src) + '">';
+        return escapeHtml(initials((bot && (bot.name || bot.handle)) || "?"));
       }
       function escapeHtml(value) {
         return String(value)
@@ -1128,6 +1137,12 @@
           hour12: true,
         });
       }
+      function formatMsgWhen(iso) {
+        const day = formatMsgDay(iso);
+        const clock = formatMsgClock(iso);
+        if (day && clock) return day + " " + clock;
+        return clock || day || "";
+      }
       function formatMsgDay(iso) {
         if (!iso) return "";
         const when = new Date(iso);
@@ -1266,11 +1281,15 @@
         const foot = opts.party
           ? opts.party
           : "<em>" + escapeHtml(opts.preview || "") + "</em>";
-        return (
-          '<li><a class="nav-row' +
+        const cls =
+          "nav-row" +
           (opts.on ? " on" : "") +
           (opts.unread ? " unread" : "") +
           (opts.notice ? " notice" : "") +
+          (opts.branch ? " nav-branch" : "");
+        const inner =
+          '<a class="' +
+          cls +
           '" href="' +
           opts.href +
           '">' +
@@ -1282,8 +1301,9 @@
           right +
           "</span>" +
           foot +
-          "</span></a></li>"
-        );
+          "</span></a>";
+        if (opts.bare) return inner;
+        return "<li>" + inner + "</li>";
       }
       function partyStackHtml(members) {
         const bots = Array.isArray(members) ? members : [];
@@ -1293,7 +1313,7 @@
               '<span class="avatar" style="background:' +
               hue(bot.handle) +
               '">' +
-              escapeHtml(initials(bot.name)) +
+              avatarFace(bot) +
               "</span>",
           )
           .join("");
@@ -1343,31 +1363,93 @@
       }
       function renderNav() {
         const q = document.getElementById("filter").value.toLowerCase();
-        const channels = state.channels
-          .filter((ch) => !q || ch.name.toLowerCase().includes(q))
+        const all = state.channels || [];
+        const byId = new Map(all.map((ch) => [ch.id, ch]));
+        const kidsOf = (id) =>
+          all.filter((ch) => ch.parentId === id).slice().sort(byUpdatedAtDesc);
+        const visible = new Set();
+        for (const ch of all) {
+          const hit = !q || String(ch.name || "").toLowerCase().includes(q);
+          if (!hit) continue;
+          let walk = ch;
+          while (walk) {
+            visible.add(walk.id);
+            walk = walk.parentId ? byId.get(walk.parentId) : null;
+          }
+        }
+        function channelBusy(ch) {
+          return Boolean(
+            (state.busyRoom &&
+              state.busyRoom.kind === "channel" &&
+              state.busyRoom.id === ch.id) ||
+              (state.serverLive || []).some(
+                (row) => row.kind === "channel" && row.id === ch.id,
+              ),
+          );
+        }
+        function channelUpdated(ch) {
+          let latest = ch.updatedAt ? Date.parse(ch.updatedAt) : 0;
+          for (const kid of kidsOf(ch.id)) {
+            const child = channelUpdated(kid);
+            const ts = child ? Date.parse(child) : 0;
+            if (ts > latest) latest = ts;
+          }
+          return Number.isFinite(latest) && latest > 0
+            ? new Date(latest).toISOString()
+            : ch.updatedAt;
+        }
+        function branchTree(parentId) {
+          return kidsOf(parentId)
+            .filter((ch) => visible.has(ch.id))
+            .map((ch) => {
+              const nested = branchTree(ch.id);
+              const row = navRowHtml({
+                bare: true,
+                branch: true,
+                href: "#c/" + encodeURIComponent(ch.id),
+                on: state.kind === "channel" && state.id === ch.id,
+                notice: true,
+                name: "↳ " + ch.name,
+                updatedAt: ch.updatedAt,
+                party: partyStackHtml(ch.members),
+                busy: channelBusy(ch),
+                unread: state.unread.has(roomKey("channel", ch.id)),
+              });
+              return nested
+                ? "<li>" + row + '<ul class="nav-branches">' + nested + "</ul></li>"
+                : "<li>" + row + "</li>";
+            })
+            .join("");
+        }
+        const roots = all
+          .filter((ch) => !ch.parentId && visible.has(ch.id))
           .slice()
-          .sort(byUpdatedAtDesc);
-        document.getElementById("channels").innerHTML = channels
+          .sort((a, b) =>
+            byUpdatedAtDesc(
+              { updatedAt: channelUpdated(a) },
+              { updatedAt: channelUpdated(b) },
+            ),
+          );
+        document.getElementById("channels").innerHTML = roots
           .map((ch) => {
-            const busy = Boolean(
-              (state.busyRoom &&
-                state.busyRoom.kind === "channel" &&
-                state.busyRoom.id === ch.id) ||
-                (state.serverLive || []).some(
-                  (row) => row.kind === "channel" && row.id === ch.id,
-                ),
-            );
-            const unread = state.unread.has(roomKey("channel", ch.id));
-            return navRowHtml({
+            const nested = branchTree(ch.id);
+            const row = navRowHtml({
+              bare: true,
               href: "#c/" + encodeURIComponent(ch.id),
               on: state.kind === "channel" && state.id === ch.id,
               notice: true,
               name: ch.name,
-              updatedAt: ch.updatedAt,
+              updatedAt: channelUpdated(ch),
               party: partyStackHtml(ch.members),
-              busy: busy,
-              unread: unread,
+              busy: channelBusy(ch),
+              unread: state.unread.has(roomKey("channel", ch.id)),
             });
+            return (
+              '<li class="nav-quest">' +
+              row +
+              (nested ? '<ul class="nav-branches">' + nested + "</ul>" : "") +
+              "</li>"
+            );
           })
           .join("");
         const bots = state.bots
@@ -1391,7 +1473,7 @@
                 '<span class="avatar" style="background:' +
                 hue(bot.handle) +
                 '">' +
-                escapeHtml(initials(bot.name)) +
+                avatarFace(bot) +
                 "</span>",
               name: bot.name,
               updatedAt: bot.updatedAt,
@@ -1426,7 +1508,7 @@
           '" style="background:' +
           hue(bot.handle) +
           '">' +
-          escapeHtml(initials(bot.name)) +
+          avatarFace(bot) +
           '</button><span class="who"><strong>' +
           escapeHtml(bot.name) +
           "</strong><em>@" +
@@ -1445,9 +1527,9 @@
           document.getElementById("subtitle").textContent = "";
           wrap.hidden = true;
           document.getElementById("members-pop").hidden = true;
-          av.textContent = bot ? initials(bot.name) : "?";
           av.style.background = bot ? hue(bot.handle) : "#333";
           av.classList.remove("hash-av");
+          av.innerHTML = bot ? avatarFace(bot) : "?";
           if (bot) {
             av.setAttribute("href", "#");
             av.setAttribute("data-bot-id", bot.id);
@@ -1480,7 +1562,7 @@
               '<span class="avatar" style="background:' +
               hue(bot.handle) +
               '">' +
-              escapeHtml(initials(bot.name)) +
+              avatarFace(bot) +
               "</span>",
           )
           .join("");
@@ -1624,7 +1706,7 @@
             '" style="background:' +
             hue(bot.handle) +
             '">' +
-            escapeHtml(initials(bot.name)) +
+            avatarFace(bot) +
             "</button>",
           head:
             '<div class="msg-head"><button type="button" class="name"' +
@@ -1848,23 +1930,28 @@
         rail.innerHTML = you
           .map((el) => {
             const id = el.getAttribute("data-id") || "";
+            const when = formatMsgWhen(el.getAttribute("data-at") || "");
             const preview = youPromptPreview(el);
             const top = Math.max(
               6,
               Math.min(track - 6, ((el.offsetTop + el.offsetHeight / 2) / total) * track),
             );
+            const label = [when, preview].filter(Boolean).join(" · ");
             return (
               '<button type="button" class="prompt-tick" data-prompt-jump="' +
               escapeHtml(id) +
               '" style="top:' +
               top +
-              'px"' +
-              (preview
-                ? ' data-preview="' + escapeHtml(preview) + '"'
+              'px" aria-label="' +
+              escapeHtml(t("promptJump") + (label ? " · " + label : "")) +
+              '"><span class="prompt-tip">' +
+              (when
+                ? '<time class="prompt-tip-when">' + escapeHtml(when) + "</time>"
                 : "") +
-              ' aria-label="' +
-              escapeHtml(t("promptJump") + (preview ? " · " + preview : "")) +
-              '"></button>'
+              (preview
+                ? '<span class="prompt-tip-text">' + escapeHtml(preview) + "</span>"
+                : "") +
+              "</span></button>"
             );
           })
           .join("");
@@ -1988,6 +2075,15 @@
                     '">' +
                     t("retry") +
                     "</button>" +
+                  (state.kind === "channel" &&
+                  !msg.queued &&
+                  String(msg.id || "").indexOf("pending-") !== 0
+                    ? '<button type="button" data-branch="' +
+                      escapeHtml(msg.id) +
+                      '">' +
+                      t("branch") +
+                      "</button>"
+                    : "") +
                   (msg.queued
                     ? ""
                     : '<button type="button" class="danger" data-msg-del="' +
@@ -2003,6 +2099,8 @@
                   (msg.queued ? " queued" : msg.steer ? " steer" : "") +
                   '" data-id="' +
                   escapeHtml(msg.id) +
+                  '" data-at="' +
+                  escapeHtml(stamp) +
                   '">' +
                   clock +
                   body +
@@ -2021,7 +2119,7 @@
                 '" style="background:' +
                 hue(handle || name) +
                 '">' +
-                escapeHtml(initials(name)) +
+                (bot ? avatarFace(bot) : escapeHtml(initials(name))) +
                 "</button>";
               const head =
                 '<div class="msg-head"><button type="button" class="name"' +
@@ -2117,6 +2215,30 @@
         if (!res.ok) throw new Error(body.error || t("deleteFailed"));
         if (state.kind === "channel" && state.id === id) {
           state.id = "channel-general";
+          setHash();
+        }
+        await loadWorkspace();
+        if (state.kind === "channel") await loadMessages();
+      }
+      async function closeBranch(id, ch) {
+        if (!id) return;
+        if (!confirm(t("branch.closeConfirm", { name: (ch && ch.name) || id }))) {
+          return;
+        }
+        const merge = confirm(t("branch.closeMerge"));
+        const res = await fetch(
+          "/channels/" + encodeURIComponent(id) + "/close",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ merge: merge }),
+          },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("branch.closeFailed"));
+        const parentId = (ch && ch.parentId) || body.parentId || "channel-general";
+        if (state.kind === "channel" && state.id === id) {
+          state.id = parentId;
           setHash();
         }
         await loadWorkspace();
@@ -2471,6 +2593,29 @@
         renderThread();
         renderNav();
       }
+      async function branchFromMessage(id) {
+        if (state.kind !== "channel" || !state.id) return;
+        const msg = state.messages.find((item) => item.id === id);
+        if (!msg) return;
+        const def = String(msg.body || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 28);
+        const typed = window.prompt(t("branch.name"), def || "");
+        if (typed === null) return;
+        const name = typed.trim() || def;
+        const res = await fetch(
+          "/channels/" + encodeURIComponent(state.id) + "/branches",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ messageId: id, name: name || undefined }),
+          },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "branch failed");
+        location.hash = "#c/" + encodeURIComponent(body.id);
+      }
       async function retryMessage(id, body) {
         if (canStopHere()) {
           stopTurn();
@@ -2499,6 +2644,7 @@
         const payload = {};
         if (typeof body === "string") payload.body = body;
         if (botIds.length === 1) payload.assigneeId = botIds[0];
+        if (botIds.length) payload.mentions = botIds;
         await postChat(
           messagesUrl(id) + "/retry",
           payload,
@@ -2688,6 +2834,12 @@
             await retryMessage(retry.getAttribute("data-retry"));
             return;
           }
+          const branchBtn = event.target.closest("[data-branch]");
+          if (branchBtn) {
+            event.preventDefault();
+            await branchFromMessage(branchBtn.getAttribute("data-branch"));
+            return;
+          }
           const del = event.target.closest("[data-msg-del]");
           if (del) {
             event.preventDefault();
@@ -2807,7 +2959,11 @@
         const nameEl = document.getElementById("channel-md-name");
         nameEl.value = ch ? ch.name : "";
         nameEl.disabled = locked;
-        document.getElementById("channel-md-del").hidden = locked;
+        const del = document.getElementById("channel-md-del");
+        const branched = Boolean(ch && ch.parentId);
+        del.hidden = locked;
+        del.setAttribute("data-i18n", branched ? "branch.close" : "channel.delete");
+        del.textContent = t(branched ? "branch.close" : "channel.delete");
         channelMdDialog.showModal();
       }
       const botMemoryDialog = document.getElementById("bot-memory");
@@ -2997,7 +3153,8 @@
       document.getElementById("channel-md-del").addEventListener("click", async () => {
         const ch = currentChannel();
         try {
-          await deleteChannel(state.id, ch && ch.name);
+          if (ch && ch.parentId) await closeBranch(state.id, ch);
+          else await deleteChannel(state.id, ch && ch.name);
           channelMdDialog.close();
         } catch (err) {
           alert(err.message);
@@ -4385,11 +4542,13 @@
         if (!pending) return;
         const fromCands = (cands || []).map((bot) => bot.id).filter(Boolean);
         const fromReply = replyAuthorId(pending.replyTo);
-        const botIds = fromCands.length
-          ? fromCands
+        const botIds = summoned.length
+          ? summoned
           : fromReply
             ? [fromReply]
-            : botsFromSend(pending.raw) || [];
+            : fromCands.length
+              ? fromCands
+              : botsFromSend(pending.raw) || [];
         const assigneeId = botIds.length === 1 ? botIds[0] : "";
         const ids = botIds;
         const split = splitSendTargets(ids);
@@ -4432,6 +4591,7 @@
         if (replyTo) payload.replyTo = replyTo;
         if (attachments.length) payload.attachments = attachments;
         if (assigneeId) payload.assigneeId = assigneeId;
+        if (botIds && botIds.length) payload.mentions = botIds;
         if (here) {
           state.messages = state.messages.concat([
             {
@@ -4481,7 +4641,7 @@
               '"><span class="avatar sm" style="background:' +
               hue(bot.handle) +
               '">' +
-              escapeHtml(initials(bot.name)) +
+              avatarFace(bot) +
               '</span><span class="assign-copy"><strong>' +
               escapeHtml(bot.name) +
               "</strong><span>@" +
@@ -4547,8 +4707,15 @@
           openAssign(cands, { raw: raw, packed: packed, replyTo: replyTo });
           return;
         }
-        const botIds = botsFromSend(raw);
-        const assigneeId = cands.length === 1 ? cands[0].id : "";
+        const fromReply = replyAuthorId(replyTo);
+        const botIds = summoned.length
+          ? summoned
+          : fromReply
+            ? [fromReply]
+            : botsFromSend(raw);
+        const assigneeId = summoned.length === 1
+          ? summoned[0]
+          : fromReply || (cands.length === 1 ? cands[0].id : "");
         await flushSend(raw, packed, replyTo, botIds, assigneeId);
       });
       function asLibList(value) {
@@ -5537,7 +5704,9 @@
               ? '<span class="traj-av" style="background:' +
                 hue(bot.handle) +
                 '">' +
-                escapeHtml(glyph) +
+                (portraitUrl(bot)
+                  ? '<img alt="" src="' + escapeHtml(portraitUrl(bot)) + '">'
+                  : escapeHtml(glyph)) +
                 "</span>"
               : '<span class="traj-av you">' + escapeHtml(glyph) + "</span>";
             return (

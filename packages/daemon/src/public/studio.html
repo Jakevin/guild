@@ -51,24 +51,32 @@
         </div>
         <div class="rpg-scene is-inn" id="scene-inn" hidden>
           <div class="inn-map">
-            <div class="inn-wall"></div>
-            <div class="inn-rail"></div>
-            <div class="inn-bar"></div>
-            <div class="inn-bottles" id="inn-bottles"></div>
-            <div class="inn-table t1"></div>
-            <div class="inn-table t2"></div>
-            <div class="inn-barrel b1"></div>
-            <div class="inn-barrel b2"></div>
-            <div class="inn-hearth"></div>
+            <div class="inn-wall">
+              <span class="inn-window"></span>
+              <span class="inn-window"></span>
+              <span class="inn-window"></span>
+              <span class="inn-window"></span>
+            </div>
+            <div class="inn-nook inn-nook-l">
+              <span class="inn-prop plant"></span>
+              <span class="inn-prop plant"></span>
+            </div>
+            <div class="inn-nook inn-nook-r">
+              <div class="inn-bar"></div>
+              <div class="inn-bottles" id="inn-bottles"></div>
+            </div>
             <div class="inn-actors" id="inn-actors"></div>
           </div>
           <button type="button" class="rpg-exit" id="leave-inn" data-i18n="studio.leave">出門</button>
         </div>
         <div class="rpg-dialog" id="rpg-dialog">
           <div class="rpg-dialog-inner">
-            <div class="rpg-name" id="rpg-name">酒館</div>
-            <p class="rpg-line" id="rpg-line">夜晚的編制還開著。點那扇門進去。</p>
-            <div class="rpg-acts" id="rpg-acts"></div>
+            <img class="rpg-face" id="rpg-face" alt="" hidden />
+            <div class="rpg-copy">
+              <div class="rpg-name" id="rpg-name">酒館</div>
+              <p class="rpg-line" id="rpg-line">夜晚的編制還開著。點那扇門進去。</p>
+              <div class="rpg-acts" id="rpg-acts"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -88,6 +96,7 @@
           <input name="oneLiner" placeholder="這名冒險者在編制裡做什麼" data-i18n-placeholder="studio.oneLinerPh" />
           <div class="card-foot">
             <button type="button" class="ghost danger" id="delete-bot" hidden data-i18n="bot.delete">請這名冒險者離席</button>
+            <button type="button" class="ghost" id="gen-look" hidden data-i18n="studio.genLook">生成形象</button>
             <div class="save-row">
               <p class="block-flash" hidden></p>
               <button type="button" class="save-md" data-save="identity" hidden>儲存名字</button>
@@ -183,7 +192,7 @@
       let openId = "";
       let activeTags = new Set();
       let showAllSkills = false;
-      let rpgTalk = { name: "", line: "", acts: "" };
+      let rpgTalk = { name: "", line: "", acts: "", face: "" };
       const PICKED = "__picked__";
       const REST_CAP = 12;
 
@@ -197,6 +206,8 @@
           document.title = t("studio.editDocTitle");
           submit.hidden = true;
           document.getElementById("delete-bot").hidden = false;
+          document.getElementById("gen-look").hidden = false;
+          document.getElementById("gen-look").textContent = t("studio.genLook");
           mdSaves.forEach((btn) => {
             btn.hidden = false;
             const kind = btn.getAttribute("data-save");
@@ -212,6 +223,7 @@
           submit.hidden = false;
           submit.textContent = t("studio.seat");
           document.getElementById("delete-bot").hidden = true;
+          document.getElementById("gen-look").hidden = true;
           document.title = t("title.studio");
           mdSaves.forEach((btn) => {
             btn.hidden = true;
@@ -237,6 +249,24 @@
       }
       function setBlockFlash(block, kind, text) {
         setNodeFlash(block && block.querySelector(".gen-row .block-flash"), kind, text);
+      }
+      function beginBusy(button, label) {
+        if (!button || button.disabled || button.getAttribute("aria-busy") === "true") {
+          return false;
+        }
+        button.dataset.idleLabel = button.textContent;
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.classList.add("is-busy");
+        if (label) button.textContent = label;
+        return true;
+      }
+      function endBusy(button, label) {
+        if (!button) return;
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.classList.remove("is-busy");
+        button.textContent = label || button.dataset.idleLabel || button.textContent;
       }
       function saveFlashEl(kind) {
         const btn = document.querySelector('.save-md[data-save="' + kind + '"]');
@@ -547,8 +577,7 @@
           setNodeFlash(flashEl, "error", t("studio.emptyLib"));
           return;
         }
-        button.disabled = true;
-        button.textContent = t("studio.picking");
+        if (!beginBusy(button, t("studio.picking"))) return;
         try {
           const response = await fetch("/generate/skills", {
             method: "POST",
@@ -597,8 +626,7 @@
         } catch (err) {
           setNodeFlash(flashEl, "error", err.message);
         } finally {
-          button.disabled = false;
-          button.textContent = t("studio.pickSkills");
+          endBusy(button, t("studio.pickSkills"));
         }
       });
       document.getElementById("skill-search").addEventListener("input", () => {
@@ -688,8 +716,7 @@
             setBlockFlash(block, "error", t("studio.needPrompt", { kind: kind }));
             return;
           }
-          button.disabled = true;
-          button.textContent = t("studio.generating");
+          if (!beginBusy(button, t("studio.generating"))) return;
           try {
             const response = await fetch("/generate", {
               method: "POST",
@@ -729,8 +756,7 @@
           } catch (err) {
             setBlockFlash(block, "error", err.message);
           } finally {
-            button.disabled = false;
-            button.textContent = t("studio.genMd");
+            endBusy(button, t("studio.genMd"));
           }
         });
       });
@@ -887,80 +913,29 @@
         const roster = await fetch("/bots").then((r) => r.json());
         renderBar(Array.isArray(roster) ? roster : []);
         setScene("inn");
-        talk(body.name, t("studio.hireToast"), npcActs(body));
+        talk(body.name, t("studio.hireToast"), npcActs(body), body.portrait);
       });
 
-      function seedOf(key) {
-        let n = 0;
-        for (const ch of key) n = (n + ch.charCodeAt(0) * 17) % 997;
-        return n;
-      }
-      function shirtColor(key) {
-        return COLORS[seedOf(key) % COLORS.length];
-      }
-      function px(ctx, x, y, w, h, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, w, h);
-      }
-      function drawBuddy(canvas, shirt, seed) {
-        const ctx = canvas.getContext("2d");
-        canvas.width = 16;
-        canvas.height = 24;
-        ctx.imageSmoothingEnabled = false;
-        const skin = ["#f0c8a0", "#e2b184", "#c68642", "#8d5524"][seed % 4];
-        const hair = ["#2a1c12", "#c4a35a", "#1a1a1a", "#6b2d3c", "#3c4a6e"][seed % 5];
-        const outline = "#1b1510";
-        const pants = "#2a3140";
-        const style = seed % 3;
-        px(ctx, 4, 12, 8, 7, outline);
-        px(ctx, 5, 13, 6, 5, shirt);
-        px(ctx, 3, 13, 2, 5, shirt);
-        px(ctx, 11, 13, 2, 5, shirt);
-        px(ctx, 3, 18, 2, 1, skin);
-        px(ctx, 11, 18, 2, 1, skin);
-        px(ctx, 4, 4, 8, 8, outline);
-        px(ctx, 5, 5, 6, 6, skin);
-        px(ctx, 6, 7, 1, 1, outline);
-        px(ctx, 9, 7, 1, 1, outline);
-        if (style === 0) {
-          px(ctx, 4, 3, 8, 3, hair);
-          px(ctx, 4, 5, 2, 3, hair);
-          px(ctx, 10, 5, 2, 3, hair);
-        } else if (style === 1) {
-          px(ctx, 4, 2, 8, 4, hair);
-          px(ctx, 3, 5, 2, 4, hair);
-          px(ctx, 11, 5, 2, 4, hair);
-        } else {
-          px(ctx, 5, 2, 6, 2, hair);
-          px(ctx, 4, 4, 8, 2, hair);
-          px(ctx, 7, 1, 2, 2, hair);
-        }
-        px(ctx, 5, 19, 3, 4, pants);
-        px(ctx, 8, 19, 3, 4, pants);
-        px(ctx, 5, 23, 3, 1, outline);
-        px(ctx, 8, 23, 3, 1, outline);
-      }
-      const SPOTS = [
-        [22, 38],
-        [36, 34],
-        [50, 40],
-        [64, 36],
-        [26, 54],
-        [42, 58],
-        [58, 52],
-        [74, 56],
-      ];
       let barBots = [];
       function setScene(name) {
         document.getElementById("scene-street").hidden = name !== "street";
         document.getElementById("scene-inn").hidden = name !== "inn";
         document.getElementById("rpg-screen").setAttribute("data-scene", name);
       }
-      function talk(name, line, acts) {
-        rpgTalk = { name: name, line: line, acts: acts || "" };
+      function talk(name, line, acts, face) {
+        rpgTalk = { name: name, line: line, acts: acts || "", face: face || "" };
         document.getElementById("rpg-name").textContent = name;
         document.getElementById("rpg-line").textContent = line;
         document.getElementById("rpg-acts").innerHTML = acts || "";
+        const img = document.getElementById("rpg-face");
+        const url = String(face || "").trim();
+        if (url) {
+          img.hidden = false;
+          img.src = url;
+        } else {
+          img.removeAttribute("src");
+          img.hidden = true;
+        }
       }
       function npcActs(bot) {
         return (
@@ -974,6 +949,69 @@
           t("bot.settings") +
           "</a>"
         );
+      }
+      function npcSprite(bot) {
+        if (bot.portrait) {
+          return (
+            '<img class="npc-bust" alt="" src="' +
+            esc(bot.portrait) +
+            '">'
+          );
+        }
+        return (
+          '<span class="npc-blank" aria-hidden="true">' +
+          esc(initials(bot.name || bot.handle)) +
+          "</span>"
+        );
+      }
+      const lookBusy = new Set();
+      async function requestLook(id) {
+        const bot = barBots.find((item) => item.id === id);
+        if (!bot || lookBusy.has(id)) return;
+        const formBtn = document.getElementById("gen-look");
+        if (formBtn && EDIT_ID === id && !beginBusy(formBtn, t("studio.genLookBusy"))) {
+          return;
+        }
+        lookBusy.add(id);
+        const npc = document.querySelector('.rpg-npc[data-id="' + id + '"]');
+        if (npc) npc.classList.add("drawing");
+        talk(bot.name, t("studio.genLookBusy"), npcActs(bot), bot.portrait);
+        const idFlash = document.querySelector("#create-bot > .card .block-flash");
+        if (idFlash && EDIT_ID === id) {
+          setNodeFlash(idFlash, "muted", t("studio.genLookBusy"));
+        }
+        try {
+          const response = await fetch("/bots/" + encodeURIComponent(id) + "/look", {
+            method: "POST",
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            talk(bot.name, body.error || t("studio.genLookFail"), npcActs(bot), bot.portrait);
+            if (idFlash && EDIT_ID === id) {
+              setNodeFlash(idFlash, "error", body.error || t("studio.genLookFail"));
+            }
+            return;
+          }
+          const i = barBots.findIndex((item) => item.id === id);
+          if (i >= 0) barBots[i] = Object.assign({}, barBots[i], body);
+          await renderBar(barBots);
+          document.querySelectorAll(".rpg-npc").forEach((el) => {
+            el.classList.toggle("on", el.getAttribute("data-id") === id);
+          });
+          talk(body.name || bot.name, t("studio.genLookDone"), npcActs(body), body.portrait);
+          if (idFlash && EDIT_ID === id) {
+            setNodeFlash(idFlash, "health", t("studio.genLookDone"));
+          }
+        } catch (err) {
+          talk(bot.name, t("studio.genLookFail"), npcActs(bot), bot.portrait);
+          if (idFlash && EDIT_ID === id) {
+            setNodeFlash(idFlash, "error", t("studio.genLookFail"));
+          }
+        } finally {
+          lookBusy.delete(id);
+          if (npc) npc.classList.remove("drawing");
+          if (formBtn && EDIT_ID === id) endBusy(formBtn, t("studio.genLook"));
+        }
       }
       function renderSideRoster(bots) {
         const hire = document.getElementById("side-hire");
@@ -997,48 +1035,55 @@
           })
           .join("");
       }
-      function renderBar(bots) {
+      async function renderBar(bots) {
         barBots = bots || [];
         renderSideRoster(barBots);
         const bottles = ["#c44", "#4a8", "#c84", "#48c", "#a4c", "#cc8", "#844", "#4cc"];
         document.getElementById("inn-bottles").innerHTML = bottles
           .map((c) => '<span style="background:' + c + '"></span>')
           .join("");
-        const roster = barBots.slice(0, SPOTS.length - 1);
-        const nodes = roster.map((bot, i) => {
-          const spot = SPOTS[i];
+        const diving = {};
+        try {
+          const space = await fetch("/workspace").then((r) => r.json());
+          (space.live || []).forEach((row) => {
+            if (row && row.botId) diving[row.botId] = true;
+          });
+        } catch {
+          /* roster still renders if live is down */
+        }
+        const station = (inner) =>
+          '<div class="inn-station"><span class="inn-desk" aria-hidden="true"><span class="inn-monitor"></span></span>' +
+          inner +
+          "</div>";
+        const nodes = barBots.map((bot) => {
           const on = EDIT_ID === bot.id ? " on" : "";
-          return (
+          const live = Boolean(diving[bot.id]);
+          return station(
             '<button type="button" class="rpg-npc' +
-            on +
-            '" style="left:' +
-            spot[0] +
-            "%;top:" +
-            spot[1] +
-            '%" data-id="' +
-            bot.id +
-            '"><canvas class="buddy" data-handle="' +
-            bot.handle +
-            '"></canvas><span class="tag">' +
-            esc(bot.name) +
-            "</span></button>"
+              on +
+              '" data-id="' +
+              bot.id +
+              '"><span class="npc-state' +
+              (live ? " live" : "") +
+              '">' +
+              esc(live ? t("studio.diving") : t("studio.idle")) +
+              "</span>" +
+              npcSprite(bot) +
+              '<span class="tag">' +
+              esc(bot.name) +
+              "</span></button>",
           );
         });
-        const hireSpot = SPOTS[Math.min(roster.length, SPOTS.length - 1)];
         nodes.push(
-          '<button type="button" class="rpg-npc vacant" style="left:' +
-            hireSpot[0] +
-            "%;top:" +
-            hireSpot[1] +
-            '%" data-id="hire"><canvas class="buddy" data-handle="recruit"></canvas><span class="tag">' +
-          t("studio.hireChip") +
-          "</span></button>",
+          station(
+            '<button type="button" class="rpg-npc vacant" data-id="hire"><span class="npc-state">' +
+              esc(t("studio.idle")) +
+              '</span><span class="npc-blank" aria-hidden="true">?</span><span class="tag">' +
+              t("studio.hireChip") +
+              "</span></button>",
+          ),
         );
         document.getElementById("inn-actors").innerHTML = nodes.join("");
-        document.querySelectorAll("#inn-actors canvas.buddy").forEach((canvas) => {
-          const handle = canvas.getAttribute("data-handle") || "";
-          drawBuddy(canvas, shirtColor(handle), seedOf(handle));
-        });
       }
       document.getElementById("enter-inn").addEventListener("click", () => {
         setScene("inn");
@@ -1062,11 +1107,16 @@
         }
         const bot = barBots.find((item) => item.id === id);
         if (!bot) return;
-        talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot));
+        talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot), bot.portrait);
       });
       document.getElementById("rpg-acts").addEventListener("click", (event) => {
         const link = event.target.closest('a[href="#hire"]');
         if (link) document.getElementById("hire").hidden = false;
+        const look = event.target.closest("[data-look]");
+        if (look) requestLook(look.getAttribute("data-look"));
+      });
+      document.getElementById("gen-look").addEventListener("click", () => {
+        if (EDIT_ID) requestLook(EDIT_ID);
       });
 
       async function boot() {
@@ -1087,7 +1137,11 @@
         }
         allSkills = mergeSkills(guild, host);
         const bots = await fetch("/bots").then((r) => r.json());
-        renderBar(Array.isArray(bots) ? bots : []);
+        await renderBar(Array.isArray(bots) ? bots : []);
+        if (location.hash === "#inn") {
+          setScene("inn");
+          talk(t("studio.keeper"), t("studio.keeperLine"), "");
+        }
         if (EDIT_ID) {
           const response = await fetch("/bots/" + encodeURIComponent(EDIT_ID));
           const bot = await response.json();
@@ -1107,7 +1161,7 @@
           selected = new Set(bot.skillIds || []);
           setFlash("muted", t("studio.editing", { handle: bot.handle }));
           setScene("inn");
-          talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot));
+          talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot), bot.portrait);
         } else {
           setScene("street");
           document.getElementById("hire").hidden = true;
@@ -1119,7 +1173,7 @@
         applyStudioCopy();
         render();
         renderBar(barBots);
-        if (rpgTalk.name) talk(rpgTalk.name, rpgTalk.line, rpgTalk.acts);
+        if (rpgTalk.name) talk(rpgTalk.name, rpgTalk.line, rpgTalk.acts, rpgTalk.face);
       });
       boot().catch((err) => setFlash("error", err.message));
     </script>

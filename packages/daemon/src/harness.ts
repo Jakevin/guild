@@ -156,7 +156,15 @@ export function gateTool(
   if (sandbox === "full_access") return null;
 
   if (sandbox === "read_only") {
-    if (name === "read" || name === "list" || name === "skill") return null;
+    if (
+      name === "read" ||
+      name === "list" ||
+      name === "skill" ||
+      name === "spawn" ||
+      name === "read_spawn"
+    ) {
+      return null;
+    }
     return {
       text: `sandbox=read_only refused ${name}`,
       isError: true,
@@ -174,7 +182,13 @@ export function gateTool(
     };
   }
 
-  if (name === "read" || name === "list" || name === "skill" || name === "spawn") {
+  if (
+    name === "read" ||
+    name === "list" ||
+    name === "skill" ||
+    name === "spawn" ||
+    name === "read_spawn"
+  ) {
     return null;
   }
 
@@ -296,18 +310,17 @@ export async function runAgentLoop(input: {
       if (traces.length) return { text: emptyAfterTools, traces, thinking };
       return input.nullIfNoTraces ? null : { text: emptyAfterTools, traces, thinking };
     }
-    const outcomes: ToolOutcome[] = [];
-    for (const call of asked.calls) {
-      outcomes.push(
-        await executeToolTraced(
+    const outcomes = await Promise.all(
+      asked.calls.map((call) =>
+        executeToolTraced(
           call.name,
           call.args,
           input.toolCtx,
           traces,
           thinking,
         ),
-      );
-    }
+      ),
+    );
     input.onTools?.(asked.calls, outcomes);
   }
 }

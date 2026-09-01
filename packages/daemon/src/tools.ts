@@ -75,7 +75,24 @@ export type ToolContext = {
     args: Record<string, unknown>,
     ctx: ToolContext,
   ) => Promise<ToolOutcome>;
+  /** Devin-style background spawn handles for this turn. Same Map across dispatch clones. */
+  spawnHandles?: Map<string, SpawnHandle>;
 };
+
+export type SpawnHandle = {
+  id: string;
+  title: string;
+  profile: string;
+  done: Promise<ToolOutcome>;
+  outcome?: ToolOutcome;
+  abort?: AbortController;
+};
+
+/** Pin the turn's handle Map before dispatch spreads a rest clone. */
+export function attachSpawnHandles(ctx: ToolContext): Map<string, SpawnHandle> {
+  if (!ctx.spawnHandles) ctx.spawnHandles = new Map();
+  return ctx.spawnHandles;
+}
 
 const BASE_TOOLS: Tool[] = [
   {
@@ -178,7 +195,7 @@ export function guildTools(
       name: Type.String({ description: "Skill name or slug" }),
     }),
   });
-  if ((ctx.spawnDepth ?? 0) < 1 && sandbox !== "read_only") {
+  if ((ctx.spawnDepth ?? 0) < 1) {
     const agents = ctx.subagents ?? [];
     const listed = agents
       .slice(0, 40)
@@ -190,19 +207,78 @@ export function guildTools(
     const catalog = listed ? ` Available: ${listed}.` : "";
     tools.push({
       name: "spawn",
-      description: `Spawn a subagent with a fresh context. It returns a summary, not a transcript. Use for parallel exploration, review, or a bounded implementation slice.${catalog} Subagents cannot spawn children.`,
+      description: `Delegate to a specialist (Devin run_subagent / Pi subagent / Codex spawn_agent). Fresh context; returns a summary, not a transcript. You stay coordinator. Single: title + task + profile (aliases: description/prompt, name/agent). Profiles: explorer (read-only survey), reviewer (read-only critique), worker (bounded patch). luna-explore maps to explorer, luna-general to worker. Independent surveys: background=true (is_background), then read_spawn with the agent_id before the final reply. Parallel: several spawn calls this round, or tasks: [{title, task, profile}, ...] (max 8, 4 at a time). Do not spawn for one known file or a one-line change.${catalog} A read_only parent still spawns; the child stays read_only. Subagents cannot spawn children.`,
       parameters: Type.Object({
-        prompt: Type.String({
-          description: "Self-contained task for the subagent. Include paths, constraints, and the deliverable.",
-        }),
+        prompt: Type.Optional(
+          Type.String({
+            description: "Self-contained task. Same as task.",
+          }),
+        ),
+        task: Type.Optional(
+          Type.String({ description: "Alias of prompt (Devin/Pi)" }),
+        ),
         name: Type.Optional(
           Type.String({
-            description: "Subagent name or slug from the library. Default worker.",
+            description: "Subagent name or slug. Default worker.",
+          }),
+        ),
+        agent: Type.Optional(
+          Type.String({ description: "Alias of name (Pi)" }),
+        ),
+        profile: Type.Optional(
+          Type.String({
+            description:
+              "Devin profile: explorer | reviewer | worker. luna-explore → explorer, luna-general → worker.",
           }),
         ),
         description: Type.Optional(
           Type.String({
             description: "Short 3–8 word label for the chat UI",
+          }),
+        ),
+        title: Type.Optional(
+          Type.String({ description: "Alias of description (Devin title)" }),
+        ),
+        background: Type.Optional(
+          Type.Boolean({
+            description:
+              "If true, return agent_id immediately and keep working. Then call read_spawn.",
+          }),
+        ),
+        is_background: Type.Optional(
+          Type.Boolean({ description: "Alias of background (Devin)" }),
+        ),
+        tasks: Type.Optional(
+          Type.Array(
+            Type.Object({
+              prompt: Type.Optional(Type.String()),
+              task: Type.Optional(Type.String()),
+              name: Type.Optional(Type.String()),
+              agent: Type.Optional(Type.String()),
+              profile: Type.Optional(Type.String()),
+              description: Type.Optional(Type.String()),
+              title: Type.Optional(Type.String()),
+            }),
+            {
+              description:
+                "Pi parallel: run these subagents concurrently (max 8, 4 at a time).",
+            },
+          ),
+        ),
+      }),
+    });
+    tools.push({
+      name: "read_spawn",
+      description:
+        "Read a background spawn started with background=true (Devin read_subagent). Pass agent_id from spawn. block=true (default) waits; block=false returns running or the summary.",
+      parameters: Type.Object({
+        agent_id: Type.Optional(
+          Type.String({ description: "Id returned by background spawn" }),
+        ),
+        id: Type.Optional(Type.String({ description: "Alias of agent_id" })),
+        block: Type.Optional(
+          Type.Boolean({
+            description: "Wait for the child. Default true.",
           }),
         ),
       }),
@@ -222,7 +298,7 @@ export const GUILD_TOOLS: Tool[] = guildTools();
 
 function openaiParameters(name: string): {
   type: "object";
-  properties: Record<string, { type: "string"; description?: string }>;
+  properties: Record<string, unknown>;
   required: string[];
 } {
   if (name === "run") {
@@ -257,14 +333,42 @@ function openaiParameters(name: string): {
     };
   }
   if (name === "spawn") {
+    const job = {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "Self-contained task. Same as task." },
+        task: { type: "string", description: "Alias of prompt" },
+        name: { type: "string", description: "Subagent name or slug" },
+        agent: { type: "string", description: "Alias of name" },
+        profile: { type: "string", description: "explorer | reviewer | worker" },
+        description: { type: "string", description: "Short UI label" },
+        title: { type: "string", description: "Alias of description" },
+      },
+    };
     return {
       type: "object",
       properties: {
-        prompt: { type: "string", description: "Self-contained task" },
-        name: { type: "string", description: "Subagent name or slug" },
-        description: { type: "string", description: "Short UI label" },
+        ...job.properties,
+        background: { type: "boolean", description: "Return agent_id immediately" },
+        is_background: { type: "boolean", description: "Alias of background" },
+        tasks: {
+          type: "array",
+          description: "Pi parallel: [{name, prompt}, ...] max 8, 4 at a time",
+          items: job,
+        },
       },
-      required: ["prompt"],
+      required: [],
+    };
+  }
+  if (name === "read_spawn") {
+    return {
+      type: "object",
+      properties: {
+        agent_id: { type: "string", description: "Id from background spawn" },
+        id: { type: "string", description: "Alias of agent_id" },
+        block: { type: "boolean", description: "Wait. Default true." },
+      },
+      required: [],
     };
   }
   if (name === "image_gen") {
@@ -327,6 +431,7 @@ export const BUILTIN_TOOL_NAMES = [
   "list",
   "skill",
   "spawn",
+  "read_spawn",
   "image_gen",
   "browser",
 ] as const;
@@ -339,6 +444,7 @@ export async function executeTool(
   try {
     const refused = gateTool(name, args, ctx);
     if (refused) return refused;
+    attachSpawnHandles(ctx);
     if (ctx.dispatch) {
       const { dispatch, ...rest } = ctx;
       return await dispatch(name, args, rest);
@@ -384,13 +490,12 @@ export async function builtinExecute(
     if (name === "list") return listDir(asString(args.path), pathBase);
     if (name === "skill") return loadSkill(asString(args.name), ctx.skills ?? []);
     if (name === "spawn") {
-      const { spawnSubagent } = await import("./subagent.ts");
-      return spawnSubagent({
-        prompt: asString(args.prompt),
-        name: typeof args.name === "string" ? args.name : "",
-        description: typeof args.description === "string" ? args.description : "",
-        ctx,
-      });
+      const { runSpawnJobs } = await import("./subagent.ts");
+      return runSpawnJobs(args, ctx);
+    }
+    if (name === "read_spawn") {
+      const { readSpawn } = await import("./subagent.ts");
+      return readSpawn(args, ctx);
     }
     if (name === "image_gen") {
       const { generateImage } = await import("./image-gen.ts");
@@ -713,7 +818,8 @@ Never say you cannot access this machine. Never tell the user to run the command
 When the question is about this computer, call tools first, then answer with evidence from the output.
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
 To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default is a Hermes-shaped snapshot of the user's last_used Chrome profile (never the live profile). Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway empty profile.
-To delegate a bounded slice (explore, review, implement) to a specialist with its own context, call spawn. Pass a self-contained prompt. The subagent returns a summary. Subagents cannot spawn children.
+You stay coordinator. Spawn is the specialist, not a last resort (Devin run_subagent / Pi subagent / Codex spawn_agent). Call spawn for a survey (explorer / luna-explore), a critique (reviewer), or a bounded patch (worker / luna-general) instead of stuffing that work into this turn with list/read/run. Do not spawn for one known file or a one-line change. Independent surveys: spawn with background=true, keep working, then read_spawn {agent_id, block:true} before the final reply. Or several spawn calls / tasks: [{title, task, profile}] this round. Task must be self-contained (child has a fresh context). Do not let a child commit, push, or decide architecture. A read_only seat can still spawn; the child stays read_only. Subagents cannot spawn children.
+Independent tool calls in one round also run in parallel — fire several reads/searches together.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.
 To follow a staffed skill, call skill with its exact name (or slug) before applying it. Relative paths in a skill resolve against that skill's base directory.
 Prefer small commands. macOS RAM: sysctl hw.memsize ; memory_pressure. Disk: df -h.`;

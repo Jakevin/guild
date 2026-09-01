@@ -8,6 +8,7 @@ import { chatTurnSystem } from "../src/handlers.ts";
 import { writeModelsFile } from "../src/llm.ts";
 import {
   applyMemoryUpdate,
+  localMergeQuestMemory,
   shouldHarvestMemory,
 } from "../src/memory.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
@@ -41,6 +42,18 @@ test("shouldHarvestMemory skips greetings and empty turns", () => {
     shouldHarvestMemory("之後這個專案用 pnpm，測試指令是 pnpm test"),
     true,
   );
+});
+
+test("localMergeQuestMemory appends a closed quest under a heading", () => {
+  const merged = localMergeQuestMemory(
+    "# Parent\n- keep H1 Pixelify\n",
+    "# pages\n- four locales on site/index.html\n",
+    "pages",
+  );
+  assert.match(String(merged), /Pixelify/);
+  assert.match(String(merged), /site\/index\.html/);
+  assert.match(String(merged), /## pages/);
+  assert.equal(localMergeQuestMemory("# same", "", "x"), null);
 });
 
 test("applyMemoryUpdate keeps NO_CHANGE and redacts keys", () => {

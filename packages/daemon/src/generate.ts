@@ -350,16 +350,16 @@ When work belongs to someone else, put @handle at the start of a line with a wri
 - Done when
 - Constraints / out of scope
 - Files or evidence
-Each line-start @handle on this quest starts that seat. Mentions in the middle of a sentence do not dispatch.
+Each line-start @handle on this quest starts that seat. A markdown numbered list that names a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster (max ${CHANNEL_ROSTER_CAP} on a quest).
-Only line-start @handle a seat the human already named this turn, or that they asked you to split the work to. Do not invent a third seat. If B must wait for A, do not @ B this turn.
+You may @handle any staffed teammate whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now — a numbered list that names later seats starts them this turn too. Do not write a plan and stop.
 Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
 - Memory: Channel.md is the task. MEMORY.md is standing notes. The compact log is working memory — do not recap the whole thread.
 - Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
-- Act: inspect, smallest change, verify, stop. Spawn is a specialist for a bounded slice of THIS seat's job (explore / review / implement) with a fresh context. Do not spawn to do another staffed bot's job — @handle them instead.`;
+- Act: you coordinate this seat. Spawn first when the work is a repo survey (\`explorer\` / luna-explore), a critique (\`reviewer\`), or a bounded isolated patch (\`worker\` / luna-general); then verify the child's evidence and decide. Independent surveys: spawn background=true, keep working, then read_spawn before you answer. Sequential: background=false and wait. Do not spawn for one known file, a one-line change, or a question that needs no repo. Do not let children commit, push, or make the architecture call. Do not skip spawn just because you can do the work yourself. Do not spawn to do another staffed bot's job — @handle them instead.`;
 
 export function buildChatSystem(input: {
   botName: string;
@@ -397,29 +397,57 @@ export function buildChatSystem(input: {
         "</system-reminder>",
       ].join("\n")
     : "";
-  const spawnLine = subagents.length
-    ? [
-        "<available_subagents>",
-        ...subagents.slice(0, 40).map((item) => {
-          const key = item.slug || item.name;
-          const desc = (item.description || item.name)
-            .replace(/\s+/g, " ")
-            .trim()
-            .slice(0, 220);
-          const mode = item.readOnly ? "read-only" : "read-write";
-          return `- \`${key}\` (${mode}): ${desc}`;
-        }),
-        "</available_subagents>",
-        "Call spawn with the exact name (or slug) and a self-contained prompt. If the user writes /name matching a subagent, spawn that one. The child has a fresh context and returns a summary.",
-        wantSpawn.length
-          ? `This turn the user invoked ${wantSpawn
-              .map((item) => "`/" + (item.slug || item.name) + "`")
-              .join(", ")}. Call spawn with that exact name first, with a self-contained prompt covering their request. Do not skip this and do the work yourself.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "";
+  const spawnCatalog: Array<{
+    slug?: string;
+    name: string;
+    description?: string;
+    readOnly?: boolean;
+  }> = subagents.length
+    ? subagents
+    : [
+        {
+          slug: "explorer",
+          name: "explorer",
+          description:
+            "Read-only codebase search. Returns absolute paths and a direct answer.",
+          readOnly: true,
+        },
+        {
+          slug: "reviewer",
+          name: "reviewer",
+          description: "Read-only review of correctness, risk, and missing tests.",
+          readOnly: true,
+        },
+        {
+          slug: "worker",
+          name: "worker",
+          description:
+            "Implementation executor. Smallest correct change, then verify.",
+          readOnly: false,
+        },
+      ];
+  const spawnLine = [
+    "<available_subagents>",
+    ...spawnCatalog.slice(0, 40).map((item) => {
+      const key = item.slug || item.name;
+      const desc = (item.description || item.name)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      const mode = item.readOnly ? "read-only" : "read-write";
+      return `- \`${key}\` (${mode}): ${desc}`;
+    }),
+    "</available_subagents>",
+    "Call spawn with the exact name (or slug) and a self-contained prompt (Pi: agent+task). Default: explorer to orient across unknown files, reviewer to critique a change, worker for an isolated patch. Independent slices: several spawn calls in this round, or tasks: [{name, prompt}]. You stay this seat's coordinator. Skipping spawn and reading the whole tree yourself is the wrong default.",
+    "If the user writes /name matching a subagent, spawn that one. The child has a fresh context and returns a summary.",
+    wantSpawn.length
+      ? `This turn the user invoked ${wantSpawn
+          .map((item) => "`/" + (item.slug || item.name) + "`")
+          .join(", ")}. Call spawn with that exact name first, with a self-contained prompt covering their request. Do not skip this and do the work yourself.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const channel = (input.channelMd ?? "").trim();
   const channelBlock = channel
     ? `# Channel.md\nThis channel's operating notes written by the user. Follow them for this room. They outrank MEMORY.md.\n\n${channel.slice(0, 4000)}`
@@ -515,7 +543,7 @@ export function localChatReply(
   userMessage: string,
 ): string {
   const clip = userMessage.trim().slice(0, 120);
-  return `【${botName} @${handle}】收到。「${clip}」\n\n沒有可用模型，本機工具還沒辦法跑。到私訊幫我選一個模型後再問。`;
+  return `【${botName} @${handle}】收到。「${clip}」\n\n沒有可用模型，本機工具還沒辦法跑。到模型頁（/settings）連接訂閱或填 API key，套用主模型後再問。`;
 }
 
 async function tryChatLlm(
@@ -569,6 +597,8 @@ async function tryChatLlm(
     env,
     prefer,
     checkpoint: input.compact,
+    onProgress: input.onProgress,
+    signal: input.signal,
   });
   if (packed.compacted && packed.checkpoint && input.onCompact) {
     input.onCompact(packed.checkpoint);
@@ -594,6 +624,7 @@ async function tryChatLlm(
       pullSteers: input.pullSteers,
       signal: input.signal,
       mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
+      spawnHandles: new Map(),
       ...policyFor(env, {
         sandbox: input.sandbox,
         workspace: input.workspace,

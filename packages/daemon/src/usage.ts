@@ -59,13 +59,19 @@ export function fromOpenAiUsage(usage?: {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  input_tokens_details?: { cached_tokens?: number };
 } | null): ChatUsage {
   if (!usage) return { rounds: 1 };
   const input = num(usage.prompt_tokens);
   const output = num(usage.completion_tokens);
+  const cacheRead =
+    num(usage.prompt_tokens_details?.cached_tokens) ??
+    num(usage.input_tokens_details?.cached_tokens);
   return {
     input,
     output,
+    cacheRead,
     totalTokens: num(usage.total_tokens) || sum(input, output),
     rounds: 1,
   };
@@ -74,6 +80,8 @@ export function fromOpenAiUsage(usage?: {
 export function fromAnthropicUsage(usage?: {
   input_tokens?: number;
   output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 } | null): ChatUsage {
   if (!usage) return { rounds: 1 };
   const input = num(usage.input_tokens);
@@ -81,6 +89,8 @@ export function fromAnthropicUsage(usage?: {
   return {
     input,
     output,
+    cacheRead: num(usage.cache_read_input_tokens),
+    cacheWrite: num(usage.cache_creation_input_tokens),
     totalTokens: sum(input, output),
     rounds: 1,
   };

@@ -1057,6 +1057,109 @@ function thinkingText(message: AssistantMessage | undefined): string {
     .trim();
 }
 
+/**
+ * Codex `DEFAULT_STREAM_IDLE_TIMEOUT_MS`. No tokens on the stream — not a
+ * wall clock on the whole turn. Do not pass this as Pi `timeoutMs` for xAI:
+ * OpenAI-completions maps that to the SDK request timeout and kills thinking.
+ */
+export const STREAM_IDLE_TIMEOUT_MS = 300_000;
+
+export function isTransientLlmError(err: unknown): boolean {
+  if (err instanceof StreamIdleError) return false;
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  return /econnreset|econnrefused|etimedout|enotfound|eai_again|fetch failed|socket|network|empty reply|429|502|503|504|5\d\d/i.test(
+    text,
+  );
+}
+
+export async function withTransientRetries<T>(
+  run: () => Promise<T>,
+  opts: {
+    signal?: AbortSignal;
+    attempts?: number;
+    onRetry?: (attempt: number, err: unknown) => void;
+  } = {},
+): Promise<T> {
+  const attempts = opts.attempts ?? 3;
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    if (opts.signal?.aborted) {
+      throw userAborted(opts.signal);
+    }
+    try {
+      return await run();
+    } catch (err) {
+      last = err;
+      if (err instanceof Error && err.name === "AbortError") throw err;
+      if (opts.signal?.aborted) throw err;
+      if (!isTransientLlmError(err) || i === attempts - 1) throw err;
+      opts.onRetry?.(i + 1, err);
+      await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+}
+
+export class StreamIdleError extends Error {
+  readonly idleMs: number;
+  constructor(idleMs: number) {
+    super(
+      `stream idle: no tokens for ${Math.round(idleMs / 1000)}s (Codex-style; not a turn wall clock). Resend or switch models.`,
+    );
+    this.name = "StreamIdleError";
+    this.idleMs = idleMs;
+  }
+}
+
+export function startStreamIdle(
+  idleMs: number,
+  parent?: AbortSignal,
+): {
+  signal: AbortSignal;
+  bump: () => void;
+  dispose: () => void;
+  timedOut: () => boolean;
+} {
+  const ctrl = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const fire = () => {
+    if (timedOut || ctrl.signal.aborted) return;
+    timedOut = true;
+    ctrl.abort();
+  };
+  const bump = () => {
+    if (timedOut || parent?.aborted) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(fire, idleMs);
+  };
+  const onParent = () => {
+    if (timer) clearTimeout(timer);
+    ctrl.abort();
+  };
+  if (parent?.aborted) {
+    ctrl.abort();
+  } else {
+    parent?.addEventListener("abort", onParent, { once: true });
+  }
+  bump();
+  return {
+    signal: ctrl.signal,
+    bump,
+    dispose: () => {
+      if (timer) clearTimeout(timer);
+      parent?.removeEventListener("abort", onParent);
+    },
+    timedOut: () => timedOut,
+  };
+}
+
+function userAborted(signal?: AbortSignal): Error {
+  const err = new Error("aborted");
+  err.name = "AbortError";
+  return err;
+}
+
 /** Pi streamSimple: Think chips only from thinking_delta, not a planted placeholder. */
 async function streamOAuthMessage(
   models: MutableModels,
@@ -1066,7 +1169,11 @@ async function streamOAuthMessage(
   toolCtx: ToolContext,
   traces: ToolTrace[],
 ): Promise<AssistantMessage> {
-  const stream = models.streamSimple(model, context, options);
+  const idle = startStreamIdle(STREAM_IDLE_TIMEOUT_MS, options?.signal);
+  const stream = models.streamSimple(model, context, {
+    ...options,
+    signal: idle.signal,
+  });
   let lastEmit = 0;
   const flush = (partial: AssistantMessage | undefined, force: boolean) => {
     const think = thinkingText(partial);
@@ -1076,19 +1183,40 @@ async function streamOAuthMessage(
     lastEmit = now;
     emitProgress(toolCtx, traces, think);
   };
-  for await (const event of stream) {
-    if (event.type === "thinking_start" || event.type === "thinking_delta") {
-      flush(event.partial, event.type === "thinking_start");
-    } else if (event.type === "thinking_end") {
-      flush(event.partial, true);
-    } else if (event.type === "done") {
-      flush(event.message, true);
-      return event.message;
-    } else if (event.type === "error") {
-      return event.error;
+  const failIfIdle = (): never => {
+    if (options?.signal?.aborted) throw userAborted(options.signal);
+    throw new StreamIdleError(STREAM_IDLE_TIMEOUT_MS);
+  };
+  try {
+    for await (const event of stream) {
+      idle.bump();
+      if (event.type === "thinking_start" || event.type === "thinking_delta") {
+        flush(event.partial, event.type === "thinking_start");
+      } else if (event.type === "thinking_end") {
+        flush(event.partial, true);
+      } else if (event.type === "done") {
+        flush(event.message, true);
+        return event.message;
+      } else if (event.type === "error") {
+        if (idle.timedOut() || options?.signal?.aborted) failIfIdle();
+        return event.error;
+      }
     }
+    if (idle.timedOut() || options?.signal?.aborted) failIfIdle();
+    return stream.result();
+  } catch (err) {
+    if (err instanceof StreamIdleError) throw err;
+    if (err instanceof Error && err.name === "AbortError") {
+      if (options?.signal?.aborted) throw err;
+      if (idle.timedOut()) throw new StreamIdleError(STREAM_IDLE_TIMEOUT_MS);
+    }
+    if (idle.timedOut() && !(options?.signal?.aborted)) {
+      throw new StreamIdleError(STREAM_IDLE_TIMEOUT_MS);
+    }
+    throw err;
+  } finally {
+    idle.dispose();
   }
-  return stream.result();
 }
 
 function abortWhen(signal?: AbortSignal): Promise<never> {
@@ -1252,21 +1380,70 @@ export async function completeOAuth(input: {
       if (fitted.length < transcript.length) {
         transcript.splice(0, transcript.length, ...fitted);
       }
-      const result = await Promise.race([
-        streamOAuthMessage(
-          models,
-          model,
-          {
-            systemPrompt: input.system,
-            messages: transcript,
-            ...(useTools ? { tools } : {}),
+      let result: AssistantMessage;
+      try {
+        result = await withTransientRetries(
+          async () => {
+            const got = await Promise.race([
+              streamOAuthMessage(
+                models,
+                model,
+                {
+                  systemPrompt: input.system,
+                  messages: transcript,
+                  ...(useTools ? { tools } : {}),
+                },
+                options,
+                toolCtx,
+                traces,
+              ),
+              abortWhen(options.signal),
+            ]);
+            if (got.stopReason === "aborted") {
+              const err = new Error("aborted");
+              err.name = "AbortError";
+              throw err;
+            }
+            if (got.stopReason === "error") {
+              throw new Error(
+                formatOAuthError(sub.id, got.errorMessage) ||
+                  `${sub.id} request failed`,
+              );
+            }
+            const text = contentText(got.content).trim();
+            const toolCalls =
+              got.stopReason === "toolUse"
+                ? got.content.filter(
+                    (part): part is Extract<typeof part, { type: "toolCall" }> =>
+                      part.type === "toolCall",
+                  )
+                : [];
+            if (!toolCalls.length && !text && traces.length === 0) {
+              throw new Error(`${sub.id} returned an empty reply`);
+            }
+            return got;
           },
-          options,
-          toolCtx,
-          traces,
-        ),
-        abortWhen(options.signal),
-      ]);
+          {
+            signal: options.signal,
+            onRetry: () => {
+              emitProgress(
+                toolCtx,
+                traces,
+                thinkingChunks.join("\n\n") || "連線中斷，重試中…",
+              );
+            },
+          },
+        );
+      } catch (err) {
+        if (err instanceof StreamIdleError) {
+          return {
+            calls: [],
+            text: err.message,
+            thinking: thinkingChunks.join("\n\n"),
+          };
+        }
+        throw err;
+      }
       if (result.stopReason === "aborted" || toolCtx.signal?.aborted || options.signal?.aborted) {
         const err = new Error("aborted");
         err.name = "AbortError";

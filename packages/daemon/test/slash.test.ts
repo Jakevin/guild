@@ -90,4 +90,6 @@ test("/explorer this turn tells the model to spawn that subagent", () => {
   assert.match(system, /available_subagents/);
   assert.match(system, /\/explorer/);
   assert.match(system, /Call spawn with that exact name first/);
+  assert.match(system, /Spawn first when/);
+  assert.match(system, /tasks: \[\{name, prompt\}\]/);
 });

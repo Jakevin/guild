@@ -18,14 +18,25 @@ import {
 } from "./generate.ts";
 import {
   liveTrajectoryEvents,
+  promoteSpawnEvent,
   synthesizeTrajectory,
   turnTrajectoryEvents,
   userTrajectoryEvent,
 } from "./trajectory.ts";
 import { importFromGithub, importFromUrl } from "./skill-import.ts";
-import { harvestBotMemory, harvestChannelMemory } from "./memory.ts";
+import {
+  harvestBotMemory,
+  harvestChannelMemory,
+  mergeQuestMemory,
+} from "./memory.ts";
 import { listHostSkills, type HostSkill } from "./host-skills.ts";
-import { GuildStore, StoreError, type LiveStep, type LiveTurn } from "./store.ts";
+import {
+  CHANNEL_ROSTER_CAP,
+  GuildStore,
+  StoreError,
+  type LiveStep,
+  type LiveTurn,
+} from "./store.ts";
 import { listSpawnRefs } from "./subagent.ts";
 import {
   importHostMcp,
@@ -38,7 +49,9 @@ import {
 import {
   assignmentFor,
   isBroadcastMention,
-  summonedHandles,
+  messageMentionIds,
+  parseMentionIds,
+  sanitizeMentionIds,
 } from "./mention.ts";
 import { slashNames } from "./slash.ts";
 import { toHistoryItem, type HistoryItem } from "./compact.ts";
@@ -59,6 +72,8 @@ export type HandlerExtras = {
   mcpTools?: McpToolRef[] | Promise<McpToolRef[]>;
   onTurnComplete?: (turn: TurnComplete) => void;
   turn?: (input: Parameters<typeof chatReply>[0]) => Promise<ChatReply>;
+  /** Bot ids the client already resolved from @mentions. */
+  mentions?: string[];
 };
 
 export function healthPayload(): HealthResponse {
@@ -242,6 +257,7 @@ export function updateBot(
     name?: string;
     handle?: string;
     oneLiner?: string;
+    portrait?: string | null;
     skillIds?: string[];
     soul?: MarkdownDraft;
     agent?: MarkdownDraft;
@@ -254,6 +270,162 @@ export function updateBot(
     ? resolveStaffSkillIds(store, input.skillIds, hosts)
     : undefined;
   return store.updateBot(id, { ...input, skillIds });
+}
+
+const LOOK_HAIR = [
+  "jet-black short crop",
+  "jet-black long straight hair",
+  "copper-red bob with blunt bangs",
+  "copper-red messy spikes",
+  "indigo long waves",
+  "indigo pixie cut",
+  "honey-blonde high ponytail",
+  "honey-blonde bowl cut",
+  "hot-pink messy spikes",
+  "hot-pink bob",
+  "ash-white curly volume",
+  "ash-white long hair",
+  "teal-tinted undercut",
+  "teal high ponytail",
+  "deep-burgundy twin braids",
+  "deep-burgundy shag",
+];
+const LOOK_CLOTH = [
+  "sunflower-yellow collared shirt",
+  "cobalt hooded jacket",
+  "rose cardigan over a cream tee",
+  "forest-green knit turtleneck",
+  "ivory blouse with a coral scarf",
+  "charcoal work vest over a rust tee",
+  "lilac haori",
+  "orange windbreaker",
+  "white lab coat over a black tee",
+  "crimson bomber jacket",
+  "mint sailor collar",
+  "navy peacoat",
+  "gold-trimmed teal capelet",
+  "checkered red-and-black shirt",
+  "pale-blue denim jacket",
+  "magenta track jacket",
+];
+const LOOK_EXTRA = [
+  "round wire glasses",
+  "small gold hoop earrings",
+  "over-ear headphones around the neck",
+  "a paintbrush tucked behind one ear",
+  "a red hair clip",
+  "a thin black choker",
+  "a knitted ear warmer",
+  "no extra accessories",
+];
+const LOOK_SKIN = [
+  "fair peach human skin",
+  "warm tan human skin",
+  "light brown human skin",
+  "deep brown human skin",
+  "golden beige human skin",
+];
+const LOOK_FACE = [
+  "round cheerful face with wide-set eyes",
+  "sharp jaw and narrow eyes",
+  "soft oval face with thick brows",
+  "heart-shaped face and a small nose",
+  "square face with a bright closed-mouth smile",
+];
+const LOOK_RACE = [
+  {
+    id: "human" as const,
+    label: "human",
+    prompt:
+      "human. Ordinary rounded human ears, fully human anatomy, no fantasy ears.",
+  },
+  {
+    id: "dwarf" as const,
+    label: "dwarf",
+    prompt:
+      "young dwarf. Stout neck, broader cheekbones, a slightly larger nose, thick brows, rounded ears, youthful (not elderly, not bald).",
+  },
+  {
+    id: "elf" as const,
+    label: "elf",
+    prompt:
+      "young elf. Long pointed ears clearly visible, fine features, almond eyes, still youthful.",
+  },
+  {
+    id: "demihuman" as const,
+    label: "demihuman",
+    prompt:
+      "demihuman who is 90% human: a human face and bust with only one subtle tell (tiny pointed ear tips, faint whisker marks, or slightly elongated canines). Not a full animal-person, not a mascot, not extra limbs.",
+  },
+];
+
+function lookSeed(key: string): number {
+  let n = 2166136261;
+  for (const ch of key) {
+    n ^= ch.charCodeAt(0);
+    n = Math.imul(n, 16777619);
+  }
+  return n >>> 0;
+}
+
+export function lookTraits(bot: { name: string; handle: string }): {
+  hair: string;
+  cloth: string;
+  extra: string;
+  skin: string;
+  face: string;
+  race: (typeof LOOK_RACE)[number];
+} {
+  const n = lookSeed(bot.handle || bot.name || "bot");
+  return {
+    hair: LOOK_HAIR[n % LOOK_HAIR.length],
+    cloth: LOOK_CLOTH[(n >>> 4) % LOOK_CLOTH.length],
+    extra: LOOK_EXTRA[(n >>> 8) % LOOK_EXTRA.length],
+    skin: LOOK_SKIN[(n >>> 12) % LOOK_SKIN.length],
+    face: LOOK_FACE[(n >>> 16) % LOOK_FACE.length],
+    race: LOOK_RACE[(n >>> 20) % LOOK_RACE.length],
+  };
+}
+
+export function lookPrompt(bot: {
+  name: string;
+  handle: string;
+  oneLiner?: string;
+}): string {
+  const role = bot.oneLiner?.trim() || "keeps a seat in the guild tavern";
+  const look = lookTraits(bot);
+  return [
+    `SNES 16-bit pixel-art bust portrait of ${bot.name} (@${bot.handle}), a unique ${look.race.label} guild adventurer.`,
+    `Race (mandatory): ${look.race.prompt}`,
+    `Mandatory look: ${look.skin}, ${look.face}, ${look.hair}, wearing a ${look.cloth}, ${look.extra}.`,
+    `They ${role}.`,
+    "Hair color, outfit, and race are locked; do not default to brown hair or a beige coat.",
+    "Natural skin tones only, never green, gray, or monster skin.",
+    "Head and shoulders only, facing the camera, chunky 16-bit pixels, limited tavern palette, cream pixel outline.",
+    "Animal Crossing crossed with Earthbound, youthful SNES NPC.",
+    "Opaque cream or tavern-wood background, no black void, no white photo studio, no checkerboard, no transparency.",
+    "Close-up character headshot, no full body, no legs, no floor, no scenery, no photorealism, no 3D render, no text, no watermark.",
+  ].join(" ");
+}
+
+export async function generateBotLook(
+  store: GuildStore,
+  id: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const bot = store.getBot(id);
+  if (!bot) throw new StoreError(404, "bot not found");
+  const { generateImage } = await import("./image-gen.ts");
+  const result = await generateImage({
+    prompt: lookPrompt(bot),
+    aspectRatio: "1:1",
+    dataDir: store.dataDir,
+    env,
+  });
+  if (result.isError || !result.publicPath) {
+    throw new StoreError(502, result.text);
+  }
+  return store.updateBot(id, { portrait: result.publicPath });
 }
 
 export async function importSkills(
@@ -356,8 +528,51 @@ export function createChannel(store: GuildStore, name: string) {
   return store.createChannel(name);
 }
 
+export function createBranch(
+  store: GuildStore,
+  parentId: string,
+  messageId: string,
+  name?: string,
+) {
+  return store.createBranch(parentId, messageId, name);
+}
+
 export function deleteChannel(store: GuildStore, id: string) {
+  const room = store.getRoom(id);
+  if (room?.parentId) {
+    throw new StoreError(400, "close the branch instead");
+  }
   return store.deleteChannel(id);
+}
+
+export async function closeBranch(
+  store: GuildStore,
+  id: string,
+  merge = false,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const room = store.getRoom(id);
+  if (!room) throw new StoreError(404, "channel not found");
+  if (room.kind !== "channel") throw new StoreError(400, "not a channel");
+  if (!room.parentId) throw new StoreError(400, "not a branch");
+  const parent = store.getRoom(room.parentId);
+  if (!parent) throw new StoreError(404, "parent not found");
+  if (merge) {
+    for (const child of store
+      .listChannels()
+      .filter((item) => item.parentId === id)) {
+      await closeBranch(store, child.id, true, env);
+    }
+    await mergeQuestMemory({
+      store,
+      parentId: parent.id,
+      childId: id,
+      questName: room.name,
+      env,
+    });
+  }
+  store.deleteChannel(id);
+  return { ok: true as const, id, parentId: parent.id, merged: Boolean(merge) };
 }
 
 export function renameChannel(store: GuildStore, id: string, name: string) {
@@ -401,16 +616,23 @@ export function openDm(store: GuildStore, botId: string) {
   return store.openDm(botId);
 }
 
+/** A seat may speak twice in one turn so report-back can resume the assigner. */
+const HANDOFF_SEAT_CAP = 2;
+
 function handoffTargets(
   store: GuildStore,
   memberIds: string[],
   replies: ChatMessage[],
   asked: string,
   history: HistoryItem[],
+  fresh: ChatMessage[],
 ): { botId: string; fromHandle: string; asked: string; history: HistoryItem[] }[] {
   const bots = store.listBots();
   const handles = bots.map((bot) => bot.handle);
-  const spoke = new Set(replies.map((row) => row.author));
+  const spoke = new Map<string, number>();
+  for (const row of replies) {
+    spoke.set(row.author, (spoke.get(row.author) || 0) + 1);
+  }
   const hops: {
     botId: string;
     fromHandle: string;
@@ -418,10 +640,10 @@ function handoffTargets(
     history: HistoryItem[];
   }[] = [];
   const queued = new Set<string>();
-  for (const reply of replies) {
+  for (const reply of fresh) {
     if (isBroadcastMention(reply.body)) continue;
-    const names = summonedHandles(reply.body, handles);
-    if (!names.length) continue;
+    const ids = messageMentionIds(reply, bots);
+    if (!ids.length) continue;
     const from = bots.find((bot) => bot.id === reply.author);
     const fromHandle = from?.handle || reply.author;
     const hopHistory = history.concat(
@@ -429,10 +651,10 @@ function handoffTargets(
       { author: reply.author, body: reply.body },
     );
     for (const bot of bots) {
-      if (!names.includes(bot.handle.toLowerCase())) continue;
+      if (!ids.includes(bot.id)) continue;
       if (!memberIds.includes(bot.id)) continue;
       if (bot.id === reply.author) continue;
-      if (spoke.has(bot.id) || queued.has(bot.id)) continue;
+      if ((spoke.get(bot.id) || 0) >= HANDOFF_SEAT_CAP || queued.has(bot.id)) continue;
       queued.add(bot.id);
       const spec = assignmentFor(reply.body, bot.handle, handles);
       hops.push({
@@ -449,19 +671,16 @@ function handoffTargets(
 function replyBots(
   store: GuildStore,
   memberIds: string[],
-  userText: string,
+  userMessage: { author?: string; body: string; mentions?: string[] },
   extraBotId?: string,
 ): string[] {
-  if (isBroadcastMention(userText)) return memberIds;
-  const bots = store.listBots();
-  const names = summonedHandles(
-    userText,
-    bots.map((bot) => bot.handle),
+  if (isBroadcastMention(userMessage.body)) return memberIds;
+  const mentioned = new Set(
+    messageMentionIds(
+      { author: userMessage.author || "you", body: userMessage.body, mentions: userMessage.mentions },
+      store.listBots(),
+    ),
   );
-  const mentioned = new Set<string>();
-  for (const bot of bots) {
-    if (names.includes(bot.handle.toLowerCase())) mentioned.add(bot.id);
-  }
   if (mentioned.size > 0) {
     return memberIds.filter((id) => mentioned.has(id));
   }
@@ -480,7 +699,11 @@ function turnUserMessage(
     store.listBots().find((bot) => bot.id === parent.author)?.handle ||
     parent.author;
   const preview = parent.body.replace(/\s+/g, " ").trim().slice(0, 240);
-  return `（回覆 @${handle}：${preview}）\n${body}`;
+  return [
+    `（回覆 @${handle}。只做下一句；引言裡的交棒已經發生過，不要再叫別人。）`,
+    `> ${preview}`,
+    body,
+  ].join("\n");
 }
 
 const ATTACH_TOKEN = /^\[[A-Za-z]+ #\d+\]$/;
@@ -534,22 +757,26 @@ function askedText(
 export function inviteMentionedBots(
   store: GuildStore,
   roomId: string,
-  userText: string,
+  userMessage: { author?: string; body: string; mentions?: string[] },
 ): string[] {
   const room = store.getRoom(roomId);
   if (!room) return [];
   if (room.kind !== "channel") return room.memberIds;
-  if (isBroadcastMention(userText)) return room.memberIds;
-  const names = summonedHandles(
-    userText,
-    store.listBots().map((bot) => bot.handle),
+  if (isBroadcastMention(userMessage.body)) return room.memberIds;
+  const ids = messageMentionIds(
+    {
+      author: userMessage.author || "you",
+      body: userMessage.body,
+      mentions: userMessage.mentions,
+    },
+    store.listBots(),
   );
   let memberIds = room.memberIds;
-  for (const bot of store.listBots()) {
-    if (!names.includes(bot.handle.toLowerCase())) continue;
-    if (memberIds.includes(bot.id)) continue;
-    store.addMember(roomId, bot.id);
-    memberIds = [...memberIds, bot.id];
+  for (const id of ids) {
+    if (memberIds.includes(id)) continue;
+    if (!store.getBot(id)) continue;
+    store.addMember(roomId, id);
+    memberIds = [...memberIds, id];
   }
   return memberIds;
 }
@@ -734,7 +961,18 @@ function liveDetail(trace: ToolTrace): string {
   if (trace.name === "skill") return String(args.name || "");
   if (trace.name === "image_gen") return String(args.prompt || "");
   if (trace.name === "spawn") {
-    return String(args.description || args.name || args.prompt || "");
+    return String(
+      args.title ||
+        args.description ||
+        args.profile ||
+        args.name ||
+        args.task ||
+        args.prompt ||
+        "",
+    );
+  }
+  if (trace.name === "read_spawn") {
+    return String(args.agent_id || args.id || "");
   }
   if (trace.name.startsWith("mcp__")) {
     return JSON.stringify(args).slice(0, 120);
@@ -918,20 +1156,20 @@ async function generateReplies(
   store: GuildStore,
   roomId: string,
   memberIds: string[],
-  userMessage: { body: string; attachments?: ChatAttachment[] },
+  userMessage: { author?: string; body: string; attachments?: ChatAttachment[]; mentions?: string[] },
   history: HistoryItem[],
   onlyBotId?: string,
   env: NodeJS.ProcessEnv = process.env,
   parent?: ChatMessage,
   extras: HandlerExtras = {},
 ) {
-  const extraBotId = hasExplicitSummon(store, userMessage.body)
+  const extraBotId = hasExplicitSummon(store, userMessage)
     ? undefined
     : followBotId(store, history, parent);
   const asked = askedText(store, parent, userMessage);
   const targets = onlyBotId
     ? [onlyBotId]
-    : replyBots(store, memberIds, userMessage.body, extraBotId);
+    : replyBots(store, memberIds, userMessage, extraBotId);
   const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
   const signal = store.beginTurn(roomId, targets);
@@ -996,6 +1234,11 @@ async function generateReplies(
       throw err;
     }
     const usage = { ...(generated.usage || {}), startedAt };
+    const hopMentions = parseMentionIds(
+      generated.body,
+      store.listBots(),
+      "bot",
+    ).filter((id) => id !== botId);
     const reply = store.appendMessage(
       roomId,
       botId,
@@ -1004,6 +1247,9 @@ async function generateReplies(
       undefined,
       undefined,
       usage,
+      undefined,
+      undefined,
+      hopMentions,
     );
     store.dropLiveBotTurn(roomId, botId);
     recordTurn(store, roomId, botId, generated, reply);
@@ -1045,8 +1291,12 @@ async function generateReplies(
         return speak(botId, turnAsked, history);
       }),
     );
-    const hops = handoffTargets(store, memberIds, replies, asked, history);
-    if (hops.length && !signal.aborted) {
+    let seen = 0;
+    for (let wave = 0; wave < CHANNEL_ROSTER_CAP && !signal.aborted; wave++) {
+      const fresh = replies.slice(seen);
+      seen = replies.length;
+      const hops = handoffTargets(store, memberIds, replies, asked, history, fresh);
+      if (!hops.length) break;
       const hopAt = new Date().toISOString();
       for (const hop of hops) {
         store.adoptTurn(roomId, hop.botId, signal);
@@ -1133,7 +1383,7 @@ export function listRoomTrajectory(store: GuildStore, roomId: string) {
   });
   return {
     ...base,
-    events: base.events.concat(extra),
+    events: base.events.map(promoteSpawnEvent).concat(extra),
     live: extra.length > 0 || open,
   };
 }
@@ -1200,12 +1450,33 @@ function followBotId(
   return lastBotSpeaker(store, messages);
 }
 
-function hasExplicitSummon(store: GuildStore, userText: string): boolean {
-  if (isBroadcastMention(userText)) return true;
+/** Reply-to-a-bot locks that seat. Client assigneeId cannot steal it unless the new text @mentions someone. */
+function exclusiveReplyBot(
+  store: GuildStore,
+  userMessage: { author?: string; body: string; mentions?: string[] },
+  parent: ChatMessage | undefined,
+  assignee?: string,
+): string | undefined {
+  if (hasExplicitSummon(store, userMessage)) return assignee || undefined;
+  if (parent && parent.author !== "you" && store.getBot(parent.author)) {
+    return parent.author;
+  }
+  return assignee || undefined;
+}
+
+function hasExplicitSummon(
+  store: GuildStore,
+  userMessage: { author?: string; body: string; mentions?: string[] },
+): boolean {
+  if (isBroadcastMention(userMessage.body)) return true;
   return (
-    summonedHandles(
-      userText,
-      store.listBots().map((bot) => bot.handle),
+    messageMentionIds(
+      {
+        author: userMessage.author || "you",
+        body: userMessage.body,
+        mentions: userMessage.mentions,
+      },
+      store.listBots(),
     ).length > 0
   );
 }
@@ -1258,6 +1529,11 @@ export async function postUserMessage(
   const packed = parseAttachments(attachments);
   const tokens = packed?.map((att) => att.token).join(" ") || "";
   const text = body.trim() || tokens;
+  const bots = store.listBots();
+  const mentions =
+    extras.mentions !== undefined
+      ? sanitizeMentionIds(extras.mentions, bots)
+      : parseMentionIds(text, bots, "user");
   const message = store.appendMessage(
     roomId,
     "you",
@@ -1265,6 +1541,10 @@ export async function postUserMessage(
     undefined,
     parent ? parent.id : undefined,
     packed,
+    undefined,
+    undefined,
+    undefined,
+    mentions,
   );
   try {
     store.appendTrajectory(roomId, [
@@ -1275,10 +1555,11 @@ export async function postUserMessage(
   }
   const history = previous.map(toHistoryItem);
   const assignee = assigneeId?.trim();
-  let memberIds = assignee
-    ? inviteAssignee(store, roomId, assignee)
-    : inviteMentionedBots(store, roomId, message.body);
-  if (!assignee && !hasExplicitSummon(store, message.body)) {
+  const only = exclusiveReplyBot(store, message, parent, assignee);
+  let memberIds = only
+    ? inviteAssignee(store, roomId, only)
+    : inviteMentionedBots(store, roomId, message);
+  if (!only && !hasExplicitSummon(store, message)) {
     memberIds = includeFollowBot(
       store,
       roomId,
@@ -1292,7 +1573,7 @@ export async function postUserMessage(
     memberIds,
     message,
     history,
-    assignee || undefined,
+    only || undefined,
     env,
     parent,
     extras,
@@ -1317,19 +1598,25 @@ export async function retryMessage(
   const current = messages[index];
 
   if (current.author === "you") {
+    const bots = store.listBots();
+    const mentions =
+      extras.mentions !== undefined
+        ? sanitizeMentionIds(extras.mentions, bots)
+        : undefined;
     const message =
       typeof body === "string" && body.trim()
-        ? store.updateMessage(roomId, messageId, body)
+        ? store.updateMessage(roomId, messageId, body, mentions)
         : current;
     store.truncateAfter(roomId, messageId);
     const kept = store.listMessages(roomId);
     const history = kept.slice(0, -1).map(toHistoryItem);
     const parent = parentMessage(kept.slice(0, -1), message.replyTo);
     const assignee = assigneeId?.trim();
-    let memberIds = assignee
-      ? inviteAssignee(store, roomId, assignee)
-      : inviteMentionedBots(store, roomId, message.body);
-    if (!assignee && !hasExplicitSummon(store, message.body)) {
+    const only = exclusiveReplyBot(store, message, parent, assignee);
+    let memberIds = only
+      ? inviteAssignee(store, roomId, only)
+      : inviteMentionedBots(store, roomId, message);
+    if (!only && !hasExplicitSummon(store, message)) {
       memberIds = includeFollowBot(
         store,
         roomId,
@@ -1343,7 +1630,7 @@ export async function retryMessage(
       memberIds,
       message,
       history,
-      assignee || undefined,
+      only || undefined,
       env,
       parent,
       extras,
@@ -1443,4 +1730,4 @@ export async function retryMessage(
 
 export { StoreError, localGenerate };
 
-export { publicModels, mergeModelsFile } from "./llm.ts";
+export { publicModels, mergeModelsFile, refreshOpenCodeFreeCatalog } from "./llm.ts";

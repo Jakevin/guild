@@ -15,6 +15,7 @@ import http from "node:http";
 import { listenGuildServer } from "../src/server.ts";
 import { healthPayload } from "../src/handlers.ts";
 import { handleRequest } from "../src/router.ts";
+import { writeModelsFile } from "../src/llm.ts";
 import { clipNavPreview, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp, tempHome as makeHome } from "./app.ts";
 
@@ -128,7 +129,7 @@ test("shipped router health is ready/ok", async () => {
 test("shipped router serves bench, library, and studio HTML", async () => {
   const { server, origin } = await listen(tempHome());
   try {
-    for (const path of ["/", "/library", "/subagents", "/subagents/add", "/mcp", "/mcp/add", "/studio", "/chat", "/settings"]) {
+    for (const path of ["/", "/library", "/subagents", "/subagents/add", "/mcp", "/mcp/add", "/studio", "/chat", "/settings", "/m"]) {
       const response = await fetch(`${origin}${path}`);
       const html = await response.text();
       assert.equal(response.status, 200);
@@ -440,7 +441,9 @@ test("skill catalog is available without creating items", async () => {
 });
 
 test("generate turns a prompt into markdown", async () => {
-  const { server, origin } = await listen(tempHome());
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
   try {
     const soul = await postJson(origin, "/generate", {
       kind: "soul",
@@ -456,7 +459,9 @@ test("generate turns a prompt into markdown", async () => {
 });
 
 test("pick skills from markdown matches the catalog", async () => {
-  const { server, origin } = await listen(tempHome());
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
   try {
     const listed = await getJson(origin, "/library/skills");
     assert.equal(listed.status, 200);
@@ -683,6 +688,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /function splitSendTargets/);
   assert.match(home, /function inFlightBotIds/);
   assert.match(home, /function replyAuthorId/);
+  assert.match(home, /fromReply\s*\n\s*\? \[fromReply\]/);
   assert.match(home, /payload.replyTo = pending.replyTo/);
   assert.match(home, /steer\.waiting/);
   assert.match(home, /function queueTargetLabel/);
@@ -758,6 +764,19 @@ test("home is chat and studio is the roster", () => {
   assert.match(studio, /hostTag/);
   assert.doesNotMatch(studio, /id="save-hint"/);
   assert.match(studio, /rpg-dialog/);
+  assert.doesNotMatch(studio, /const SPOTS/);
+  assert.match(studio, /inn-station/);
+  assert.match(studio, /npc-bust/);
+  assert.match(studio, /npc-blank/);
+  assert.match(studio, /if \(bot\.portrait\)/);
+  assert.match(studio, /id="rpg-face"/);
+  assert.match(style, /grid-template-rows:\s*auto auto/);
+  assert.match(style, /\.inn-actors \{[\s\S]*?grid-template-columns:\s*repeat\(4/);
+  assert.match(style, /\.rpg-npc \.npc-bust,\s*\.rpg-npc \.npc-blank \{[\s\S]*?width:\s*72px/);
+  assert.match(style, /\.rpg-face \{[\s\S]*?width:\s*56px/);
+  assert.match(home, /function portraitUrl/);
+  assert.match(home, /function avatarFace/);
+  assert.match(chatCss, /\.avatar img/);
   assert.match(studio, /inn-street\.jpg/);
   assert.match(studio, /進酒館/);
   assert.match(studio, /skillIds/);
@@ -805,7 +824,9 @@ test("skills add page is HTML", async () => {
 });
 
 test("generate skill markdown from a prompt", async () => {
-  const { server, origin } = await listen(tempHome());
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
   try {
     const generated = await postJson(origin, "/generate", {
       kind: "skill",
@@ -845,7 +866,9 @@ test("seed backfills a missing oneLiner on a default bot", async () => {
 });
 
 test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
-  const { server, origin } = await listen(tempHome());
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
   try {
     const page = await fetch(`${origin}/chat`);
     assert.equal(page.status, 200);
@@ -855,6 +878,7 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /密談/);
     assert.match(html, /function formatUpdated/);
     assert.match(html, /function formatMsgClock/);
+    assert.match(html, /function formatMsgWhen/);
     assert.match(html, /function msgStamp/);
     assert.match(html, /finishedAt/);
     assert.match(html, /day-rule/);
@@ -863,7 +887,7 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /navRowHtml/);
     assert.match(html, /lastPreview/);
     assert.match(html, /nav-chip/);
-    assert.match(html, /class="nav-row/);
+    assert.match(html, /nav-row/);
     assert.match(html, /botModelLabel/);
     assert.match(html, /function botModelMeta/);
     assert.match(html, /byUpdatedAtDesc/);
@@ -1097,6 +1121,7 @@ test("models.json can add a Pi-style provider", async () => {
     const keys = await fetch(`${origin}/settings/keys`);
     assert.equal(keys.status, 200);
     assert.match(html, /modelLabel/);
+    assert.match(html, /prettyModelName/);
     assert.match(html, /effectiveAux/);
     assert.match(html, /settings.using/);
     assert.match(html, /settings.inherited/);
@@ -1110,6 +1135,9 @@ test("models.json can add a Pi-style provider", async () => {
     assert.match(html, /add-provider-dialog/);
     assert.match(html, /preset-grid/);
     assert.match(html, /addFromPreset/);
+    assert.match(html, /opencode-free/);
+    assert.match(html, /opencode\.ai\/zen\/v1/);
+    assert.match(html, /settings.opencodeFreeHint/);
     assert.doesNotMatch(html, /id="preset"/);
     assert.doesNotMatch(html, /toolbar-actions/);
     assert.match(html, /flushVisibleCard/);
@@ -1125,6 +1153,13 @@ test("models.json can add a Pi-style provider", async () => {
     assert.ok(ids.includes("openai"));
     assert.ok(ids.includes("xai"));
     assert.ok(ids.includes("ollama"));
+    assert.ok(ids.includes("opencode-free"));
+    assert.equal(ids[0], "opencode-free");
+    const listedPicker = (listed.body as { picker: { id: string; ready: boolean; kind: string }[] })
+      .picker;
+    const freePick = listedPicker.find((p) => p.id === "opencode-free");
+    assert.equal(freePick?.kind, "keyless");
+    assert.equal(freePick?.ready, true);
     const openai = body.providers.find((p) => p.id === "openai");
     assert.equal(openai?.stored, "env");
     assert.equal(openai?.apiKey, "$OPENAI_API_KEY");
@@ -1181,8 +1216,7 @@ test("models.json can add a Pi-style provider", async () => {
     assert.ok(picker.subscriptions.some((s) => s.id === "radius"));
     assert.ok(picker.auxRoles.some((r) => r.id === "vision"));
     assert.ok(picker.auxRoles.some((r) => r.id === "web"));
-    assert.ok(picker.auxRoles.some((r) => r.id === "compression"));
-    assert.ok(picker.auxRoles.some((r) => r.id === "skills"));
+    assert.ok(picker.auxRoles.some((r) => r.id === "spawn"));
     assert.equal(
       picker.subscriptions.find((s) => s.id === "openai-codex")?.id,
       "openai-codex",

@@ -127,6 +127,75 @@ export async function harvestBotMemory(input: {
   return { updated: true, body: input.store.writeBotMemory(input.botId, next) };
 }
 
+export function localMergeQuestMemory(
+  parent: string,
+  child: string,
+  questName: string,
+): string | null {
+  const from = redactSecrets(String(child || "").replace(/\r\n/g, "\n")).trim();
+  if (!from) return null;
+  const into = String(parent || "").replace(/\r\n/g, "\n").trim();
+  const heading = String(questName || "side quest").replace(/\s+/g, " ").trim() || "side quest";
+  if (!into) return clipMemory(from);
+  if (into.includes(from)) return null;
+  return clipMemory(`${into}\n\n## ${heading}\n\n${from}`);
+}
+
+function mergeQuestPrompt(parent: string, child: string, questName: string): string {
+  return `You merge a closed side quest's MEMORY.md into the parent channel MEMORY.md.
+Standing notes only: names, preferences, decisions, recurring work, conventions, ownership, tech.
+Keep useful bullets from both. Drop stale, duplicated, or contradicted ones. Max 80 lines.
+Do not copy the whole transcript. Do not mention this merge.
+
+Parent MEMORY.md:
+<<<
+${parent.trim() || "(empty)"}
+>>>
+
+Closed quest "${questName}" MEMORY.md:
+<<<
+${child.trim()}
+>>>
+
+Reply with the complete updated parent MEMORY.md, or exactly NO_CHANGE.`;
+}
+
+export async function mergeQuestMemory(input: {
+  store: GuildStore;
+  parentId: string;
+  childId: string;
+  questName: string;
+  env?: NodeJS.ProcessEnv;
+  prefer?: ModelRef | null;
+}): Promise<{ updated: boolean; body: string }> {
+  const parent = input.store.readChannelMemory(input.parentId);
+  const child = input.store.readChannelMemory(input.childId);
+  if (!child.trim()) return { updated: false, body: parent };
+  const result = await llmComplete({
+    dataDir: input.store.dataDir,
+    env: input.env,
+    role: "compression",
+    prefer: input.prefer,
+    tools: false,
+    temperature: 0.1,
+    system:
+      "You rewrite MEMORY.md. Output markdown or NO_CHANGE. No preamble.",
+    messages: [
+      {
+        role: "user",
+        content: mergeQuestPrompt(parent, child, input.questName),
+      },
+    ],
+  });
+  const fromModel = applyMemoryUpdate(parent, result?.text ?? null);
+  const next = fromModel ?? localMergeQuestMemory(parent, child, input.questName);
+  if (next == null) return { updated: false, body: parent };
+  return {
+    updated: true,
+    body: input.store.writeChannelMemory(input.parentId, next),
+  };
+}
+
 export async function harvestChannelMemory(input: {
   store: GuildStore;
   roomId: string;

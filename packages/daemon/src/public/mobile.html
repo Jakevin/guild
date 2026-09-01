@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B0E12" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
+    <title>Guild — 外出</title>
+    <link rel="stylesheet" href="/mobile.css?v=away" />
+    <script src="/i18n.js"></script>
+    <script src="/md.js"></script>
+  </head>
+  <body class="m-away" data-i18n-page="mobile">
+    <section class="screen" id="screen-list">
+      <header class="list-head">
+        <h1>Guild</h1>
+      </header>
+      <p class="hint" data-i18n="mobile.hint">
+        外出時用 Tailscale 連到家裡這台 guildd（埠 7420）。
+      </p>
+      <div class="section-h" data-i18n="channels">委託</div>
+      <ul class="navlist" id="channels"></ul>
+      <div class="section-h" data-i18n="dms">密談</div>
+      <ul class="navlist" id="dms"></ul>
+    </section>
+    <section class="screen" id="screen-room" hidden>
+      <header class="room-head">
+        <button type="button" class="back" id="back" data-i18n-title="mobile.back" data-i18n-aria="mobile.back" title="返回委託" aria-label="返回委託">‹</button>
+        <h1 id="title"></h1>
+        <div class="meta" id="subtitle"></div>
+      </header>
+      <div class="thread" id="thread"></div>
+      <form class="composer" id="composer">
+        <div class="composer-card">
+          <div class="mention-pop" id="mention-pop" hidden>
+            <div id="mention-results"></div>
+          </div>
+          <textarea id="draft" rows="1" placeholder="Ask anything" data-i18n-placeholder="askAnything"></textarea>
+          <div class="composer-actions">
+            <button type="submit" class="send" id="send" data-i18n="send">送出</button>
+            <button type="button" class="stop-all" id="stop" hidden data-i18n="live.stop">停止</button>
+          </div>
+        </div>
+      </form>
+    </section>
+    <div class="flash" id="flash" hidden></div>
+    <script>
+      (function () {
+        const COLORS = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
+        const state = {
+          channels: [],
+          bots: [],
+          serverLive: [],
+          messages: [],
+          lives: [],
+          kind: "",
+          id: "",
+          posting: false,
+          mentionIndex: 0,
+          pollTimer: 0,
+        };
+
+        function hue(key) {
+          let n = 0;
+          for (const ch of String(key)) n = (n + ch.charCodeAt(0) * 17) % COLORS.length;
+          return COLORS[n];
+        }
+        function escapeHtml(value) {
+          return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        }
+        function initials(name) {
+          const parts = String(name)
+            .replace(/[^\p{L}\p{N} ]/gu, " ")
+            .trim()
+            .split(/\s+/);
+          if (parts[0] && /[A-Za-z]/.test(parts[0][0])) {
+            return parts[0][0].toUpperCase();
+          }
+          return Array.from(String(name).replace(/\s+/g, ""))[0] || "?";
+        }
+        function portraitUrl(bot) {
+          const url = bot && typeof bot.portrait === "string" ? bot.portrait.trim() : "";
+          return url.indexOf("/generated/") === 0 ? url : "";
+        }
+        function avatarFace(bot) {
+          const src = portraitUrl(bot);
+          if (src) return '<img alt="" src="' + escapeHtml(src) + '">';
+          return escapeHtml(initials((bot && (bot.name || bot.handle)) || "?"));
+        }
+        function botById(id) {
+          return (state.bots || []).find((bot) => bot.id === id);
+        }
+        function currentChannel() {
+          return (state.channels || []).find((ch) => ch.id === state.id);
+        }
+        function currentRoomRef() {
+          return state.kind ? { kind: state.kind, id: state.id } : null;
+        }
+        function roomMessagesUrl() {
+          return state.kind === "dm"
+            ? "/dms/" + encodeURIComponent(state.id) + "/messages"
+            : "/channels/" + encodeURIComponent(state.id) + "/messages";
+        }
+        function liveUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/live"
+            : "/channels/" + encodeURIComponent(r.id) + "/live";
+        }
+        function abortUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/abort"
+            : "/channels/" + encodeURIComponent(r.id) + "/abort";
+        }
+        function parseHash() {
+          const raw = location.hash.replace(/^#/, "");
+          if (raw.startsWith("d/")) {
+            state.kind = "dm";
+            state.id = decodeURIComponent(raw.slice(2));
+            return;
+          }
+          if (raw.startsWith("c/")) {
+            state.kind = "channel";
+            state.id = decodeURIComponent(raw.slice(2));
+            return;
+          }
+          state.kind = "";
+          state.id = "";
+        }
+        function showList() {
+          location.hash = "";
+        }
+        function fitShell() {
+          const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+          document.documentElement.style.setProperty("--vvh", h + "px");
+        }
+        function toast(text) {
+          const el = document.getElementById("flash");
+          el.hidden = false;
+          el.textContent = text;
+          el.classList.add("on");
+          clearTimeout(toast.timer);
+          toast.timer = setTimeout(() => {
+            el.classList.remove("on");
+          }, 1800);
+        }
+        function relTime(iso) {
+          if (!iso) return t("noActivity");
+          const at = Date.parse(iso);
+          if (!Number.isFinite(at)) return t("noActivity");
+          const d = Date.now() - at;
+          if (d < 45000) return t("justNow");
+          if (d < 3600000) {
+            return t("minutesAgo", { n: Math.max(1, Math.floor(d / 60000)) });
+          }
+          const when = new Date(at);
+          return (
+            String(when.getMonth() + 1).padStart(2, "0") +
+            "/" +
+            String(when.getDate()).padStart(2, "0")
+          );
+        }
+        function previewLine(text) {
+          return String(text || "")
+            .replace(/```[\s\S]*?```/g, " ")
+            .replace(/[*_`#]+/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 88);
+        }
+        function roomLiveRows(kind, id) {
+          return (state.serverLive || []).filter(
+            (row) => row.kind === kind && row.id === id,
+          );
+        }
+        function liveTurnsFrom(body) {
+          const rows =
+            Array.isArray(body && body.bots) && body.bots.length
+              ? body.bots
+              : body && body.botId
+                ? [body]
+                : [];
+          return rows
+            .filter((row) => row && row.botId)
+            .map((row) => ({
+              botId: row.botId,
+              thinking: row.thinking || "",
+              steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
+              startedAt: row.startedAt || "",
+            }));
+        }
+        function isBusy() {
+          return state.posting || (state.lives || []).length > 0;
+        }
+        function mentionScanText(text) {
+          return String(text || "")
+            .replace(/```[\s\S]*?```/g, " ")
+            .replace(/`[^`]*`/g, " ");
+        }
+        function summonedBotIds(text) {
+          const raw = String(text || "");
+          const known = new Map(
+            (state.bots || []).map((bot) => [
+              String(bot.handle).toLowerCase(),
+              bot.id,
+            ]),
+          );
+          const out = [];
+          const push = (id) => {
+            if (id && out.indexOf(id) < 0) out.push(id);
+          };
+          let fence = false;
+          const lines = raw.split(/\r?\n/);
+          const lead = /^[ \t]*((?:@[A-Za-z0-9_-]+[\s,、]*)+)/;
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            if (trimmed.indexOf("```") === 0) {
+              fence = !fence;
+              continue;
+            }
+            if (fence) continue;
+            const m = line.match(lead);
+            if (!m) continue;
+            const names = m[1].match(/@([A-Za-z0-9_-]+)/g) || [];
+            for (let n = 0; n < names.length; n++) {
+              push(known.get(names[n].slice(1).toLowerCase()));
+            }
+          }
+          if (out.length) return out;
+          const scan = mentionScanText(raw);
+          const re = /(?:^|\s)@([A-Za-z0-9_-]+)\b/g;
+          let row;
+          while ((row = re.exec(scan))) {
+            push(known.get(String(row[1]).toLowerCase()));
+          }
+          return out;
+        }
+        function lastBotAuthor() {
+          const msgs = state.messages || [];
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const author = msgs[i].author;
+            if (author && author !== "you" && botById(author)) return author;
+          }
+          return "";
+        }
+        function botsFromSend(text) {
+          if (state.kind === "dm") return [state.id];
+          const scan = mentionScanText(text);
+          if (/(^|\s)@(channel|quest|here|all)\b/i.test(scan)) {
+            const ch = currentChannel();
+            return (ch && ch.memberIds) || [];
+          }
+          const ids = summonedBotIds(text);
+          if (ids.length) return ids;
+          const last = lastBotAuthor();
+          return last ? [last] : [];
+        }
+        function visibleAssistantText(text) {
+          return String(text || "")
+            .replace(/<skill_content\b[\s\S]*?<\/skill_content>/gi, "")
+            .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "")
+            .replace(/<available_skills>[\s\S]*?<\/available_skills>/gi, "")
+            .trim();
+        }
+        function formatBody(text) {
+          const cleaned = visibleAssistantText(text);
+          if (cleaned.length > 8000) return escapeHtml(cleaned.slice(-8000));
+          return typeof renderMarkdown === "function"
+            ? renderMarkdown(cleaned)
+            : escapeHtml(cleaned);
+        }
+        function liveStepLabel(name) {
+          if (name === "think") return t("think");
+          if (name === "skill") return t("skill");
+          if (name === "image_gen") return t("imageGen");
+          if (name === "spawn") return t("spawn");
+          if (name === "run") return t("bash");
+          if (name === "read") return t("read");
+          if (name === "write") return t("write");
+          if (name === "list") return t("list");
+          return name || "";
+        }
+        function liveStepsHtml(steps) {
+          const rows = (steps || []).slice(-5);
+          if (!rows.length) return "";
+          return (
+            '<ul class="live-steps">' +
+            rows
+              .map((step) => {
+                const running = step.running ? " running" : "";
+                const detail = String(step.detail || "").trim();
+                return (
+                  '<li class="live-step' +
+                  running +
+                  '"><span class="live-name">' +
+                  escapeHtml(liveStepLabel(step.name)) +
+                  "</span>" +
+                  (detail
+                    ? '<span class="live-detail">' + escapeHtml(detail) + "</span>"
+                    : "") +
+                  "</li>"
+                );
+              })
+              .join("") +
+            "</ul>"
+          );
+        }
+        function turnStatusHtml() {
+          if (!isBusy() || !state.lives.length) return "";
+          return state.lives
+            .map((live) => {
+              const bot = botById(live.botId);
+              if (!bot) return "";
+              const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
+              const elapsed = Number.isFinite(started)
+                ? Date.now() - started
+                : 0;
+              const clock =
+                elapsed >= 15000
+                  ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
+                  : "";
+              return (
+                '<article class="msg bot live" data-bot-id="' +
+                escapeHtml(bot.id) +
+                '"><span class="avatar" style="background:' +
+                hue(bot.handle) +
+                '">' +
+                avatarFace(bot) +
+                '</span><div class="msg-main"><div class="msg-head"><span class="name">' +
+                escapeHtml(bot.name) +
+                '</span><span class="handle">@' +
+                escapeHtml(bot.handle) +
+                '</span></div><div class="turn-live"><div class="turn-status">' +
+                t("deepDiving") +
+                clock +
+                "</div>" +
+                liveStepsHtml(live.steps) +
+                '<div class="turn-actions"><button type="button" class="turn-stop" data-live-stop="' +
+                escapeHtml(bot.id) +
+                '">' +
+                t("live.stop") +
+                "</button></div></div></div></article>"
+              );
+            })
+            .join("");
+        }
+        function msgHtml(msg) {
+          const you = msg.author === "you";
+          const bot = you ? null : botById(msg.author);
+          const name = you ? t("you") : bot ? bot.name : msg.author;
+          const handle = bot ? bot.handle : "";
+          const avStyle = bot ? "background:" + hue(bot.handle) : "";
+          const face = you
+            ? escapeHtml(initials(t("you")))
+            : bot
+              ? avatarFace(bot)
+              : "?";
+          const body = you
+            ? '<p class="bubble">' + escapeHtml(msg.body || "") + "</p>"
+            : '<div class="bubble"><div class="assistant-text md">' +
+              formatBody(msg.body || "") +
+              "</div></div>";
+          return (
+            '<article class="msg' +
+            (you ? " you" : " bot") +
+            '"><span class="avatar" style="' +
+            avStyle +
+            '">' +
+            face +
+            '</span><div class="msg-main"><div class="msg-head"><span class="name">' +
+            escapeHtml(name) +
+            "</span>" +
+            (handle
+              ? '<span class="handle">@' + escapeHtml(handle) + "</span>"
+              : "") +
+            '<span class="clock">' +
+            escapeHtml(relTime(msg.createdAt)) +
+            "</span></div>" +
+            body +
+            "</div></article>"
+          );
+        }
+        function renderThread(opts) {
+          const root = document.getElementById("thread");
+          const pin =
+            Boolean(opts && opts.pinBottom) ||
+            root.scrollHeight - root.scrollTop - root.clientHeight < 80;
+          const all = state.messages || [];
+          const cap = 30;
+          const truncated = all.length > cap;
+          const rows = truncated ? all.slice(-cap) : all;
+          if (!rows.length && !isBusy()) {
+            root.innerHTML =
+              '<div class="empty-thread">' + escapeHtml(t("noMessages")) + "</div>";
+            return;
+          }
+          const notice = truncated
+            ? '<div class="empty-thread">' +
+              escapeHtml(t("mobile.recent", { n: cap })) +
+              "</div>"
+            : "";
+          root.innerHTML = notice + rows.map(msgHtml).join("") + turnStatusHtml();
+          if (pin) root.scrollTop = root.scrollHeight;
+        }
+        function syncComposer() {
+          const busy = isBusy();
+          document.getElementById("send").hidden = busy;
+          document.getElementById("stop").hidden = !busy;
+        }
+        function navRow(opts) {
+          const live = opts.busy
+            ? '<span class="live-dot">' + escapeHtml(t("busy")) + "</span>"
+            : "";
+          return (
+            '<li><a class="' +
+            (opts.branch ? "branch" : "") +
+            '" href="' +
+            escapeHtml(opts.href) +
+            '">' +
+            opts.av +
+            '<span class="nav-copy"><strong>' +
+            escapeHtml(opts.name) +
+            live +
+            "</strong><em>" +
+            escapeHtml(opts.preview || t("noActivity")) +
+            "</em></span></a></li>"
+          );
+        }
+        function renderList() {
+          const all = state.channels || [];
+          const byId = new Map(all.map((ch) => [ch.id, ch]));
+          const kidsOf = (id) => all.filter((ch) => ch.parentId === id);
+          const roots = all.filter((ch) => !ch.parentId);
+          const seen = new Set();
+          const rows = [];
+          function walk(ch, depth) {
+            if (seen.has(ch.id)) return;
+            seen.add(ch.id);
+            const last = ch.lastMessage;
+            rows.push(
+              navRow({
+                href: "#c/" + encodeURIComponent(ch.id),
+                branch: depth > 0,
+                name: (depth ? "↳ " : "#") + ch.name,
+                preview: last
+                  ? previewLine(last.body) + " · " + relTime(last.createdAt)
+                  : relTime(ch.updatedAt),
+                busy: roomLiveRows("channel", ch.id).length > 0,
+                av: '<span class="avatar">#</span>',
+              }),
+            );
+            kidsOf(ch.id).forEach((kid) => walk(kid, depth + 1));
+          }
+          roots.forEach((ch) => walk(ch, 0));
+          all.forEach((ch) => {
+            if (!seen.has(ch.id) && (!ch.parentId || !byId.has(ch.parentId))) {
+              walk(ch, 0);
+            }
+          });
+          document.getElementById("channels").innerHTML = rows.length
+            ? rows.join("")
+            : '<li class="empty-list">' + escapeHtml(t("noActivity")) + "</li>";
+          document.getElementById("dms").innerHTML = (state.bots || [])
+            .map((bot) => {
+              const last = bot.lastMessage;
+              return navRow({
+                href: "#d/" + encodeURIComponent(bot.id),
+                name: bot.name,
+                preview: last
+                  ? previewLine(last.body) + " · " + relTime(last.createdAt)
+                  : "@" + bot.handle,
+                busy: roomLiveRows("dm", bot.id).length > 0,
+                av:
+                  '<span class="avatar" style="background:' +
+                  hue(bot.handle) +
+                  '">' +
+                  avatarFace(bot) +
+                  "</span>",
+              });
+            })
+            .join("");
+        }
+        function renderHead() {
+          const title = document.getElementById("title");
+          const sub = document.getElementById("subtitle");
+          if (state.kind === "dm") {
+            const bot = botById(state.id);
+            title.textContent = bot ? bot.name : state.id;
+            sub.textContent = bot ? "@" + bot.handle : "";
+            return;
+          }
+          const ch = currentChannel();
+          title.textContent = ch ? "#" + ch.name : state.id;
+          const n = ch && ch.members ? ch.members.length : 0;
+          sub.textContent = n ? String(n) : "";
+        }
+        function showScreens() {
+          const list = !state.kind;
+          document.getElementById("screen-list").hidden = !list;
+          document.getElementById("screen-room").hidden = list;
+        }
+        async function loadWorkspace() {
+          const data = await fetch("/workspace").then((r) => r.json());
+          state.channels = data.channels || [];
+          state.bots = data.bots || [];
+          state.serverLive = Array.isArray(data.live) ? data.live : [];
+          renderList();
+          if (state.kind) renderHead();
+        }
+        async function loadMessages(opts) {
+          if (!state.kind) return;
+          const res = await fetch(roomMessagesUrl());
+          const body = await res.json().catch(() => []);
+          if (!res.ok) throw new Error(body.error || "load failed");
+          state.messages = Array.isArray(body) ? body : [];
+          renderThread({ pinBottom: !(opts && opts.merge) });
+        }
+        async function pollLive() {
+          if (!state.kind) return;
+          const url = liveUrl();
+          if (!url) return;
+          try {
+            const res = await fetch(url);
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) return;
+            const lives = liveTurnsFrom(body);
+            const was = state.lives.map((row) => row.botId).join(",");
+            const now = lives.map((row) => row.botId).join(",");
+            state.lives = lives;
+            if (!lives.length && !state.posting) {
+              if (was) await loadMessages({ merge: true }).catch(() => {});
+              else renderThread();
+            } else {
+              if (now !== was) await loadMessages({ merge: true }).catch(() => {});
+              else renderThread();
+            }
+            syncComposer();
+          } catch {
+            /* poll is best-effort */
+          }
+        }
+        async function tick() {
+          try {
+            if (!state.kind) await loadWorkspace();
+            else {
+              await pollLive();
+              if (!isBusy()) await loadMessages({ merge: true }).catch(() => {});
+            }
+          } finally {
+            schedule();
+          }
+        }
+        function schedule() {
+          clearTimeout(state.pollTimer);
+          const ms = !state.kind ? 2500 : isBusy() ? 900 : 2200;
+          state.pollTimer = setTimeout(tick, ms);
+        }
+        async function openFromHash() {
+          parseHash();
+          hideMention();
+          showScreens();
+          await loadWorkspace();
+          if (state.kind) {
+            renderHead();
+            await loadMessages().catch((err) => toast(err.message || String(err)));
+            await pollLive();
+            syncComposer();
+            const thread = document.getElementById("thread");
+            thread.scrollTop = thread.scrollHeight;
+          }
+          schedule();
+        }
+        function mentionAtCursor(el) {
+          const start = el.selectionStart || 0;
+          const before = el.value.slice(0, start);
+          const m = before.match(/(^|\s)@([A-Za-z0-9_-]*)$/);
+          if (!m) return null;
+          return { start: start - m[2].length - 1, query: m[2].toLowerCase() };
+        }
+        function mentionChoices(query) {
+          const needle = String(query || "").toLowerCase();
+          return (state.bots || []).filter((bot) => {
+            if (!needle) return true;
+            return (
+              bot.handle.toLowerCase().indexOf(needle) >= 0 ||
+              bot.name.toLowerCase().indexOf(needle) >= 0
+            );
+          });
+        }
+        function hideMention() {
+          document.getElementById("mention-pop").hidden = true;
+        }
+        function renderMention() {
+          const draft = document.getElementById("draft");
+          const at = mentionAtCursor(draft);
+          const pop = document.getElementById("mention-pop");
+          if (!at) {
+            hideMention();
+            return;
+          }
+          const rows = mentionChoices(at.query);
+          if (!rows.length) {
+            hideMention();
+            return;
+          }
+          if (state.mentionIndex >= rows.length) state.mentionIndex = 0;
+          if (state.mentionIndex < 0) state.mentionIndex = rows.length - 1;
+          document.getElementById("mention-results").innerHTML = rows
+            .map((bot, index) => {
+              const on = index === state.mentionIndex ? " on" : "";
+              return (
+                '<button type="button" class="mention-item' +
+                on +
+                '" data-mention="' +
+                index +
+                '" data-handle="' +
+                escapeHtml(bot.handle) +
+                '"><span class="mention-glyph" style="background:' +
+                hue(bot.handle) +
+                '">' +
+                avatarFace(bot) +
+                "</span><span><strong>" +
+                escapeHtml(bot.name) +
+                "</strong><em>@" +
+                escapeHtml(bot.handle) +
+                "</em></span></button>"
+              );
+            })
+            .join("");
+          pop.hidden = false;
+        }
+        function insertMention(handle) {
+          const draft = document.getElementById("draft");
+          const at = mentionAtCursor(draft);
+          if (!at) return;
+          const after = draft.value.slice(draft.selectionStart || 0);
+          const next = draft.value.slice(0, at.start) + "@" + handle + " " + after;
+          draft.value = next;
+          const pos = at.start + handle.length + 2;
+          draft.setSelectionRange(pos, pos);
+          hideMention();
+          fitDraft();
+          draft.focus();
+        }
+        function pickMention(index) {
+          const btn = document.querySelector(
+            '.mention-item[data-mention="' + index + '"]',
+          );
+          if (btn) insertMention(btn.getAttribute("data-handle"));
+        }
+        function fitDraft() {
+          const el = document.getElementById("draft");
+          el.style.height = "auto";
+          el.style.height = Math.min(el.scrollHeight, 144) + "px";
+        }
+        async function stopTurn(botId) {
+          try {
+            await fetch(abortUrl(), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(botId ? { botId: botId } : {}),
+            });
+          } catch {
+            /* ignore */
+          }
+          state.lives = botId
+            ? state.lives.filter((row) => row.botId !== botId)
+            : [];
+          state.posting = false;
+          syncComposer();
+          renderThread();
+          await loadMessages().catch(() => {});
+        }
+        async function sendDraft() {
+          const draft = document.getElementById("draft");
+          const raw = draft.value.trim();
+          if (!raw || !state.kind || isBusy()) return;
+          const botIds = botsFromSend(raw);
+          const payload = { body: raw };
+          if (botIds.length) payload.mentions = botIds;
+          if (botIds.length === 1) payload.assigneeId = botIds[0];
+          draft.value = "";
+          fitDraft();
+          hideMention();
+          state.messages = state.messages.concat([
+            {
+              id: "pending-you-" + Date.now(),
+              author: "you",
+              body: raw,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+          state.posting = true;
+          syncComposer();
+          renderThread();
+          try {
+            const res = await fetch(roomMessagesUrl(), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.error || "send failed");
+            await loadMessages();
+            await pollLive();
+          } catch (err) {
+            if (err && err.name === "AbortError") return;
+            toast(err.message || String(err));
+            draft.value = raw;
+            fitDraft();
+            await loadMessages().catch(() => {});
+          } finally {
+            state.posting = false;
+            syncComposer();
+            schedule();
+          }
+        }
+
+        document.getElementById("back").addEventListener("click", () => {
+          showList();
+        });
+        document.getElementById("composer").addEventListener("submit", (event) => {
+          event.preventDefault();
+          sendDraft();
+        });
+        document.getElementById("stop").addEventListener("click", () => {
+          stopTurn();
+        });
+        document.getElementById("thread").addEventListener("click", (event) => {
+          const stop = event.target.closest("[data-live-stop]");
+          if (!stop) return;
+          event.preventDefault();
+          stopTurn(stop.getAttribute("data-live-stop"));
+        });
+        document.getElementById("draft").addEventListener("input", () => {
+          fitDraft();
+          renderMention();
+        });
+        document.getElementById("draft").addEventListener("keydown", (event) => {
+          const pop = document.getElementById("mention-pop");
+          if (pop.hidden) return;
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            state.mentionIndex += 1;
+            renderMention();
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            state.mentionIndex -= 1;
+            renderMention();
+          } else if (event.key === "Enter" || event.key === "Tab") {
+            event.preventDefault();
+            pickMention(state.mentionIndex);
+          } else if (event.key === "Escape") {
+            hideMention();
+          }
+        });
+        document.getElementById("mention-results").addEventListener("click", (event) => {
+          const btn = event.target.closest("[data-handle]");
+          if (!btn) return;
+          insertMention(btn.getAttribute("data-handle"));
+        });
+        window.addEventListener("hashchange", () => {
+          openFromHash().catch((err) => toast(err.message || String(err)));
+        });
+        window.addEventListener("resize", fitShell);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", fitShell);
+        }
+        fitShell();
+        openFromHash().catch((err) => toast(err.message || String(err)));
+      })();
+    </script>
+  </body>
+</html>

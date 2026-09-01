@@ -218,7 +218,7 @@ export async function generateImage(input: {
   aspectRatio?: string;
   dataDir?: string;
   env?: NodeJS.ProcessEnv;
-}): Promise<{ text: string; isError: boolean }> {
+}): Promise<{ text: string; isError: boolean; publicPath?: string }> {
   const prompt = String(input.prompt || "").trim();
   if (!prompt) return { text: "prompt is required", isError: true };
   const aspect = String(input.aspectRatio || "").trim();
@@ -252,6 +252,7 @@ export async function generateImage(input: {
             `markdown: ![${prompt.slice(0, 80)}](${saved.publicPath})`,
           ].join("\n"),
           isError: false,
+          publicPath: saved.publicPath,
         };
       }
       errors.push(`${route.model} @ ${route.url}: ${hit.error}`);

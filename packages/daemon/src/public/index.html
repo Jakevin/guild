@@ -15,6 +15,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/buddy.js"></script>
   </head>
   <body class="office-page">
     <header class="appbar">
@@ -63,53 +64,7 @@
         const colors = ["#7c6af7", "#5b8def", "#2ea887", "#e07a3d", "#d4537e"];
         return colors[seedOf(key) % colors.length];
       }
-      function px(ctx, x, y, w, h, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, w, h);
-      }
-      function drawBuddy(canvas, shirt, seed) {
-        const ctx = canvas.getContext("2d");
-        canvas.width = 16;
-        canvas.height = 24;
-        ctx.imageSmoothingEnabled = false;
-        const skin = ["#f0c8a0", "#e2b184", "#c68642", "#8d5524"][seed % 4];
-        const hair = ["#2a1c12", "#c4a35a", "#1a1a1a", "#6b2d3c", "#3c4a6e"][seed % 5];
-        const outline = "#1b1510";
-        const pants = "#2a3140";
-        const style = seed % 3;
 
-        px(ctx, 4, 12, 8, 7, outline);
-        px(ctx, 5, 13, 6, 5, shirt);
-        px(ctx, 3, 13, 2, 5, shirt);
-        px(ctx, 11, 13, 2, 5, shirt);
-        px(ctx, 3, 18, 2, 1, skin);
-        px(ctx, 11, 18, 2, 1, skin);
-
-        px(ctx, 4, 4, 8, 8, outline);
-        px(ctx, 5, 5, 6, 6, skin);
-        px(ctx, 6, 7, 1, 1, outline);
-        px(ctx, 9, 7, 1, 1, outline);
-        px(ctx, 7, 9, 2, 1, "#c07070");
-
-        if (style === 0) {
-          px(ctx, 4, 3, 8, 3, hair);
-          px(ctx, 4, 5, 2, 3, hair);
-          px(ctx, 10, 5, 2, 3, hair);
-        } else if (style === 1) {
-          px(ctx, 4, 2, 8, 4, hair);
-          px(ctx, 3, 5, 2, 4, hair);
-          px(ctx, 11, 5, 2, 4, hair);
-        } else {
-          px(ctx, 5, 2, 6, 2, hair);
-          px(ctx, 4, 4, 8, 2, hair);
-          px(ctx, 7, 1, 2, 2, hair);
-        }
-
-        px(ctx, 5, 19, 3, 4, pants);
-        px(ctx, 8, 19, 3, 4, pants);
-        px(ctx, 5, 23, 3, 1, outline);
-        px(ctx, 8, 23, 3, 1, outline);
-      }
       function escapeHtml(value) {
         return String(value)
           .replace(/&/g, "&amp;")

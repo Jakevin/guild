@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 模型</title>
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/style.css?v=aux-align" />
     <script src="/i18n.js"></script>
   </head>
   <body class="app settings-page" data-i18n-page="settings" data-section="main">
@@ -46,6 +46,7 @@
       </header>
       <div class="page-body">
       <p id="flash" class="muted"></p>
+      <p class="sub" data-i18n="settings.lede">第一次：先連訂閱或填 API key，再套用主模型。沒有模型就不能用。訂閱走 OAuth；API key 寫入 ~/.guild/models.json。</p>
 
       <section class="panel" data-sec-panel="main">
         <h2 data-i18n="settings.main">主模型</h2>
@@ -76,7 +77,7 @@
           <h2 data-i18n="settings.aux">輔助模型</h2>
           <button type="button" class="linkish" id="reset-aux" data-i18n="settings.auxReset">全部改回主模型</button>
         </div>
-        <p class="sub" data-i18n="settings.auxHint">Vision、Web extract、Compression 等每一列都寫出實際模型。跟主模型時仍顯示名稱，不是空白。</p>
+        <p class="sub" data-i18n="settings.auxHint">只有 Vision、Web extract、SubAgent 可以另選模型。其餘用途一律跟主模型。</p>
         <div id="aux"></div>
       </section>
 
@@ -144,6 +145,18 @@
       let auxRole = null;
       let keyTab = 0;
       const PRESETS = {
+        "opencode-free": {
+          id: "opencode-free",
+          name: "OpenCode Free",
+          baseUrl: "https://opencode.ai/zen/v1",
+          api: "openai-completions",
+          apiKey: "",
+          models: [
+            { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free" },
+            { id: "laguna-s-2.1-free", name: "Laguna S 2.1 Free" },
+            { id: "mimo-v2.5-free", name: "Mimo V2.5 Free" },
+          ],
+        },
         openai: {
           id: "openai",
           name: "OpenAI",
@@ -260,7 +273,7 @@
               '<option value="' +
               escapeHtml(m.id) +
               '">' +
-              escapeHtml(m.name || m.id) +
+              escapeHtml(prettyModelName(m.id, m.name)) +
               "</option>",
           )
           .join("");
@@ -275,11 +288,27 @@
       function groupReady(id) {
         return Boolean((data.picker || []).find((p) => p.id === id && p.ready));
       }
+      function prettyModelName(id, given) {
+        const raw = String(id || "");
+        const label = String(given || "").trim();
+        if (label && label !== raw) return label;
+        const core = (raw.split("/").pop() || raw).trim();
+        const spaced = core
+          .replace(/[:_]+/g, "-")
+          .replace(/([A-Za-z])(\d)/g, "$1 $2")
+          .replace(/-/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!spaced) return raw;
+        return spaced.replace(/\b([a-z])/g, function (ch) {
+          return ch.toUpperCase();
+        });
+      }
       function modelLabel(ref) {
         if (!ref || !ref.provider || !ref.model) return t("settings.noDefault");
         const group = pickerGroups().find((p) => p.id === ref.provider);
         const hit = ((group && group.models) || []).find((m) => m.id === ref.model);
-        const name = (hit && hit.name) || ref.model;
+        const name = prettyModelName(ref.model, hit && hit.name);
         const vendor = (group && group.name) || ref.provider;
         return name + " · " + vendor;
       }
@@ -388,12 +417,46 @@
         if (key.length <= 10) return key;
         return key.slice(0, 5) + "…" + key.slice(-5);
       }
+      function isKeylessProvider(id) {
+        return id === "opencode-free" || id === "free" || id === "opencode_free";
+      }
       function storedBadge(p) {
+        if (isKeylessProvider(p.id)) {
+          return '<span class="badge">' + t("settings.keyless") + "</span>";
+        }
         if (p.stored === "env") return '<span class="badge">env</span>';
         if (p.stored === "literal") return '<span class="badge">' + t("settings.filled") + "</span>";
         return '<span class="badge empty">' + t("settings.emptyKey") + "</span>";
       }
+      function probeFor(id) {
+        return ((data.probe || []).find((row) => row.id === id) || null);
+      }
+      function probeBadge(id) {
+        const row = probeFor(id);
+        if (!row) return "";
+        if (row.ok && row.status === 429) {
+          return '<span class="badge wait probe-flag">' + t("settings.probeBusy") + "</span>";
+        }
+        if (row.ok) return '<span class="badge probe-flag">' + t("settings.probeOk") + "</span>";
+        return '<span class="badge empty probe-flag">' + t("settings.probeFail") + "</span>";
+      }
+      function probeHint() {
+        const probe = data.probe || [];
+        if (!probe.length) return "";
+        const skip = probe.filter((row) => !row.ok);
+        if (!skip.length) return "";
+        return (
+          '<p class="hint">' +
+          t("settings.syncedSkip", {
+            ok: probe.filter((row) => row.ok).length,
+            names: skip.map((row) => row.id).join("、"),
+          }) +
+          "</p>"
+        );
+      }
       function cardHtml(p, index) {
+        const lock = isKeylessProvider(p.id);
+        const ro = lock ? " readonly" : "";
         const models = (p.models || [])
           .map((m, i) => {
             return (
@@ -401,7 +464,9 @@
               '" data-f="id" value="' + escapeHtml(m.id || "") +
               '" placeholder="model id" /><input data-p="' + index + '" data-m="' + i +
               '" data-f="name" value="' + escapeHtml(m.name || "") +
-              '" placeholder="' + t("settings.displayName") + '" /><button type="button" class="secondary" data-del-model="' +
+              '" placeholder="' + t("settings.displayName") + '" />' +
+              probeBadge(m.id) +
+              '<button type="button" class="secondary" data-del-model="' +
               index + ":" + i + '">×</button></div>'
             );
           })
@@ -409,19 +474,38 @@
         return (
           '<div class="provider-card" data-index="' + index + '">' +
           '<div class="card-head"><h3>' + escapeHtml(p.name || p.id) + storedBadge(p) +
-          '</h3><button type="button" class="secondary" data-del="' + index + '">' + t("settings.delete") + "</button></div>" +
-          "<label>ID</label><input data-p=\"" + index + '" data-f="id" value="' + escapeHtml(p.id) + '" />' +
-          "<label>" + t("settings.name") + "</label><input data-p=\"" + index + '" data-f="name" value="' + escapeHtml(p.name || "") + '" />' +
-          "<label>baseUrl</label><input data-p=\"" + index + '" data-f="baseUrl" value="' + escapeHtml(p.baseUrl || "") + '" />' +
-          '<div class="row-2"><div><label>API</label><select data-p="' + index + '" data-f="api">' +
+          "</h3>" +
+          (lock
+            ? ""
+            : '<button type="button" class="secondary" data-del-provider="' + index + '">' + t("settings.delete") + "</button>") +
+          "</div>" +
+          "<label>ID</label><input data-p=\"" + index + '" data-f="id" value="' + escapeHtml(p.id) + '"' + ro + " />" +
+          "<label>" + t("settings.name") + "</label><input data-p=\"" + index + '" data-f="name" value="' + escapeHtml(p.name || "") + '"' + ro + " />" +
+          "<label>baseUrl</label><input data-p=\"" + index + '" data-f="baseUrl" value="' + escapeHtml(p.baseUrl || "") + '"' + ro + " />" +
+          '<div class="row-2"><div><label>API</label><select data-p="' + index + '" data-f="api"' +
+          (lock ? " disabled" : "") + ">" +
           '<option value="openai-completions"' + (p.api !== "anthropic-messages" && p.api !== "openai-responses" ? " selected" : "") + ">openai-completions</option>" +
           '<option value="anthropic-messages"' + (p.api === "anthropic-messages" ? " selected" : "") + ">anthropic-messages</option>" +
           '<option value="openai-responses"' + (p.api === "openai-responses" ? " selected" : "") + ">openai-responses</option></select></div>" +
-          '<div><label>API key</label><input type="text" data-p="' + index + '" data-f="apiKey" spellcheck="false" autocomplete="off" autocapitalize="off" value="' +
-          escapeHtml(p.apiKeyPreview || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div></div>' +
-          "<label>" + t("model") + "</label>" + models +
+          (isKeylessProvider(p.id)
+            ? '<div><label>API key</label><p class="hint">' + t("settings.keyless") + "</p></div>"
+            : '<div><label>API key</label><input type="text" data-p="' + index + '" data-f="apiKey" spellcheck="false" autocomplete="off" autocapitalize="off" value="' +
+              escapeHtml(p.apiKeyPreview || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div>') +
+          "</div>" +
+          (isKeylessProvider(p.id)
+            ? '<p class="hint">' + t("settings.opencodeFreeHint") + "</p>"
+            : "") +
+          '<div class="model-head"><label>' + t("model") + "</label>" +
+          (isKeylessProvider(p.id)
+            ? '<button type="button" class="sync-free" data-sync-free="1"><span class="sync-ico" aria-hidden="true">↻</span>' + t("settings.sync") + "</button>"
+            : "") +
+          "</div>" +
+          models +
+          (lock ? probeHint() : "") +
           '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>" +
-          '<div class="card-foot"><p class="hint">' + t("settings.saveKeyHint") + "</p>" +
+          '<div class="card-foot"><p class="hint">' +
+          t(isKeylessProvider(p.id) ? "settings.saveKeylessHint" : "settings.saveKeyHint") +
+          "</p>" +
           '<button type="button" data-save-keys="' + index + '">' +
           t("settings.saveKey") +
           "</button></div></div>"
@@ -434,11 +518,19 @@
         const p = (data.providers || [])[index];
         if (!p) return;
         const id = card.querySelector('[data-f="id"]').value.trim();
-        if (id) p.id = id;
-        p.name = card.querySelector('[data-f="name"]').value.trim();
-        p.baseUrl = card.querySelector('[data-f="baseUrl"]').value.trim();
-        p.api = card.querySelector('[data-f="api"]').value;
-        const key = card.querySelector('[data-f="apiKey"]').value.trim();
+        if (isKeylessProvider(p.id) || isKeylessProvider(id)) {
+          p.id = "opencode-free";
+          p.name = "OpenCode Free";
+          p.baseUrl = "https://opencode.ai/zen/v1";
+          p.api = "openai-completions";
+        } else {
+          if (id) p.id = id;
+          p.name = card.querySelector('[data-f="name"]').value.trim();
+          p.baseUrl = card.querySelector('[data-f="baseUrl"]').value.trim();
+          p.api = card.querySelector('[data-f="api"]').value;
+        }
+        const keyEl = card.querySelector('[data-f="apiKey"]');
+        const key = keyEl ? keyEl.value.trim() : "";
         if (key && key !== (p.apiKeyPreview || "")) {
           p.apiKey = key;
           p.apiKeyPreview = maskApiKey(key);
@@ -454,8 +546,7 @@
         });
         p.models = models;
       }
-      function collectKeys() {
-        flushVisibleCard();
+      function snapshotProviders() {
         const providers = {};
         (data.providers || []).forEach((p) => {
           if (!p.id) return;
@@ -468,6 +559,10 @@
           };
         });
         return providers;
+      }
+      function collectKeys() {
+        flushVisibleCard();
+        return snapshotProviders();
       }
       function presetLabel(key, preset) {
         return key === "custom" ? t("settings.custom") : (preset && preset.name) || key;
@@ -730,6 +825,68 @@
       document.getElementById("add-provider-cancel").addEventListener("click", () => {
         document.getElementById("add-provider-dialog").close();
       });
+      async function syncOpenCodeFree() {
+        const btn = document.querySelector("[data-sync-free]");
+        if (btn) btn.disabled = true;
+        flash("", t("settings.syncing"));
+        try {
+          const res = await fetch("/settings/models/opencode-free/sync", {
+            method: "POST",
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            flash("error", body.error || t("settings.syncFailed"));
+            return;
+          }
+          data = body;
+          const probe = Array.isArray(body.probe) ? body.probe : [];
+          const ok = probe.filter((row) => row.ok).length;
+          const skip = probe.filter((row) => !row.ok);
+          render();
+          if (probe.length && !ok) {
+            flash("error", t("settings.syncedNone"));
+          } else if (skip.length) {
+            flash(
+              "ok",
+              t("settings.syncedSkip", {
+                ok: ok,
+                names: skip.map((row) => row.id).join("、"),
+              }),
+            );
+          } else {
+            const n =
+              ok ||
+              (((data.picker || []).find((p) => p.id === "opencode-free") || {}).models || [])
+                .length;
+            flash("ok", t("settings.synced", { n: n }));
+          }
+        } catch (err) {
+          flash("error", err.message || t("settings.syncFailed"));
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+      async function deleteProvider(index) {
+        const doomed = (data.providers || [])[index];
+        if (!doomed || isKeylessProvider(doomed.id)) return;
+        const name = doomed.name || doomed.id;
+        data.providers.splice(index, 1);
+        if (keyTab >= data.providers.length) keyTab = Math.max(0, data.providers.length - 1);
+        const res = await fetch("/settings/models", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ providers: snapshotProviders() }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          flash("error", body.error || t("deleteFailed"));
+          await load();
+          return;
+        }
+        data = body;
+        render();
+        flash("health", t("settings.deletedProvider", { name: name }));
+      }
       async function saveProviderCard(index) {
         const card = document.querySelector('.provider-card[data-index="' + index + '"]');
         const label = card
@@ -762,17 +919,21 @@
         if (p) input.value = p.apiKeyPreview || "";
       });
       document.getElementById("providers").addEventListener("click", (event) => {
-        const el = event.target;
+        const el = event.target.closest ? event.target : event.target.parentElement;
+        if (!el || !el.closest) return;
         if (el.closest("[data-save-keys]")) {
           const i = Number(el.closest("[data-save-keys]").getAttribute("data-save-keys"));
           saveProviderCard(i);
           return;
         }
-        if (el.closest("[data-del]")) {
-          const i = Number(el.closest("[data-del]").getAttribute("data-del"));
-          data.providers.splice(i, 1);
-          if (keyTab >= data.providers.length) keyTab = Math.max(0, data.providers.length - 1);
-          render();
+        if (el.closest("[data-sync-free]")) {
+          syncOpenCodeFree();
+          return;
+        }
+        if (el.closest("[data-del-provider]")) {
+          const i = Number(el.closest("[data-del-provider]").getAttribute("data-del-provider"));
+          deleteProvider(i);
+          return;
         }
         if (el.closest("[data-add-model]")) {
           flushVisibleCard();

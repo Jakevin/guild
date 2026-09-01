@@ -11,6 +11,11 @@ import {
   oauthCredentialFromUnknown,
   oauthOmitsTemperature,
   parseCopilotPickerIds,
+  isTransientLlmError,
+  startStreamIdle,
+  STREAM_IDLE_TIMEOUT_MS,
+  StreamIdleError,
+  withTransientRetries,
   xaiFromGrokAuthFile,
 } from "../src/oauth.ts";
 
@@ -238,4 +243,63 @@ test("xai stays ready when access is expired but refresh exists", () => {
   assert.ok(xai);
   assert.equal(xai.connected, true);
   assert.equal(xai.ready, true);
+});
+
+test("transient LLM errors retry; idle and Stop do not", async () => {
+  assert.equal(isTransientLlmError(new Error("fetch failed")), true);
+  assert.equal(isTransientLlmError(new Error("HTTP 503")), true);
+  assert.equal(isTransientLlmError(new Error("openai-codex returned an empty reply")), true);
+  assert.equal(isTransientLlmError(new StreamIdleError(300_000)), false);
+  const stop = new Error("aborted");
+  stop.name = "AbortError";
+  assert.equal(isTransientLlmError(stop), false);
+  let hits = 0;
+  const value = await withTransientRetries(async () => {
+    hits += 1;
+    if (hits < 3) throw new Error("ECONNRESET");
+    return "ok";
+  });
+  assert.equal(value, "ok");
+  assert.equal(hits, 3);
+});
+
+test("stream idle is Codex 300s, not a turn wall clock", () => {
+  assert.equal(STREAM_IDLE_TIMEOUT_MS, 300_000);
+  const err = new StreamIdleError(STREAM_IDLE_TIMEOUT_MS);
+  assert.equal(err.name, "StreamIdleError");
+  assert.match(err.message, /300s/);
+  assert.match(err.message, /not a turn wall clock/);
+});
+
+test("stream idle watchdog fires when no events arrive", async () => {
+  const idle = startStreamIdle(40);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(idle.timedOut(), true);
+    assert.equal(idle.signal.aborted, true);
+  } finally {
+    idle.dispose();
+  }
+});
+
+test("stream idle bump resets the watchdog; user Stop is not idle", async () => {
+  const idle = startStreamIdle(80);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    idle.bump();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(idle.timedOut(), false);
+    assert.equal(idle.signal.aborted, false);
+  } finally {
+    idle.dispose();
+  }
+  const parent = new AbortController();
+  const child = startStreamIdle(5_000, parent.signal);
+  try {
+    parent.abort();
+    assert.equal(child.signal.aborted, true);
+    assert.equal(child.timedOut(), false);
+  } finally {
+    child.dispose();
+  }
 });

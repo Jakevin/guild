@@ -6,6 +6,8 @@ import {
   addChannelMember,
   createBot,
   createChannel,
+  createBranch,
+  closeBranch,
   deleteBot,
   deleteChannel,
   renameChannel,
@@ -18,6 +20,7 @@ import {
   setChannelMemory,
   generateKind,
   pickBotSkills,
+  generateBotLook,
   getBotDetail,
   getLiveTurn,
   abortLiveTurn,
@@ -25,6 +28,7 @@ import {
   importSkills,
   mergeModelsFile,
   publicModels,
+  refreshOpenCodeFreeCatalog,
   listBench,
   listLibrary,
   listMcpServers,
@@ -73,10 +77,13 @@ const PAGES: Record<string, { file: string; type: string }> = {
   "/studio": { file: "studio.html", type: "text/html; charset=utf-8" },
   "/skills/add": { file: "skills-add.html", type: "text/html; charset=utf-8" },
   "/chat": { file: "chat.html", type: "text/html; charset=utf-8" },
+  "/m": { file: "mobile.html", type: "text/html; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
   "/chat.css": { file: "chat.css", type: "text/css; charset=utf-8" },
+  "/mobile.css": { file: "mobile.css", type: "text/css; charset=utf-8" },
   "/md.js": { file: "md.js", type: "text/javascript; charset=utf-8" },
   "/i18n.js": { file: "i18n.js", type: "text/javascript; charset=utf-8" },
+  "/buddy.js": { file: "buddy.js", type: "text/javascript; charset=utf-8" },
   "/favicon.ico": { file: "favicon.ico", type: "image/x-icon" },
   "/favicon.svg": { file: "favicon.svg", type: "image/svg+xml" },
   "/favicon-16.svg": { file: "favicon-16.svg", type: "image/svg+xml" },
@@ -180,6 +187,16 @@ function strList(record: Record<string, unknown>, key: string): string[] {
   return [];
 }
 
+function extrasWithMentions(
+  extras: HandlerExtras,
+  body: Record<string, unknown>,
+): HandlerExtras {
+  const mentions = strList(body, "mentions")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return mentions.length ? { ...extras, mentions } : extras;
+}
+
 function skillPickCatalog(
   record: Record<string, unknown>,
 ): { id: string; name: string; description?: string; tags?: string[]; slug?: string }[] {
@@ -258,7 +275,12 @@ export async function handleRequest(
     }
 
     if (method === "GET" && page) {
-      const body = readFileSync(`${PUBLIC}${page.file}`);
+      const file = `${PUBLIC}${page.file}`;
+      if (!existsSync(file)) {
+        json(res, 404, { error: "not_found", path });
+        return;
+      }
+      const body = readFileSync(file);
       const extra = page.type.startsWith("image/")
         ? { "cache-control": "public, max-age=86400" }
         : {};
@@ -350,6 +372,36 @@ export async function handleRequest(
     if (method === "POST" && path === "/channels") {
       const body = asRecord(await readJson(req));
       json(res, 201, createChannel(store, str(body, "name")));
+      return;
+    }
+    const channelBranch = path.match(/^\/channels\/([^/]+)\/branches$/);
+    if (channelBranch && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        201,
+        createBranch(
+          store,
+          decodeURIComponent(channelBranch[1]),
+          str(body, "messageId"),
+          str(body, "name") || undefined,
+        ),
+      );
+      return;
+    }
+    const channelClose = path.match(/^\/channels\/([^/]+)\/close$/);
+    if (channelClose && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        await closeBranch(
+          store,
+          decodeURIComponent(channelClose[1]),
+          body.merge === true,
+          env,
+        ),
+      );
       return;
     }
     const channelOne = path.match(/^\/channels\/([^/]+)$/);
@@ -480,7 +532,7 @@ export async function handleRequest(
           str(body, "body") || undefined,
           env,
           str(body, "assigneeId") || undefined,
-          extras,
+          extrasWithMentions(extras, body),
         ),
       );
       return;
@@ -502,7 +554,7 @@ export async function handleRequest(
           str(body, "body") || undefined,
           env,
           str(body, "assigneeId") || undefined,
-          extras,
+          extrasWithMentions(extras, body),
         ),
       );
       return;
@@ -639,7 +691,7 @@ export async function handleRequest(
           str(body, "replyTo") || undefined,
           parseAttachments(body.attachments),
           str(body, "assigneeId") || undefined,
-          extras,
+          extrasWithMentions(extras, body),
         ),
       );
       return;
@@ -665,7 +717,7 @@ export async function handleRequest(
           str(body, "replyTo") || undefined,
           parseAttachments(body.attachments),
           str(body, "assigneeId") || undefined,
-          extras,
+          extrasWithMentions(extras, body),
         ),
       );
       return;
@@ -806,7 +858,16 @@ export async function handleRequest(
 
     if (method === "GET" && path === "/settings/models") {
       await refreshCopilotCatalog(store.dataDir);
+      await refreshOpenCodeFreeCatalog(store.dataDir);
       json(res, 200, publicModels(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/models/opencode-free/sync") {
+      const refreshed = await refreshOpenCodeFreeCatalog(store.dataDir, true);
+      json(res, 200, {
+        ...publicModels(store.dataDir),
+        probe: refreshed.probe ?? [],
+      });
       return;
     }
     if (method === "PUT" && path === "/settings/models") {
@@ -891,6 +952,12 @@ export async function handleRequest(
       return;
     }
 
+    const lookId = path.match(/^\/bots\/([^/]+)\/look$/)?.[1];
+    if (lookId && method === "POST") {
+      json(res, 200, await generateBotLook(store, decodeURIComponent(lookId), env));
+      return;
+    }
+
     const botId = path.match(/^\/bots\/([^/]+)$/)?.[1];
     if (botId && method === "GET") {
       json(res, 200, getBotDetail(store, botId));
@@ -906,6 +973,9 @@ export async function handleRequest(
         name: str(body, "name") || undefined,
         handle: str(body, "handle") || undefined,
         oneLiner: str(body, "oneLiner") || undefined,
+        ...(Object.hasOwn(body, "portrait")
+          ? { portrait: body.portrait == null ? null : str(body, "portrait") }
+          : {}),
         skillIds: Object.hasOwn(body, "skillIds")
           ? strList(body, "skillIds")
           : undefined,
@@ -962,6 +1032,7 @@ export async function handleRequest(
       json(res, error.status, { error: error.message });
       return;
     }
+    console.error(error);
     json(res, 500, { error: "internal_error" });
   }
 }

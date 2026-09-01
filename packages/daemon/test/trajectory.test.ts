@@ -9,6 +9,7 @@ import { getLiveTurn, listRoomTrajectory } from "../src/handlers.ts";
 import { GuildStore } from "../src/store.ts";
 import {
   liveTrajectoryEvents,
+  promoteSpawnEvent,
   synthesizeTrajectory,
   turnTrajectoryEvents,
 } from "../src/trajectory.ts";
@@ -63,6 +64,72 @@ test("turnTrajectoryEvents records spawn as its own kind", () => {
   assert.match(String(spawn?.summary), /explorer/);
   assert.doesNotMatch(String(spawn?.summary), /^spawn spawn$/);
   assert.ok(!events.some((event) => event.kind === "tool"));
+});
+
+test("turnTrajectoryEvents records read_spawn as spawn kind", () => {
+  const events = turnTrajectoryEvents({
+    turnId: "t-read-spawn",
+    botId: "bot-pm",
+    traces: [
+      {
+        name: "read_spawn",
+        args: { agent_id: "ee7b0bbf-edd5-42ae-b8a7-aff83809acf3", block: true },
+        text: "unknown agent_id",
+        isError: true,
+      },
+    ],
+    text: "waiting",
+  });
+  const row = events.find((event) => event.kind === "spawn");
+  assert.ok(row);
+  assert.match(String(row?.summary), /^read ee7b0bbf/);
+  assert.equal(row?.isError, true);
+});
+
+test("promoteSpawnEvent lifts old TOOL spawn spawn rows", () => {
+  const promoted = promoteSpawnEvent({
+    seq: 1,
+    ts: new Date().toISOString(),
+    turnId: "old",
+    botId: "bot-pm",
+    kind: "tool",
+    summary: "spawn spawn",
+    payload: {
+      name: "spawn",
+      args: { name: "explorer", prompt: "Find README gaps" },
+    },
+    result: "# explorer\nagent: Explorer",
+  });
+  assert.equal(promoted.kind, "spawn");
+  assert.match(promoted.summary, /explorer/);
+  assert.match(promoted.summary, /README/);
+  assert.doesNotMatch(promoted.summary, /^spawn spawn$/);
+});
+
+test("listRoomTrajectory presents legacy spawn tool rows as spawn", () => {
+  const store = new GuildStore(tempHome());
+  try {
+    store.appendTrajectory("channel-general", [
+      {
+        ts: new Date().toISOString(),
+        turnId: "legacy-spawn",
+        botId: "bot-rd",
+        kind: "tool",
+        summary: "spawn spawn",
+        payload: {
+          name: "spawn",
+          args: { name: "reviewer", prompt: "Critique the i18n diff" },
+        },
+      },
+    ]);
+    const listed = listRoomTrajectory(store, "channel-general");
+    const spawn = listed.events.find((event) => event.kind === "spawn");
+    assert.ok(spawn);
+    assert.match(String(spawn?.summary), /reviewer/);
+    assert.doesNotMatch(String(spawn?.summary), /^spawn spawn$/);
+  } finally {
+    store.close();
+  }
 });
 
 test("empty live turn does not invent a Think event", () => {
