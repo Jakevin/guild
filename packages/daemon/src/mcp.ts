@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -215,6 +221,8 @@ class McpSession {
 
 const sessions = new Map<string, McpSession>();
 
+const REDACTED_ENV_VALUE = "***";
+
 export function mcpPath(dataDir: string): string {
   return join(dataDir, "mcp.json");
 }
@@ -237,10 +245,29 @@ export function writeMcpFile(
   servers: Record<string, McpLaunch>,
 ): void {
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(
-    mcpPath(dataDir),
-    `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`,
-  );
+  const file = mcpPath(dataDir);
+  writeFileSync(file, `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  chmodSync(file, 0o600);
+}
+
+/**
+ * The wire shape for HTTP. `launch.env` holds API keys, so every value becomes
+ * a placeholder; the keys stay so the UI can still show that env is set.
+ * Spawning keeps using the full launch from `listGuildMcp` / `listActiveMcp`.
+ */
+export function publicMcpServer(server: McpServer): McpServer {
+  const env = server.launch?.env;
+  const launch: McpLaunch = { ...server.launch };
+  if (env && Object.keys(env).length) {
+    launch.env = Object.fromEntries(
+      Object.keys(env).map((key) => [key, REDACTED_ENV_VALUE]),
+    );
+  } else {
+    delete launch.env;
+  }
+  return { ...server, launch };
 }
 
 export function listGuildMcp(dataDir: string): McpServer[] {

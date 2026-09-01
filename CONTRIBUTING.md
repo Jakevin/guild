@@ -16,7 +16,9 @@ pnpm dev                 # http://127.0.0.1:7420
 GUILD_HOME=/tmp/guild-dev pnpm dev
 ```
 
-The real UI is `packages/daemon/src/public/chat.html`, served by `guildd`. `apps/desktop` is an orphan shell — do not treat it as the product.
+`pnpm build` (`pnpm -r build`) runs each package's `build`. The daemon's is `node --check bin/guildd.mjs`: npm ships TypeScript source loaded by `tsx`, so `tsc` is not a publish gate (Cordis 4 `Service` / `.ts` import extensions fail typecheck). `apps/desktop` is an orphan Vite shell — do not treat it as the product.
+
+The real UI is `packages/daemon/src/public/chat.html`, served by `guildd`.
 
 ## Do not add chat features
 

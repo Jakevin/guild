@@ -1,4 +1,5 @@
 import type { ModelReasoning } from "@guild/protocol";
+import { guildUserAgent } from "./version.ts";
 
 const MODELS_DEV = "https://models.dev/api.json";
 const OPENROUTER_MODELS = "https://openrouter.ai/api/v1/models";
@@ -211,11 +212,11 @@ export async function refreshReasoningCatalog(
   const ctrl = AbortSignal.timeout(FETCH_MS);
   const [devRes, orRes] = await Promise.allSettled([
     fetcher(MODELS_DEV, {
-      headers: { accept: "application/json", "user-agent": "Guild/0.2.19" },
+      headers: { accept: "application/json", "user-agent": guildUserAgent() },
       signal: ctrl,
     }),
     fetcher(OPENROUTER_MODELS, {
-      headers: { accept: "application/json", "user-agent": "Guild/0.2.19" },
+      headers: { accept: "application/json", "user-agent": guildUserAgent() },
       signal: ctrl,
     }),
   ]);

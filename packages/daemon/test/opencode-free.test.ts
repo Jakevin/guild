@@ -17,6 +17,7 @@ import {
   selectOpenCodeFreeIds,
   usesZenResponses,
 } from "../src/opencode-free.ts";
+import { guildUserAgent } from "../src/version.ts";
 import { mergeModelsFile, publicModels, resolveLlm, writeModelsFile } from "../src/llm.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 
@@ -60,6 +61,12 @@ test("keyless requests omit Authorization so a dummy bearer never hits Zen", () 
   assert.equal(headers.authorization, undefined);
   assert.equal(headers.Authorization, undefined);
   assert.match(headers["user-agent"] ?? "", /^Guild\//);
+  // The UA comes from this package's manifest, not a hardcoded literal.
+  const pkg = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version: string };
+  assert.equal(headers["user-agent"], `Guild/${pkg.version}`);
+  assert.equal(headers["user-agent"], guildUserAgent());
   assert.equal(headers["x-title"], "Guild");
   const keyed = llmRequestHeaders({
     providerId: "openai",

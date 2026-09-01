@@ -135,6 +135,24 @@ test("workspace_write refuses run cwd outside the workspace", async () => {
   assert.match(ok.text, new RegExp(workspace.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("workspace_write run is not a shell jail", async () => {
+  const workspace = tempDir();
+  const leaked = join(tempDir(), "leaked.txt");
+  writeFileSync(leaked, "payload-from-outside");
+  const ctx = { sandbox: "workspace_write" as const, workspace };
+  const viaRead = await executeTool("read", { path: leaked }, ctx);
+  assert.equal(viaRead.isError, true);
+  assert.match(viaRead.text, /outside workspace/);
+  assert.ok(!viaRead.text.includes("payload-from-outside"));
+  const viaShell = await executeTool(
+    "run",
+    { command: `cat ${JSON.stringify(leaked)}` },
+    ctx,
+  );
+  assert.equal(viaShell.isError, false);
+  assert.match(viaShell.text, /payload-from-outside/);
+});
+
 test("workspace_write refuses browser", async () => {
   const workspace = tempDir();
   const ctx = { sandbox: "workspace_write" as const, workspace };

@@ -140,6 +140,9 @@ test("hostRead refuses guild secrets before touching the disk", () => {
   // The deny runs before stat, so these 403 whether or not the file exists.
   refused(() => hostRead(join(homedir(), ".guild", "oauth.json")));
   refused(() => hostRead(join(homedir(), ".guild", "models.json")));
+  refused(() => hostRead(join(homedir(), ".guild", "mcp.json")));
+  refused(() => hostRead("~/.guild/mcp.json"));
+  refused(() => hostList(join(homedir(), ".guild", "mcp.json")));
   refused(() => hostRead("~/.guild/oauth.json"));
   refused(() => hostRead(join(homedir(), ".guild", "browser-profile", "Default", "Cookies")));
   refused(() => hostList(join(homedir(), ".guild", "browser-profile")));
@@ -147,6 +150,48 @@ test("hostRead refuses guild secrets before touching the disk", () => {
   refused(() => assertHostPathAllowed(join(homedir(), ".guild", "oauth.json")));
   // The rest of ~/.guild stays browsable for the attach picker.
   notRefused(() => hostList(join(homedir(), ".guild")));
+});
+
+test("hostRead refuses home credential files before stat", () => {
+  // None of these need to exist: the denylist runs before any disk access.
+  refused(() => hostRead(join(homedir(), ".claude.json")));
+  refused(() => hostRead("~/.claude.json"));
+  refused(() => hostRead(join(homedir(), ".npmrc")));
+  refused(() => hostRead(join(homedir(), ".netrc")));
+  refused(() => hostRead(join(homedir(), "_netrc")));
+  refused(() => hostRead(join(homedir(), ".yarnrc.yml")));
+  refused(() => hostRead(join(homedir(), ".git-credentials")));
+  refused(() => hostRead(join(homedir(), ".env")));
+  refused(() => hostRead(join(homedir(), ".env.local")));
+  refused(() => hostRead(join(homedir(), ".env.production")));
+  refused(() => hostRead(join(homedir(), ".pgpass")));
+  refused(() => hostRead(join(homedir(), ".pypirc")));
+  refused(() => hostRead(join(homedir(), ".my.cnf")));
+  refused(() => hostRead(join(homedir(), "credentials.json")));
+  refused(() => hostRead(join(tempDir(), "service-account.json")));
+  refused(() => hostRead(join(tempDir(), ".env.staging")));
+  // A project .npmrc is not the home npm login file.
+  notRefused(() => hostRead(join(tempDir(), ".npmrc")));
+});
+
+test("hostRead refuses credential directories under $HOME", () => {
+  refused(() => hostRead(join(homedir(), ".aws", "credentials")));
+  refused(() => hostList(join(homedir(), ".aws")));
+  refused(() => hostRead(join(homedir(), ".docker", "config.json")));
+  refused(() => hostRead(join(homedir(), ".gnupg", "secring.gpg")));
+  refused(() => hostRead(join(homedir(), ".claude", "settings.json")));
+  refused(() => hostList(join(homedir(), ".claude")));
+  refused(() => hostRead(join(homedir(), ".codex", "config.toml")));
+  refused(() => hostRead(join(homedir(), ".cursor", "mcp.json")));
+  refused(() => hostRead(join(homedir(), ".kube", "config")));
+  refused(() => hostList(join(homedir(), ".kube")));
+  refused(() => hostRead(join(homedir(), ".azure", "accessTokens.json")));
+  refused(() => hostRead(join(homedir(), ".config", "gcloud", "credentials.json")));
+  refused(() => hostRead(join(homedir(), ".config", "gh", "hosts.yml")));
+  refused(() => hostRead(join(homedir(), "Library", "Keychains", "login.keychain-db")));
+  refused(() => hostTree(join(homedir(), ".cursor")));
+  // ~/.config itself is not a secret folder.
+  notRefused(() => hostList(join(homedir(), ".config")));
 });
 
 test("hostRead refuses private keys but not public ones", () => {
@@ -168,6 +213,14 @@ test("hostRead refuses private keys but not public ones", () => {
   const pfx = join(dir, "store.pfx");
   writeFileSync(pfx, "secret");
   refused(() => hostRead(pfx));
+  for (const suffix of [".key", ".p8", ".jks", ".keystore"]) {
+    const secret = join(dir, `bundle${suffix}`);
+    writeFileSync(secret, "secret");
+    refused(() => hostRead(secret));
+  }
+  const p8 = join(dir, "AuthKey_abc123.p8");
+  writeFileSync(p8, "secret");
+  refused(() => hostRead(p8));
   const pub = join(dir, "id_ed25519.pub");
   writeFileSync(pub, "ssh-ed25519 AAAA public");
   assert.equal(hostRead(pub).text, "ssh-ed25519 AAAA public");
@@ -194,6 +247,11 @@ test("GET /host/read refuses a secret path", async () => {
     );
     assert.equal(res.status, 403);
     assert.equal(res.body.error, "host path refused");
+    const mcp = await fetch(
+      `${origin}/host/read?path=${encodeURIComponent(join(homedir(), ".guild", "mcp.json"))}`,
+    ).then(async (r) => ({ status: r.status, body: await r.json() }));
+    assert.equal(mcp.status, 403);
+    assert.equal(mcp.body.error, "host path refused");
     const ls = await fetch(
       `${origin}/host/ls?path=${encodeURIComponent(join(homedir(), ".guild", "browser-profile"))}`,
     );

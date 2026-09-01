@@ -1,6 +1,6 @@
 {
   "name": "@kevin5251984/guild",
-  "version": "0.2.19",
+  "version": "0.2.20",
   "type": "module",
   "license": "MIT",
   "description": "A local guild of adventurers. npx @kevin5251984/guild web",
@@ -31,7 +31,7 @@
   "scripts": {
     "dev": "tsx src/cli.ts",
     "start": "node ./bin/guildd.mjs",
-    "build": "tsc -p tsconfig.json",
+    "build": "node --check ./bin/guildd.mjs",
     "test": "tsx --test test/*.test.ts",
     "prepack": "node ./scripts/vendor-protocol.mjs prepack",
     "postpack": "node ./scripts/vendor-protocol.mjs postpack"

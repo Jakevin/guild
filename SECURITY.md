@@ -35,6 +35,16 @@ This is a Guild gate around `executeTool`, not Codex `app-server` isolation and 
 
 Data lives under `GUILD_HOME` (default `~/.guild`): `guild.sqlite` (rooms, messages, trajectory; WAL), plus bots / library markdown, `models.json`, `oauth.json` (mode `0600`), and optional `browser-profile/` (copied Chrome logins when real-profile browsing is on). API keys may be env vars (`$OPENAI_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
 
+### Restart, `/host`, and what the gates are not
+
+**No hot reload.** There is no HMR. `guildd` loads daemon source and `src/public/*` once. Changing that code — including the `/host` denylist and MCP env redaction — does nothing until you stop the process (Ctrl-C / SIGTERM on the `guildd` listening on port 7420) and start it again. SQLite under `GUILD_HOME` survives a restart. In-memory live turns, MCP stdio children, and the browser CDP session do not. `models.json` is re-read on request; an already-spawned MCP child keeps the env it started with.
+
+**`/host/*` is an attach picker over `$HOME`, not a chroot.** The picker browses the machine on purpose so you can attach files from outside the workspace. A denylist refuses Guild secrets (`oauth.json`, `models.json`, `mcp.json`, `browser-profile/` under `~/.guild` and `GUILD_HOME`), SSH private keys and `id_*` files, key-material suffixes (`.pem`, `.p12`, `.pfx`, `.key`, `.p8`, `.jks`, `.keystore`), and the usual credential files / folders (`~/.claude.json`, `~/.npmrc`, `~/.netrc`, `~/.yarnrc.yml`, `~/.git-credentials`, `~/.pgpass`, `~/.pypirc`, `~/.my.cnf`, `~/.env*`, `credentials.json`, `service-account.json`, `~/.aws`, `~/.docker`, `~/.gnupg`, `~/.claude`, `~/.codex`, `~/.cursor`, `~/.kube`, `~/.azure`, `~/.config/gcloud`, `~/.config/gh`, `~/Library/Keychains`). Non-secret `$HOME` and files such as `/etc/passwd` stay readable by design. A request with a foreign `Origin` is `403 cross-origin refused`. This list is **not** applied to the bot's `read` / `list` / `run` tools: under `full_access` those tools are you.
+
+**MCP env is masked on HTTP, not in the process.** `GET /mcp/servers`, `GET /mcp/host`, and the `POST` replies replace every `launch.env` value with `***` (keys stay, so the UI can show that env is set). `{GUILD_HOME}/mcp.json` is mode `0600` and still holds the real values; spawned children receive them. Anything that can read that file as your uid can read the keys.
+
+**`workspace_write` is a Guild tool gate, not a shell jail.** `gateTool` checks the `run` cwd and `write` / `read` / `list` paths against `GUILD_WORKSPACE` (else this checkout). MCP, `image_gen`, and `browser` are refused because they are unsandboxed. The command body is still `execFile($SHELL, ["-lc", command])` as you. A `run` whose cwd is inside the workspace can `cat ~/.npmrc`, `curl`, or `rm` whatever your user can. It is not Seatbelt, bubblewrap, or Codex `app-server` isolation.
+
 ## What is not here
 
 - Codex `app-server` isolation / `CODEX_HOME` per bot

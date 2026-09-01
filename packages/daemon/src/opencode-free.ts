@@ -1,4 +1,5 @@
 import type { ModelEntry, ProviderEntry } from "@guild/protocol";
+import { guildUserAgent } from "./version.ts";
 
 /** Built-in alias `free` → this provider, matching Hermes Agent (2026-08). */
 export const OPENCODE_FREE_PROVIDER_ID = "opencode-free";
@@ -94,7 +95,7 @@ export function llmRequestHeaders(target: {
       "content-type": "application/json",
       "http-referer": "https://github.com/Jakevin/guild",
       "x-title": "Guild",
-      "user-agent": "Guild/0.2.19",
+      "user-agent": guildUserAgent(),
       ...extra,
     };
     delete headers.authorization;
@@ -126,7 +127,7 @@ export async function fetchOpenCodeFreeModels(
     const res = await fetch(`${OPENCODE_FREE_BASE_URL}/models`, {
       headers: {
         accept: "application/json",
-        "user-agent": "Guild/0.2.19",
+        "user-agent": guildUserAgent(),
         "http-referer": "https://github.com/Jakevin/guild",
         "x-title": "Guild",
       },

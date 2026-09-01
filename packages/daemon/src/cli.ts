@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { startGuildDaemon } from "./start.ts";
 import {
@@ -6,6 +5,7 @@ import {
   parseGuildCli,
   shouldOpenBrowser,
 } from "./cli-args.ts";
+import { guildVersion } from "./version.ts";
 
 const opts = parseGuildCli(process.argv);
 if (opts.error) {
@@ -15,10 +15,7 @@ if (opts.error) {
 } else if (opts.help) {
   process.stdout.write(guildCliHelp());
 } else if (opts.version) {
-  const pkg = JSON.parse(
-    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-  ) as { version: string };
-  process.stdout.write(`${pkg.version}\n`);
+  process.stdout.write(`${guildVersion()}\n`);
 } else {
   if (opts.port !== undefined) process.env.GUILD_PORT = String(opts.port);
   const started = startGuildDaemon();

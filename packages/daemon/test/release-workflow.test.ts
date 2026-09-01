@@ -34,4 +34,16 @@ test("CONTRIBUTING documents the trusted publisher fields", () => {
   assert.match(md, /`guild`/);
   assert.match(md, /npm publish/);
   assert.match(md, /git tag/);
+  assert.match(md, /node --check bin\/guildd\.mjs/);
+  assert.match(md, /tsx/);
+});
+
+test("daemon build is a launcher syntax check, not tsc", () => {
+  const pkg = JSON.parse(
+    readFileSync(join(ROOT, "packages/daemon/package.json"), "utf8"),
+  ) as { scripts: { build: string }; files: string[] };
+  assert.match(pkg.scripts.build, /node --check/);
+  assert.doesNotMatch(pkg.scripts.build, /\btsc\b/);
+  assert.ok(pkg.files.includes("src"));
+  assert.ok(pkg.files.includes("bin"));
 });

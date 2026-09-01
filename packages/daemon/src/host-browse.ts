@@ -42,9 +42,47 @@ function guildHomes(): string[] {
 
 const SSH_DIR = join(HOME, ".ssh");
 /** Files whose *contents* are credentials, wherever the guild home lives. */
-const SECRET_GUILD_FILES = new Set(["oauth.json", "models.json"]);
+const SECRET_GUILD_FILES = new Set(["oauth.json", "models.json", "mcp.json"]);
+/** Credential dotfiles that live directly in `$HOME`. */
+const SECRET_HOME_FILES = new Set([
+  ".claude.json",
+  ".netrc",
+  "_netrc",
+  ".npmrc",
+  ".yarnrc.yml",
+  ".git-credentials",
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".pgpass",
+  ".pypirc",
+  ".my.cnf",
+  "credentials.json",
+]);
+/** `$HOME` folders that are credential stores: the folder and everything below. */
+const SECRET_HOME_DIRS = [
+  ".aws",
+  ".docker",
+  ".gnupg",
+  ".claude",
+  ".codex",
+  ".cursor",
+  ".kube",
+  ".azure",
+  join(".config", "gcloud"),
+  join(".config", "gh"),
+  join("Library", "Keychains"),
+].map((relative) => join(HOME, relative));
 const SSH_KEY_NAME = /^(id_rsa|id_dsa|id_ecdsa|id_ed25519|id_xmss)$/i;
-const SECRET_SUFFIXES = [".pem", ".p12", ".pfx"];
+const SECRET_SUFFIXES = [
+  ".pem",
+  ".p12",
+  ".pfx",
+  ".key",
+  ".p8",
+  ".jks",
+  ".keystore",
+];
 
 function under(path: string, dir: string): boolean {
   const prefix = dir.endsWith(sep) ? dir : `${dir}${sep}`;
@@ -76,6 +114,12 @@ function isSecretPath(abs: string): boolean {
     if (under(abs, join(home, "browser-profile"))) return true;
     if (under(abs, home) && SECRET_GUILD_FILES.has(lower)) return true;
   }
+  if (dirname(abs) === HOME && SECRET_HOME_FILES.has(lower)) return true;
+  if (name === ".env" || name.startsWith(".env.")) return true;
+  if (lower === "credentials.json" || lower === "service-account.json") {
+    return true;
+  }
+  if (SECRET_HOME_DIRS.some((dir) => under(abs, dir))) return true;
   if (under(abs, SSH_DIR) && abs !== SSH_DIR && !publicKey) return true;
   if (SSH_KEY_NAME.test(name)) return true;
   if (!publicKey && SECRET_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
@@ -86,8 +130,11 @@ function isSecretPath(abs: string): boolean {
 
 /**
  * The attach picker browses `$HOME` on purpose, so /host/* is not confined to a
- * workspace. Secrets still have to stay shut: OAuth tokens, model keys, the
- * cloned browser profile, and private keys.
+ * workspace. Secrets still have to stay shut: OAuth tokens, model keys, the MCP
+ * store, the cloned browser profile, private keys, and the usual credential
+ * dotfiles / folders (`.aws`, `.claude`, `.codex`, `.npmrc`, `.netrc`, …).
+ * This is a denylist over the picker, not a chroot: non-secret `$HOME` and
+ * system files such as `/etc/passwd` stay readable.
  */
 export function assertHostPathAllowed(target: string): void {
   const abs = isAbsolute(target) ? resolve(target) : resolveUserPath(target);

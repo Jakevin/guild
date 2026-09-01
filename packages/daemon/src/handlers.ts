@@ -43,6 +43,7 @@ import {
   listGuildMcp,
   listHostMcp,
   listMcpToolRefs,
+  publicMcpServer,
   removeGuildMcp,
   upsertGuildMcp,
 } from "./mcp.ts";
@@ -92,12 +93,13 @@ export function listLibrary(store: GuildStore, kind: LibraryKind) {
   return store.listLibrary(kind);
 }
 
+/** HTTP surfaces never carry `launch.env` values; see `publicMcpServer`. */
 export function listMcpServers(store: GuildStore) {
-  return listGuildMcp(store.dataDir);
+  return listGuildMcp(store.dataDir).map(publicMcpServer);
 }
 
 export function listHostMcpServers() {
-  return listHostMcp();
+  return listHostMcp().map(publicMcpServer);
 }
 
 export function createMcpServer(
@@ -112,13 +114,15 @@ export function createMcpServer(
   },
 ) {
   try {
-    return upsertGuildMcp(store.dataDir, input.name, {
-      command: input.command || "",
-      args: input.args || [],
-      env: input.env,
-      cwd: input.cwd,
-      url: input.url,
-    });
+    return publicMcpServer(
+      upsertGuildMcp(store.dataDir, input.name, {
+        command: input.command || "",
+        args: input.args || [],
+        env: input.env,
+        cwd: input.cwd,
+        url: input.url,
+      }),
+    );
   } catch (error) {
     throw new StoreError(
       400,
@@ -129,7 +133,7 @@ export function createMcpServer(
 
 export function importMcpServer(store: GuildStore, hostId: string) {
   try {
-    return importHostMcp(store.dataDir, hostId);
+    return publicMcpServer(importHostMcp(store.dataDir, hostId));
   } catch (error) {
     throw new StoreError(
       404,
