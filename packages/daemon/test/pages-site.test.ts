@@ -57,6 +57,19 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(workflow, /actions\/deploy-pages/);
 });
 
+test("Pages JSON-LD and the nav version match the npm package", () => {
+  const html = readFileSync(SITE, "utf8");
+  const pkg = JSON.parse(
+    readFileSync(join(ROOT, "package.json"), "utf8"),
+  ) as { version: string };
+  const daemon = JSON.parse(
+    readFileSync(join(ROOT, "packages/daemon/package.json"), "utf8"),
+  ) as { version: string };
+  assert.equal(pkg.version, daemon.version);
+  assert.match(html, new RegExp(`"softwareVersion": "${pkg.version}"`));
+  assert.match(html, new RegExp(`class="ver">v${pkg.version} ·`));
+});
+
 test("first-mention starts with wiring a model", () => {
   const first = readFileSync(join(ROOT, "docs/first-mention.md"), "utf8");
   const zh = readFileSync(join(ROOT, "docs/first-mention.zh.md"), "utf8");
