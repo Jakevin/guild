@@ -233,14 +233,18 @@
       margin: 0 0 16px;
     }
     h1 {
-      font-family: Syne, "IBM Plex Sans", sans-serif;
-      font-size: clamp(2.35rem, 7.2vw, 5.1rem);
-      font-weight: 800;
-      letter-spacing: -0.045em;
-      line-height: 0.94;
+      /* Pixel HUD title. Cinzel stays on the guild sign; Syne stays on h2. */
+      font-family: "Pixelify Sans", "IBM Plex Mono", ui-monospace, monospace;
+      font-size: clamp(1.9rem, 6.4vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1.14;
       margin: 0 0 22px;
       text-wrap: balance;
-      max-width: 16ch;
+      max-width: 18ch;
+      -webkit-font-smoothing: none;
+      font-smooth: never;
+      text-rendering: geometricPrecision;
     }
     .lead {
       color: var(--muted);
@@ -372,7 +376,12 @@
     }
     @media (max-width: 820px) {
       .hall-frame { grid-template-columns: 1fr; min-height: 0; }
-      h1 { max-width: none; }
+      h1 {
+        max-width: none;
+        font-size: clamp(1.5rem, 7vw, 2.05rem);
+        letter-spacing: 0.02em;
+        line-height: 1.18;
+      }
     }
     .rail {
       padding: 28px 14px 16px;
