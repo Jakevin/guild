@@ -12,20 +12,20 @@ Local-first. Your files. Your models.
 
 ## 打開大廳
 
-需要 [Node](https://nodejs.org) ≥ 22.19 與 [pnpm](https://pnpm.io) 10.x。
+需要 [Node](https://nodejs.org) ≥ 22.19。一行啟動，不必 clone：
+
+```bash
+npx @kevin5251984/guild web
+```
+
+打開 [http://127.0.0.1:7420](http://127.0.0.1:7420)。`--port` 換 port，`--no-open` 不開瀏覽器。
+
+要讀或改程式——用 [pnpm](https://pnpm.io) 10.x clone：
 
 ```bash
 pnpm i
 pnpm test
 pnpm dev
-```
-
-打開 [http://127.0.0.1:7420](http://127.0.0.1:7420)。
-
-不 clone —— 只要 Node ≥ 22.19：
-
-```bash
-npx @kevin5251984/guild web
 ```
 
 靜態預覽（無模型、無工具）：[jakevin.github.io/guild](https://jakevin.github.io/guild/)。

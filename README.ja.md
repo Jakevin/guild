@@ -12,20 +12,20 @@ Local-first. Your files. Your models.
 
 ## 拠点をひらく
 
-[Node](https://nodejs.org) ≥ 22.19 と [pnpm](https://pnpm.io) 10.x が必要です。
+[Node](https://nodejs.org) ≥ 22.19 があれば 1 行。clone 不要：
+
+```bash
+npx @kevin5251984/guild web
+```
+
+[http://127.0.0.1:7420](http://127.0.0.1:7420) を開く。`--port` でポート、`--no-open` でブラウザを開かない。
+
+コードを読む／変えるなら — [pnpm](https://pnpm.io) 10.x で clone：
 
 ```bash
 pnpm i
 pnpm test
 pnpm dev
-```
-
-[http://127.0.0.1:7420](http://127.0.0.1:7420) を開く。
-
-clone なし — Node ≥ 22.19 だけ：
-
-```bash
-npx @kevin5251984/guild web
 ```
 
 静的プレビュー（モデルなし、ツールなし）：[jakevin.github.io/guild](https://jakevin.github.io/guild/)。

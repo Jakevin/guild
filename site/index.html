@@ -3,10 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Guild — a local bench. @mention one.</title>
-  <meta name="description" content="A local guild of adventurers. @mention the one you actually want. Not another omniscient chat. This page is a fixture preview — no model, no tools." />
+  <title>Guild — a local guild. @mention one.</title>
+  <meta name="description" content="A local guild of adventurers. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Fixture preview — no model, no tools." />
+  <link rel="canonical" href="https://jakevin.github.io/guild/" />
+  <meta name="theme-color" content="#0B0E12" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:site_name" content="Guild" />
+  <meta property="og:url" content="https://jakevin.github.io/guild/" />
+  <meta property="og:title" content="Guild — a local guild. @mention one." />
+  <meta property="og:description" content="A local guild of adventurers. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Fixture preview — no model, no tools." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Guild — a local guild. @mention one." />
+  <meta name="twitter:description" content="A local guild of adventurers. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Fixture preview — no model, no tools." />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://jakevin.github.io/guild/#webpage",
+        "url": "https://jakevin.github.io/guild/",
+        "name": "Guild — a local guild. @mention one.",
+        "description": "A local guild of adventurers. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. This page is a static fixture preview — no model calls.",
+        "isPartOf": { "@id": "https://jakevin.github.io/guild/#website" },
+        "about": { "@id": "https://github.com/Jakevin/guild#software" }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://jakevin.github.io/guild/#website",
+        "url": "https://jakevin.github.io/guild/",
+        "name": "Guild"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://github.com/Jakevin/guild#software",
+        "name": "Guild",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux, Windows",
+        "softwareVersion": "0.2.16",
+        "url": "https://github.com/Jakevin/guild",
+        "installUrl": "https://www.npmjs.com/package/@kevin5251984/guild",
+        "description": "A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    ]
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet" />
@@ -680,11 +727,11 @@
     <span class="mark"><img src="mark.svg" width="36" height="36" alt="Guild" /></span>
     <div>
       <div class="brand">Guild</div>
-      <div class="ver">v0.2.9 · local-first</div>
+      <div class="ver">v0.2.16 · local-first</div>
     </div>
     <nav>
       <a class="btn" href="https://github.com/Jakevin/guild">GitHub</a>
-      <a class="btn primary" href="https://github.com/Jakevin/guild#open-the-hall">Run locally</a>
+      <a class="btn primary" href="#run">Run locally</a>
     </nav>
   </header>
 
@@ -698,7 +745,7 @@
     </div>
     <p class="kicker">A local guild of adventurers</p>
     <h1>A local bench of bots.<br />@mention the one you want.</h1>
-    <p class="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Next move is <code>pnpm i && pnpm test && pnpm dev</code> — not a star.</p>
+    <p class="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. Checkout with pnpm is the alternative.</p>
     <div class="cta-row">
       <a class="btn primary" href="#try">Try the hall</a>
       <a class="btn" href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a>
@@ -787,20 +834,22 @@
     <p class="note">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
   </section>
 
-  <section class="block">
+  <section class="block" id="run">
     <p class="kicker">What runs locally</p>
     <h2>Your disk. Your models.</h2>
+    <p class="note">Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.</p>
     <div class="term">
       <header>
-        <span>Quick start</span>
+        <span>npx</span>
         <button type="button" class="btn" id="copy-cli">Copy</button>
       </header>
-      <pre id="cli">git clone https://github.com/Jakevin/guild.git
-cd guild
+      <pre id="cli">npx @kevin5251984/guild web
+# http://127.0.0.1:7420
+
+# checkout instead — pnpm 10.x
 pnpm i
 pnpm test
-pnpm dev
-# http://127.0.0.1:7420</pre>
+pnpm dev</pre>
     </div>
     <table class="limits">
       <thead><tr><th>Limit</th><th>Fact</th></tr></thead>
@@ -896,7 +945,7 @@ pnpm dev
     });
     document.getElementById("copy-cli").addEventListener("click", async () => {
       const btn = document.getElementById("copy-cli");
-      const text = document.getElementById("cli").textContent.replace(/\n# http:\/\/127\.0\.0\.1:7420\s*$/, "\n").trim() + "\n";
+      const text = "npx @kevin5251984/guild web\n";
       try {
         await navigator.clipboard.writeText(text);
         btn.textContent = "Copied";

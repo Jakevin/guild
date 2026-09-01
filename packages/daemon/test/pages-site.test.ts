@@ -22,6 +22,19 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /pnpm i/);
   assert.match(html, /pnpm test/);
   assert.match(html, /pnpm dev/);
+  assert.match(html, /npx @kevin5251984\/guild web/);
+  assert.match(html, /Node ≥ 22\.19/);
+  assert.match(html, /http:\/\/127\.0\.0\.1:7420/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/jakevin\.github\.io\/guild\/"/);
+  assert.match(html, /property="og:title"/);
+  assert.match(html, /property="og:url"/);
+  assert.match(html, /name="twitter:card" content="summary"/);
+  assert.match(html, /name="theme-color" content="#0B0E12"/);
+  assert.match(html, /application\/ld\+json/);
+  assert.match(html, /"@type": "SoftwareApplication"/);
+  assert.doesNotMatch(html, /property="og:image"/);
+  assert.doesNotMatch(html, /name="twitter:site"/);
+  assert.doesNotMatch(html, /twitter:creator/);
   assert.match(html, /full_access/);
   assert.doesNotMatch(html, /\bfetch\s*\(/);
   assert.doesNotMatch(html, /XMLHttpRequest/);
@@ -63,6 +76,8 @@ test("README points at the Pages demo without moving the first screen", () => {
   assert.match(first, /docs\/demo-hall-en-2026-08-31\.gif/);
   assert.match(first, /## Open the hall/);
   assert.doesNotMatch(first, /jakevin\.github\.io/);
+  assert.match(first, /npx @kevin5251984\/guild web/);
+  assert.doesNotMatch(first, /pnpm i/);
   assert.match(en, /npx @kevin5251984\/guild web/);
   assert.match(zh, /npx @kevin5251984\/guild web/);
   assert.match(ja, /npx @kevin5251984\/guild web/);

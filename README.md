@@ -12,20 +12,20 @@ Local-first. Your files. Your models.
 
 ## Open the hall
 
-Need [Node](https://nodejs.org) ≥ 22.19 and [pnpm](https://pnpm.io) 10.x.
+Need [Node](https://nodejs.org) ≥ 22.19. One line, no clone:
+
+```bash
+npx @kevin5251984/guild web
+```
+
+Open [http://127.0.0.1:7420](http://127.0.0.1:7420). `--port` moves the port; `--no-open` keeps the browser shut.
+
+Reading or changing the code — checkout with [pnpm](https://pnpm.io) 10.x:
 
 ```bash
 pnpm i
 pnpm test
 pnpm dev
-```
-
-Open [http://127.0.0.1:7420](http://127.0.0.1:7420).
-
-No clone — Node ≥ 22.19 only:
-
-```bash
-npx @kevin5251984/guild web
 ```
 
 Fixture preview (no model, no tools): [jakevin.github.io/guild](https://jakevin.github.io/guild/).
