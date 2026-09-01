@@ -9,7 +9,7 @@
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Pixelify+Sans:wght@500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --enamel: #0B0E12;
@@ -126,7 +126,7 @@
     }
     .mark img { width: 36px; height: 36px; display: block; }
     .nav .brand {
-      font-family: Cinzel, Syne, serif;
+      font-family: Cinzel, serif;
       font-weight: 700;
       letter-spacing: 0.14em;
       font-size: 15px;
@@ -233,7 +233,7 @@
       margin: 0 0 16px;
     }
     h1 {
-      /* Pixel HUD title. Cinzel stays on the guild sign; Syne stays on h2. */
+      /* Pixel HUD title. Cinzel stays on the guild sign. */
       font-family: "Pixelify Sans", "IBM Plex Mono", ui-monospace, monospace;
       font-size: clamp(1.9rem, 6.4vw, 3.6rem);
       font-weight: 700;
@@ -356,13 +356,17 @@
       margin: 0 auto;
     }
     h2 {
-      font-family: Syne, "IBM Plex Sans", sans-serif;
-      font-size: clamp(1.6rem, 3.4vw, 2.4rem);
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      line-height: 1.05;
+      /* Pixel HUD section title — smaller than H1, more tracking, not a second hero. */
+      font-family: "Pixelify Sans", "IBM Plex Mono", ui-monospace, monospace;
+      font-size: clamp(1.15rem, 2.6vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.22;
       margin: 0 0 12px;
       text-wrap: balance;
+      -webkit-font-smoothing: none;
+      font-smooth: never;
+      text-rendering: geometricPrecision;
     }
     .note { color: var(--muted); font-size: 15px; margin: 0 0 22px; max-width: 42rem; text-wrap: pretty; }
 
@@ -381,6 +385,11 @@
         font-size: clamp(1.5rem, 7vw, 2.05rem);
         letter-spacing: 0.02em;
         line-height: 1.18;
+      }
+      h2 {
+        font-size: clamp(1.05rem, 4.2vw, 1.35rem);
+        letter-spacing: 0.04em;
+        line-height: 1.24;
       }
     }
     .rail {

@@ -32,10 +32,12 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.doesNotMatch(html, /Quest board/);
   assert.match(html, /family=Cinzel/);
   assert.match(html, /family=Pixelify\+Sans/);
-  assert.match(html, /family=Syne/);
+  assert.doesNotMatch(html, /family=Syne/);
   assert.match(html, /h1 \{[\s\S]*?font-family:\s*"Pixelify Sans"/);
+  assert.match(html, /h2 \{[\s\S]*?font-family:\s*"Pixelify Sans"/);
   assert.match(html, /\.sign \{[\s\S]*?font-family:\s*Cinzel/);
   assert.doesNotMatch(html, /h1 \{[^}]*font-family:\s*Syne/);
+  assert.doesNotMatch(html, /h2 \{[^}]*font-family:\s*Syne/);
   assert.match(html, /docs\/demo-hall-en-2026-08-31\.gif/);
   assert.doesNotMatch(html, /docs\/demo-hall-en-2026-08-29\.gif/);
   assert.match(workflow, /path: site/);
