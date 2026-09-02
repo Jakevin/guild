@@ -330,7 +330,7 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /property="og:title"/);
   assert.match(html, /property="og:url"/);
   assert.match(html, /name="twitter:card" content="summary"/);
-  assert.match(html, /name="theme-color" content="#0B0E12"/);
+  assert.match(html, /name="theme-color" content="#f5f4ed"/);
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /"@type": "SoftwareApplication"/);
   assert.match(html, /reasoning, local-origin/);
@@ -357,12 +357,14 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /not a task board/i);
   assert.match(html, /not a tavern/i);
   assert.doesNotMatch(html, /Quest board/);
-  assert.match(html, /family=Cinzel/);
-  assert.match(html, /family=Pixelify\+Sans/);
+  assert.match(html, /--parchment:\s*#f5f4ed/);
+  assert.match(html, /--brand:\s*#1B365D/);
+  assert.match(html, /Charter, Georgia, Palatino/);
+  assert.match(html, /TsangerJinKai02/);
+  assert.match(html, /YuMincho/);
   assert.doesNotMatch(html, /family=Syne/);
-  assert.match(html, /h1 \{[\s\S]*?font-family:\s*"Pixelify Sans"/);
-  assert.match(html, /h2 \{[\s\S]*?font-family:\s*"Pixelify Sans"/);
-  assert.match(html, /\.sign \{[\s\S]*?font-family:\s*Cinzel/);
+  assert.doesNotMatch(html, /family=Cinzel/);
+  assert.doesNotMatch(html, /family=Pixelify\+Sans/);
   assert.doesNotMatch(html, /h1 \{[^}]*font-family:\s*Syne/);
   assert.doesNotMatch(html, /h2 \{[^}]*font-family:\s*Syne/);
   assert.match(html, /src="demo-hall-en-2026-08-31\.gif"/);
