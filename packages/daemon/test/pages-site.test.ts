@@ -8,9 +8,310 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SITE = join(ROOT, "site/index.html");
 const WORKFLOW = join(ROOT, ".github/workflows/pages.yml");
 
+const PLAQUE_KEYS = [
+  "pl.branch.t",
+  "pl.mobile.t",
+  "pl.free.t",
+  "pl.reason.t",
+  "pl.dispatch.t",
+  "pl.guard.t",
+] as const;
+const PLAQUE_TITLES = [
+  "Branch a quest",
+  "/m away",
+  "OpenCode Free",
+  "Reasoning · speed",
+  "Waves, not a pile-on",
+  "Local guards",
+] as const;
+
+type ClickEv = {
+  target: FakeNode;
+  preventDefault: () => void;
+};
+
+type FakeNode = {
+  tagName: string;
+  id: string;
+  className: string;
+  attrs: Record<string, string>;
+  children: FakeNode[];
+  parent: FakeNode | null;
+  textContent: string;
+  innerHTML: string;
+  value: string;
+  scrollTop: number;
+  scrollHeight: number;
+  focused: boolean;
+  rect: { top: number; height: number };
+  listeners: Record<string, Array<(ev: ClickEv) => void>>;
+  classList: { toggle: (name: string, force?: boolean) => void };
+  getAttribute: (name: string) => string | null;
+  setAttribute: (name: string, value: string) => void;
+  addEventListener: (type: string, fn: (ev: ClickEv) => void) => void;
+  appendChild: (child: FakeNode) => FakeNode;
+  click: () => void;
+  focus: (opts?: { preventScroll?: boolean }) => void;
+  closest: (sel: string) => FakeNode | null;
+  getBoundingClientRect: () => { top: number; height: number };
+  querySelector: (sel: string) => FakeNode | null;
+  querySelectorAll: (sel: string) => FakeNode[];
+};
+
+function matches(node: FakeNode, sel: string): boolean {
+  if (sel.startsWith("#")) return node.id === sel.slice(1);
+  if (sel.startsWith(".")) {
+    return node.className.split(/\s+/).includes(sel.slice(1));
+  }
+  const eq = /^\[([^=\]]+)="([^"]+)"\]$/.exec(sel);
+  if (eq) return node.getAttribute(eq[1]) === eq[2];
+  const attr = /^\[([^=\]]+)\]$/.exec(sel);
+  if (attr) return node.getAttribute(attr[1]) != null;
+  return node.tagName === sel.toUpperCase();
+}
+
+function el(tag: string, attrs: Record<string, string> = {}, text = ""): FakeNode {
+  const node: FakeNode = {
+    tagName: tag.toUpperCase(),
+    id: attrs.id ?? "",
+    className: attrs.class ?? "",
+    attrs: { ...attrs },
+    children: [],
+    parent: null,
+    textContent: text,
+    innerHTML: text,
+    value: text,
+    scrollTop: 0,
+    scrollHeight: 0,
+    focused: false,
+    rect: { top: 0, height: 0 },
+    listeners: {},
+    classList: {
+      toggle(name: string, force?: boolean) {
+        const parts = new Set(node.className.split(/\s+/).filter(Boolean));
+        if (force === true) parts.add(name);
+        else if (force === false) parts.delete(name);
+        else if (parts.has(name)) parts.delete(name);
+        else parts.add(name);
+        node.className = [...parts].join(" ");
+      },
+    },
+    getAttribute(name: string) {
+      if (name === "id") return node.id || null;
+      if (name === "class") return node.className || null;
+      return node.attrs[name] ?? null;
+    },
+    setAttribute(name: string, value: string) {
+      node.attrs[name] = value;
+      if (name === "id") node.id = value;
+      if (name === "class") node.className = value;
+    },
+    addEventListener(type: string, fn: (ev: ClickEv) => void) {
+      (node.listeners[type] ??= []).push(fn);
+    },
+    appendChild(child: FakeNode) {
+      child.parent = node;
+      node.children.push(child);
+      return child;
+    },
+    click() {
+      const ev: ClickEv = {
+        target: node,
+        preventDefault() {},
+      };
+      let cur: FakeNode | null = node;
+      while (cur) {
+        for (const fn of cur.listeners.click ?? []) fn(ev);
+        cur = cur.parent;
+      }
+    },
+    focus() {
+      node.focused = true;
+    },
+    closest(sel: string) {
+      let cur: FakeNode | null = node;
+      while (cur) {
+        if (matches(cur, sel)) return cur;
+        cur = cur.parent;
+      }
+      return null;
+    },
+    getBoundingClientRect() {
+      return node.rect;
+    },
+    querySelector(sel: string) {
+      return node.querySelectorAll(sel)[0] ?? null;
+    },
+    querySelectorAll(sel: string) {
+      const out: FakeNode[] = [];
+      const walk = (cur: FakeNode) => {
+        if (matches(cur, sel)) out.push(cur);
+        for (const child of cur.children) walk(child);
+      };
+      for (const child of node.children) walk(child);
+      return out;
+    },
+  };
+  return node;
+}
+
+function loadPagesFixture(html: string) {
+  const start = html.lastIndexOf("<script>");
+  const end = html.lastIndexOf("</script>");
+  assert.ok(start >= 0 && end > start, "fixture <script>");
+  const script = html.slice(start + "<script>".length, end);
+  const soulMatch = html.match(/<textarea id="soul"[^>]*>([\s\S]*?)<\/textarea>/);
+  assert.ok(soulMatch, "soul textarea");
+
+  const nodes: FakeNode[] = [];
+  const byId = new Map<string, FakeNode>();
+  const register = (node: FakeNode) => {
+    nodes.push(node);
+    if (node.id) byId.set(node.id, node);
+    return node;
+  };
+
+  const documentElement = register(el("html", { lang: "en" }));
+  const skip = register(el("a", { class: "skip", href: "#try" }, "Skip to the hall"));
+  const nav = register(el("header", { class: "nav" }));
+  nav.rect = { top: 0, height: 69 };
+  const localeSwitch = register(el("div", { class: "locale-switch" }));
+  for (const loc of ["zh-CN", "zh-TW", "en", "ja"]) {
+    const btn = register(el("button", { "data-locale": loc, type: "button" }, loc));
+    btn.parent = localeSwitch;
+    localeSwitch.children.push(btn);
+  }
+  const tryEl = register(el("section", { id: "try", class: "block" }));
+  tryEl.rect = { top: 1690, height: 400 };
+  tryEl.setAttribute("tabindex", "-1");
+  const thread = register(el("div", { id: "thread", class: "thread" }));
+  Object.defineProperty(thread, "innerHTML", {
+    get() {
+      return thread.children.map((c) => c.innerHTML).join("");
+    },
+    set(value: string) {
+      if (value === "") thread.children = [];
+    },
+    configurable: true,
+  });
+  const soul = register(el("textarea", { id: "soul" }, soulMatch[1]));
+  soul.value = soulMatch[1];
+  const soulStatus = register(el("span", { id: "soul-status" }));
+  register(el("button", { id: "ask-pm", class: "chip", type: "button" }));
+  register(el("button", { id: "ask-rd", class: "chip", type: "button" }));
+  register(el("button", { id: "reset", class: "chip", type: "button" }));
+  register(el("button", { id: "apply-soul", class: "btn", type: "button" }));
+  register(el("button", { id: "copy-cli", class: "btn", type: "button" }));
+  for (const handle of ["infra", "pm", "rd", "design", "marketing"]) {
+    register(el("button", { class: "seat", "data-handle": handle, type: "button" }));
+  }
+
+  const location = { hash: "" };
+  const windowObj = {
+    scrollY: 0,
+    scrollTo(_x: number, y: number) {
+      windowObj.scrollY = y;
+    },
+  };
+  const history = {
+    replaceState(_state: unknown, _title: string, url: string) {
+      if (url.includes("#")) location.hash = url.slice(url.indexOf("#"));
+    },
+  };
+  const store = new Map<string, string>();
+  let title = "";
+
+  const document = {
+    documentElement,
+    get title() {
+      return title;
+    },
+    set title(value: string) {
+      title = value;
+    },
+    getElementById(id: string) {
+      return byId.get(id) ?? null;
+    },
+    querySelector(sel: string) {
+      return nodes.find((node) => matches(node, sel)) ?? null;
+    },
+    querySelectorAll(sel: string) {
+      return nodes.filter((node) => matches(node, sel));
+    },
+    createElement(tag: string) {
+      return el(tag);
+    },
+  };
+
+  const run = new Function(
+    "document",
+    "window",
+    "location",
+    "history",
+    "navigator",
+    "localStorage",
+    script,
+  );
+  run(document, windowObj, location, history, { language: "en-US" }, {
+    getItem(key: string) {
+      return store.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+  });
+
+  tryEl.focus = () => {
+    tryEl.focused = true;
+  };
+
+  return {
+    skip,
+    tryEl,
+    thread,
+    soul,
+    soulStatus,
+    askPm: byId.get("ask-pm")!,
+    askRd: byId.get("ask-rd")!,
+    applySoul: byId.get("apply-soul")!,
+    location,
+    windowObj,
+    document,
+    seat(handle: string) {
+      const node = nodes.find(
+        (item) =>
+          item.className.split(/\s+/).includes("seat") &&
+          item.getAttribute("data-handle") === handle,
+      );
+      assert.ok(node, handle);
+      return node;
+    },
+    locale(loc: string) {
+      const node = nodes.find((item) => item.getAttribute("data-locale") === loc);
+      assert.ok(node, loc);
+      return node;
+    },
+    messages() {
+      return thread.children.map((row) => {
+        const who = /class="who">([^<]*)/.exec(row.innerHTML)?.[1] ?? "";
+        const text = row.innerHTML
+          .replace(/<span class="av"[^>]*>[^<]*<\/span>/, "")
+          .replace(/<div class="who">[^<]*<\/div>/, "")
+          .replace(/<br>/g, "\n")
+          .replace(/<[^>]+>/g, "")
+          .trim();
+        return { className: row.className, who, text };
+      });
+    },
+  };
+}
+
 test("GitHub Pages demo is a fixture, not a live daemon", () => {
   const html = readFileSync(SITE, "utf8");
   const workflow = readFileSync(WORKFLOW, "utf8");
+  const pkg = JSON.parse(
+    readFileSync(join(ROOT, "package.json"), "utf8"),
+  ) as { version: string };
   assert.match(html, /Interactive preview — no model calls/);
   assert.match(html, /@infra/);
   assert.match(html, /@pm/);
@@ -32,6 +333,19 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /name="theme-color" content="#0B0E12"/);
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /"@type": "SoftwareApplication"/);
+  assert.match(html, /reasoning, local-origin/);
+  assert.match(html, /name="description" content="[^"]*reasoning, local-origin/);
+  assert.match(html, /property="og:description" content="[^"]*reasoning, local-origin/);
+  assert.match(html, /name="twitter:description" content="[^"]*reasoning, local-origin/);
+  assert.match(
+    html,
+    new RegExp(
+      `"description": "Guild ${pkg.version}\\. Node 22\\.19\\+\\. npx @kevin5251984/guild web opens http://127\\.0\\.0\\.1:7420\\. Branch, /m, OpenCode Free, reasoning, local-origin`,
+    ),
+  );
+  assert.match(html, /data-i18n-html="td\.origin"/);
+  assert.match(html, /data-i18n-html="td\.host"/);
+  assert.match(html, /data-i18n-html="td\.env"/);
   assert.doesNotMatch(html, /property="og:image"/);
   assert.doesNotMatch(html, /name="twitter:site"/);
   assert.doesNotMatch(html, /twitter:creator/);
@@ -115,6 +429,9 @@ test("README points at the Pages demo without moving the first screen", () => {
 
 test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
   const html = readFileSync(SITE, "utf8");
+  const pkg = JSON.parse(
+    readFileSync(join(ROOT, "package.json"), "utf8"),
+  ) as { version: string };
   assert.match(html, /data-locale="zh-CN"/);
   assert.match(html, /data-locale="zh-TW"/);
   assert.match(html, /data-locale="en"/);
@@ -137,6 +454,12 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
   assert.match(html, /PingFang/);
   assert.match(html, /Hiragino/);
   assert.match(html, /class="skip" href="#try"/);
+  assert.match(html, /id="try" tabindex="-1"/);
+  assert.match(html, /querySelector\("\.skip"\)\.addEventListener\("click"/);
+  assert.match(html, /window\.scrollTo\(0, y\)/);
+  assert.match(html, /tryEl\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(html, /@media \(max-width: 640px\)[\s\S]*?\.nav nav \{[\s\S]*?flex: 1 1 100%/);
+  assert.match(html, /\.nav \.locale-switch \{ flex: 0 1 auto; \}/);
   assert.doesNotMatch(html, /<select/);
   assert.doesNotMatch(html, /🏳️|🇨🇳|🇹🇼|🇯🇵|🇺🇸/);
   const banners = [...html.matchAll(/"banner\.title": "([^"]+)"/g)].map((m) => m[1]);
@@ -154,7 +477,7 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
   assert.match(html, /"h2\.tonight": "今晚大廳能做的事"/);
   assert.match(html, /"pl\.mobile\.t": "\/m 外出"/);
   assert.match(html, /opencode\.ai/);
-  assert.match(html, /Guild 0\.2\.20/);
+  assert.match(html, new RegExp(`Guild ${pkg.version}`));
   assert.doesNotMatch(html, /four-language UI/);
 
   const start = html.indexOf("const I18N = {");
@@ -172,4 +495,123 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
     assert.deepEqual(Object.keys(I18N[loc]).sort(), keys, loc);
     assert.equal(I18N[loc]["banner.title"], "Interactive preview — no model calls.");
   }
+});
+
+test("Pages locks six enamel plaques and 390px no-overflow CSS", () => {
+  const html = readFileSync(SITE, "utf8");
+  const plaques = [...html.matchAll(
+    /<article class="plaque">\s*<h3 data-i18n="([^"]+)">([^<]+)<\/h3>/g,
+  )];
+  assert.equal(plaques.length, 6);
+  assert.equal((html.match(/<article class="plaque">/g) ?? []).length, 6);
+  assert.deepEqual(plaques.map((m) => m[1]), [...PLAQUE_KEYS]);
+  assert.deepEqual(plaques.map((m) => m[2]), [...PLAQUE_TITLES]);
+  assert.match(html, /id="tonight"/);
+  assert.match(
+    html,
+    /\.plaques \{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
+  );
+  assert.match(
+    html,
+    /@media \(max-width: 640px\) \{\s*\.plaques \{ grid-template-columns: 1fr; \}/,
+  );
+  assert.match(html, /@media \(max-width: 820px\) \{\s*\.hall-frame \{ grid-template-columns: 1fr;/);
+  assert.match(html, /\.limits \{\s*width: 100%;/);
+  assert.match(html, /\.term pre \{[\s\S]*?white-space:\s*pre-wrap;[\s\S]*?overflow-wrap:\s*anywhere;/);
+  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
+  assert.match(html, /--gutter:\s*clamp\(18px, 4vw, 48px\)/);
+  assert.match(html, /<tr><td>Origin<\/td><td data-i18n-html="td\.origin">/);
+  assert.match(html, /<tr><td>Host files<\/td><td data-i18n-html="td\.host">/);
+  assert.match(html, /<tr><td>MCP env<\/td><td data-i18n-html="td\.env">/);
+  assert.doesNotMatch(html, /white-space:\s*nowrap/);
+  assert.doesNotMatch(html, /overflow-x\s*:/);
+  assert.doesNotMatch(html, /<table[^>]*style=/);
+});
+
+test("Pages locale, seats, and chips are native buttons; Skip focuses #try", () => {
+  const html = readFileSync(SITE, "utf8");
+  const locales = [...html.matchAll(/<button type="button" data-locale="([^"]+)"/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(locales, ["zh-CN", "zh-TW", "en", "ja"]);
+  const seats = [...html.matchAll(
+    /<button type="button" class="seat" data-handle="([^"]+)"/g,
+  )].map((m) => m[1]);
+  assert.deepEqual(seats, ["infra", "pm", "rd", "design", "marketing"]);
+  const chips = [...html.matchAll(/<button type="button" class="chip" id="([^"]+)"/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(chips, ["ask-pm", "ask-rd", "reset"]);
+  assert.match(html, /<button type="button" class="btn" id="apply-soul"/);
+  assert.match(html, /<a class="skip" href="#try"/);
+  assert.match(html, /id="try" tabindex="-1"/);
+  assert.equal((html.match(/<button /g) ?? []).length, 14);
+  assert.equal((html.match(/<button type="button"/g) ?? []).length, 14);
+  assert.doesNotMatch(html, /<button(?![^>]*type="button")/);
+  assert.doesNotMatch(html, /<select/);
+  assert.match(html, /aria-pressed/);
+  assert.match(html, /role="group"/);
+
+  const page = loadPagesFixture(html);
+  assert.equal(page.locale("en").getAttribute("aria-pressed"), "true");
+  assert.equal(page.locale("zh-TW").getAttribute("aria-pressed"), "false");
+  page.locale("zh-TW").click();
+  assert.equal(page.document.documentElement.lang, "zh-Hant");
+  assert.equal(page.locale("zh-TW").getAttribute("aria-pressed"), "true");
+  assert.equal(page.locale("en").getAttribute("aria-pressed"), "false");
+
+  page.skip.click();
+  assert.equal(page.tryEl.focused, true);
+  assert.equal(page.location.hash, "#try");
+  assert.equal(page.windowObj.scrollY, 1690 - 69 - 8);
+});
+
+test("Pages fixture order is @pm then @rd then Save Voice then @pm Ship it:", () => {
+  const html = readFileSync(SITE, "utf8");
+  const page = loadPagesFixture(html);
+  const start = html.indexOf("const I18N = {");
+  const end = html.indexOf("\n    };", start);
+  const I18N = new Function(`${html.slice(start, end + "\n    };".length)}\nreturn I18N;`)() as Record<
+    string,
+    Record<string, string>
+  >;
+  const en = I18N.en;
+
+  let msgs = page.messages();
+  assert.equal(msgs.length, 1);
+  assert.match(msgs[0].className, /\byou\b/);
+  assert.equal(msgs[0].text, en.channel);
+
+  page.askPm.click();
+  msgs = page.messages();
+  assert.equal(msgs.length, 3);
+  assert.equal(msgs[1].text, en["ask.pm"]);
+  assert.equal(msgs[2].who, "@pm · Project Manager");
+  assert.equal(msgs[2].text, en["pm.before"]);
+  assert.doesNotMatch(msgs[2].text, /^Ship it:/);
+  assert.equal(page.seat("pm").className.split(/\s+/).includes("on"), true);
+
+  page.askRd.click();
+  msgs = page.messages();
+  assert.equal(msgs.length, 5);
+  assert.equal(msgs[3].text, en["ask.rd"]);
+  assert.equal(msgs[4].who, "@rd · RD");
+  assert.equal(msgs[4].text, en["rd.reply"]);
+  assert.equal(page.seat("rd").className.split(/\s+/).includes("on"), true);
+  assert.equal(page.seat("pm").className.split(/\s+/).includes("on"), false);
+
+  assert.equal(page.soul.value.includes("Ship it:"), false);
+  page.applySoul.click();
+  assert.equal(page.soul.value.includes("Ship it:"), true);
+  assert.match(page.soul.value, /## Voice\nStart every reply with "Ship it:"/);
+  assert.equal(page.soulStatus.textContent, en["status.saved"]);
+
+  page.seat("pm").click();
+  msgs = page.messages();
+  assert.equal(msgs.length, 7);
+  assert.equal(msgs[5].text, en["ask.pm"]);
+  assert.equal(msgs[6].who, "@pm · Project Manager");
+  assert.equal(msgs[6].text, en["pm.after"]);
+  assert.match(msgs[6].text, /^Ship it:/);
+  assert.equal(page.seat("pm").className.split(/\s+/).includes("on"), true);
 });

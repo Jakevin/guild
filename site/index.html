@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Guild 0.2.20 — a local guild. @mention one.</title>
-  <meta name="description" content="Guild 0.2.20. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch quests, /m, OpenCode Free. Fixture preview — no model, no tools." />
+  <title>Guild 0.2.21 — a local guild. @mention one.</title>
+  <meta name="description" content="Guild 0.2.21. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch, /m, OpenCode Free, reasoning, local-origin. Fixture — no model, no tools." />
   <link rel="canonical" href="https://jakevin.github.io/guild/" />
   <meta name="theme-color" content="#0B0E12" />
   <meta name="color-scheme" content="dark" />
@@ -13,11 +13,11 @@
   <meta property="og:locale" content="en_US" />
   <meta property="og:site_name" content="Guild" />
   <meta property="og:url" content="https://jakevin.github.io/guild/" />
-  <meta property="og:title" content="Guild 0.2.20 — a local guild. @mention one." />
-  <meta property="og:description" content="Guild 0.2.20. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch quests, /m, OpenCode Free. Fixture preview — no model, no tools." />
+  <meta property="og:title" content="Guild 0.2.21 — a local guild. @mention one." />
+  <meta property="og:description" content="Guild 0.2.21. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch, /m, OpenCode Free, reasoning, local-origin. Fixture — no model, no tools." />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Guild 0.2.20 — a local guild. @mention one." />
-  <meta name="twitter:description" content="Guild 0.2.20. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch quests, /m, OpenCode Free. Fixture preview — no model, no tools." />
+  <meta name="twitter:title" content="Guild 0.2.21 — a local guild. @mention one." />
+  <meta name="twitter:description" content="Guild 0.2.21. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch, /m, OpenCode Free, reasoning, local-origin. Fixture — no model, no tools." />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
   <script type="application/ld+json">
@@ -28,8 +28,8 @@
         "@type": "WebPage",
         "@id": "https://jakevin.github.io/guild/#webpage",
         "url": "https://jakevin.github.io/guild/",
-        "name": "Guild 0.2.20 — a local guild. @mention one.",
-        "description": "Guild 0.2.20. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch quests, /m, OpenCode Free. Static fixture — no model calls.",
+        "name": "Guild 0.2.21 — a local guild. @mention one.",
+        "description": "Guild 0.2.21. Node 22.19+. npx @kevin5251984/guild web opens http://127.0.0.1:7420. Branch, /m, OpenCode Free, reasoning, local-origin. Fixture — no model, no tools.",
         "isPartOf": { "@id": "https://jakevin.github.io/guild/#website" },
         "about": { "@id": "https://github.com/Jakevin/guild#software" }
       },
@@ -45,7 +45,7 @@
         "name": "Guild",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Linux, Windows",
-        "softwareVersion": "0.2.20",
+        "softwareVersion": "0.2.21",
         "url": "https://github.com/Jakevin/guild",
         "installUrl": "https://www.npmjs.com/package/@kevin5251984/guild",
         "description": "A local guild of adventurers. @mention the one you actually want. Not another omniscient chat.",
@@ -93,7 +93,9 @@
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+    #try:focus { outline: none; }
+    #try:focus-visible { box-shadow: var(--focus); }
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -128,6 +130,10 @@
       z-index: 20;
     }
     .skip:focus { left: 8px; }
+    .skip:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
 
     /* Enamel press: paper / steel / ghost */
     .btn, .chip, .seat, .soul .btn, .locale-switch button {
@@ -192,6 +198,21 @@
       gap: 8px;
       flex-wrap: wrap;
       align-items: center;
+    }
+    @media (max-width: 640px) {
+      html { scroll-padding-top: 168px; }
+      .nav {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 12px;
+      }
+      .nav nav {
+        margin-left: 0;
+        flex: 1 1 100%;
+        justify-content: flex-start;
+      }
+      .nav .locale-switch { flex: 0 1 auto; }
+      .nav .btn { flex: 0 0 auto; }
     }
     .locale-switch {
       display: inline-flex;
@@ -830,6 +851,85 @@
       gap: 8px 18px;
       justify-content: space-between;
     }
+  
+    /* kami rhythm on enamel: tokens, numbered sections, FAQ. No parchment. */
+    .hero-tokens {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px 32px;
+      margin: 0 0 28px;
+      max-width: 42rem;
+    }
+    .hero-tokens span {
+      font: 12px/1.35 "IBM Plex Mono", ui-monospace, monospace;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .hero-tokens b {
+      display: block;
+      color: var(--paper);
+      font: 500 15px/1.2 "IBM Plex Sans", "PingFang TC", sans-serif;
+      letter-spacing: 0.02em;
+      margin-bottom: 3px;
+    }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin: 0 0 10px;
+    }
+    .section-num {
+      flex: none;
+      font: 12px/1 "Pixelify Sans", "IBM Plex Mono", ui-monospace, monospace;
+      letter-spacing: 0.16em;
+      color: var(--signal);
+    }
+    .section-head h2 { margin: 0; }
+    .gallery-lede {
+      color: var(--muted);
+      font-size: 15px;
+      margin: 0 0 18px;
+      max-width: 42rem;
+    }
+    .faq {
+      margin: 8px 0 0;
+      max-width: 42rem;
+    }
+    .faq-pair {
+      border-bottom: 1px solid var(--line);
+    }
+    .faq-pair summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 16px 0;
+      color: var(--paper);
+      font-size: 16px;
+      line-height: 1.35;
+    }
+    .faq-pair summary::-webkit-details-marker { display: none; }
+    .faq-pair summary::after {
+      content: "+";
+      float: right;
+      color: var(--signal);
+      font: 16px/1 "IBM Plex Mono", ui-monospace, monospace;
+    }
+    .faq-pair[open] summary::after { content: "–"; }
+    .faq-pair p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .faq-tail {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    html[lang^="zh"] .section-num,
+    html[lang="ja"] .section-num {
+      font-family: "IBM Plex Sans", "PingFang TC", "Hiragino Sans", sans-serif;
+    }
+
   </style>
 </head>
 <body>
@@ -838,7 +938,7 @@
     <span class="mark"><img src="mark.svg" width="36" height="36" alt="Guild" /></span>
     <div>
       <div class="brand">Guild</div>
-      <div class="ver">v0.2.20 · <span data-i18n="local">local-first</span></div>
+      <div class="ver">v0.2.21 · <span data-i18n="local">local-first</span></div>
     </div>
     <nav>
       <div class="locale-switch" role="group" data-i18n-aria="lang.group" aria-label="Language">
@@ -862,7 +962,13 @@
     </div>
     <p class="kicker" data-i18n="kicker.hero">A local guild of adventurers</p>
     <h1 data-i18n-html="h1">A local bench of bots.<br />@mention the one you want.</h1>
-    <p class="lead" data-i18n-html="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.20: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.</p>
+    <p class="lead" data-i18n-html="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.21: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.</p>
+    <div class="hero-tokens">
+      <span><b>Node ≥ 22.19</b> engines</span>
+      <span><b>npx @kevin5251984/guild web</b> one line</span>
+      <span><b>http://127.0.0.1:7420</b> the hall</span>
+      <span><b>MIT</b> free</span>
+    </div>
     <div class="cta-row">
       <a class="btn primary" href="#try" data-i18n="cta.try">Try the hall</a>
       <a class="btn" href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a>
@@ -884,9 +990,47 @@
     </figure>
   </div>
 
-  <section class="block" id="try">
+  <section class="block" id="tonight">
+    <p class="kicker" data-i18n="kicker.tonight">v0.2.21</p>
+    <div class="section-head">
+      <span class="section-num" aria-hidden="true">01</span>
+      <h2 data-i18n="h2.tonight">What the hall can do tonight</h2>
+    </div>
+    <p class="note" data-i18n-html="note.tonight">This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.</p>
+    <div class="plaques">
+      <article class="plaque">
+        <h3 data-i18n="pl.branch.t">Branch a quest</h3>
+        <p data-i18n-html="pl.branch">Open a branch from a message. The child keeps the roster, <code>Channel.md</code>, and up to 20 messages. Close can merge <code>MEMORY.md</code> back to the parent.</p>
+      </article>
+      <article class="plaque">
+        <h3 data-i18n="pl.mobile.t">/m away</h3>
+        <p data-i18n-html="pl.mobile">Same loopback hall. Read, reply, stop, steer — over HTTP. Attachments, branches, and the trajectory panel stay on the desk.</p>
+      </article>
+      <article class="plaque">
+        <h3 data-i18n="pl.free.t">OpenCode Free</h3>
+        <p data-i18n-html="pl.free">Default model path with no API key. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.</p>
+      </article>
+      <article class="plaque">
+        <h3 data-i18n="pl.reason.t">Reasoning · speed</h3>
+        <p data-i18n-html="pl.reason">Effort only where the model supports it. Fast picks <code>low</code>, then <code>minimal</code> — not a second provider.</p>
+      </article>
+      <article class="plaque">
+        <h3 data-i18n="pl.dispatch.t">Waves, not a pile-on</h3>
+        <p data-i18n-html="pl.dispatch"><code>@handle</code> does not hire a seat. <code>@quest</code> / <code>@channel</code> / <code>@all</code> broadcast. Numbered lines share a wave; <code>完成後</code> / <code>最後</code> wait.</p>
+      </article>
+      <article class="plaque">
+        <h3 data-i18n="pl.guard.t">Local guards</h3>
+        <p data-i18n-html="pl.guard">Foreign <code>Origin</code> is refused. Host browse hides secret files. MCP HTTP shows env keys, values as <code>***</code>.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="block" id="try" tabindex="-1">
     <p class="kicker" data-i18n="kicker.try">Try the hall</p>
-    <h2 data-i18n="h2.try">Five seats. One @handle.</h2>
+    <div class="section-head">
+      <span class="section-num" aria-hidden="true">02</span>
+      <h2 data-i18n="h2.try">Five seats. One @handle.</h2>
+    </div>
     <p class="note" data-i18n-html="note.try">Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.</p>
     <div class="hall-frame">
       <span class="rivets" aria-hidden="true"><i></i><i></i></span>
@@ -925,7 +1069,10 @@
 
   <section class="block">
     <p class="kicker" data-i18n="kicker.harness">How the harness works</p>
-    <h2 data-i18n="h2.harness">One turn. One process.</h2>
+    <div class="section-head">
+      <span class="section-num" aria-hidden="true">03</span>
+      <h2 data-i18n="h2.harness">One turn. One process.</h2>
+    </div>
     <p class="note">@handle → chatReply → HarnessService.turn → runAgentLoop</p>
     <div class="flow" aria-hidden="true">
       <div class="cell">@handle<em data-i18n="flow.assign">assignment</em></div>
@@ -951,41 +1098,12 @@
     <p class="note" data-i18n-html="note.files">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
   </section>
 
-  <section class="block" id="tonight">
-    <p class="kicker" data-i18n="kicker.tonight">v0.2.20</p>
-    <h2 data-i18n="h2.tonight">What the hall can do tonight</h2>
-    <p class="note" data-i18n-html="note.tonight">This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.</p>
-    <div class="plaques">
-      <article class="plaque">
-        <h3 data-i18n="pl.branch.t">Branch a quest</h3>
-        <p data-i18n-html="pl.branch">Open a branch from a message. The child keeps the roster, <code>Channel.md</code>, and up to 20 messages. Close can merge <code>MEMORY.md</code> back to the parent.</p>
-      </article>
-      <article class="plaque">
-        <h3 data-i18n="pl.mobile.t">/m away</h3>
-        <p data-i18n-html="pl.mobile">Same loopback hall. Read, reply, stop, steer — over HTTP. Attachments, branches, and the trajectory panel stay on the desk.</p>
-      </article>
-      <article class="plaque">
-        <h3 data-i18n="pl.free.t">OpenCode Free</h3>
-        <p data-i18n-html="pl.free">Default model path with no API key. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.</p>
-      </article>
-      <article class="plaque">
-        <h3 data-i18n="pl.reason.t">Reasoning · speed</h3>
-        <p data-i18n-html="pl.reason">Effort only where the model supports it. Fast picks <code>low</code>, then <code>minimal</code> — not a second provider.</p>
-      </article>
-      <article class="plaque">
-        <h3 data-i18n="pl.dispatch.t">Waves, not a pile-on</h3>
-        <p data-i18n-html="pl.dispatch"><code>@handle</code> does not hire a seat. <code>@quest</code> / <code>@channel</code> / <code>@all</code> broadcast. Numbered lines share a wave; <code>完成後</code> / <code>最後</code> wait.</p>
-      </article>
-      <article class="plaque">
-        <h3 data-i18n="pl.guard.t">Local guards</h3>
-        <p data-i18n-html="pl.guard">Foreign <code>Origin</code> is refused. Host browse hides secret files. MCP HTTP shows env keys, values as <code>***</code>.</p>
-      </article>
-    </div>
-  </section>
-
   <section class="block" id="run">
     <p class="kicker" data-i18n="kicker.run">What runs locally</p>
-    <h2 data-i18n="h2.run">Your disk. Your models.</h2>
+    <div class="section-head">
+      <span class="section-num" aria-hidden="true">04</span>
+      <h2 data-i18n="h2.run">Your disk. Your models.</h2>
+    </div>
     <p class="note" data-i18n-html="note.run">Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.</p>
     <div class="term">
       <header>
@@ -1014,6 +1132,33 @@ pnpm dev</pre>
     <p class="note" data-i18n-html="note.security">Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
   </section>
 
+  <section class="block" id="faq">
+    <p class="kicker">FAQ</p>
+    <div class="section-head">
+      <span class="section-num" aria-hidden="true">05</span>
+      <h2 data-i18n="faq.title">Before you npx</h2>
+    </div>
+    <div class="faq">
+      <details class="faq-pair">
+        <summary data-i18n="faq.q1">Do I need an API key tonight?</summary>
+        <p data-i18n-html="faq.a1">No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.</p>
+      </details>
+      <details class="faq-pair">
+        <summary data-i18n="faq.q2">Does this tab talk to the hall?</summary>
+        <p data-i18n-html="faq.a2">No. Interactive preview — no model calls. Fixed replies. This tab does not talk to <code>127.0.0.1:7420</code>.</p>
+      </details>
+      <details class="faq-pair">
+        <summary data-i18n="faq.q3">Is the product a four-language app?</summary>
+        <p data-i18n-html="faq.a3">No. This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.</p>
+      </details>
+      <details class="faq-pair">
+        <summary data-i18n-html="faq.q4">What can <code>run</code> and <code>write</code> do?</summary>
+        <p data-i18n-html="faq.a4">Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.</p>
+      </details>
+      <p class="faq-tail" data-i18n="faq.tail">Free. Open source under the MIT license.</p>
+    </div>
+  </section>
+
   <footer>
     <p data-i18n="footer">Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.</p>
     <p><a href="https://github.com/Jakevin/guild">github.com/Jakevin/guild</a></p>
@@ -1026,24 +1171,24 @@ pnpm dev</pre>
     const LOCALES = ["zh-CN", "zh-TW", "en", "ja"];
     const LANG_ATTR = { "zh-CN": "zh-Hans", "zh-TW": "zh-Hant", en: "en", ja: "ja" };
     const I18N = {
-      en: {
-        title: "Guild 0.2.20 — a local guild. @mention one.",
-        skip: "Skip to the hall",
-        local: "local-first",
+      "en": {
+        "title": "Guild 0.2.21 — a local guild. @mention one.",
+        "skip": "Skip to the hall",
+        "local": "local-first",
         "nav.run": "Run locally",
         "lang.group": "Language",
         "kicker.hero": "A local guild of adventurers",
-        h1: "A local bench of bots.<br />@mention the one you want.",
-        lead: "Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.20: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.",
+        "h1": "A local bench of bots.<br />@mention the one you want.",
+        "lead": "Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.21: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.",
         "cta.try": "Try the hall",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys. This tab does not talk to <code>127.0.0.1:7420</code>.",
         "img.alt": "A local guild. @mention one adventurer.",
-        figcaption: "Live hall on :7420 — this page is a fixture of the same idea.",
+        "figcaption": "Live hall on :7420 — this page is a fixture of the same idea.",
         "kicker.try": "Try the hall",
         "h2.try": "Five seats. One @handle.",
         "note.try": "Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.",
-        roster: "Roster",
+        "roster": "Roster",
         "pane.job": "a channel has a job",
         "chip.reset": "Reset",
         "soul.label": "SOUL.md · @pm Voice (fixture)",
@@ -1058,7 +1203,7 @@ pnpm dev</pre>
         "note.steer": "steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.",
         "note.hermes": "Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.",
         "note.files": "Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.",
-        "kicker.tonight": "v0.2.20",
+        "kicker.tonight": "v0.2.21",
         "h2.tonight": "What the hall can do tonight",
         "note.tonight": "This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.",
         "pl.branch.t": "Branch a quest",
@@ -1076,8 +1221,8 @@ pnpm dev</pre>
         "kicker.run": "What runs locally",
         "h2.run": "Your disk. Your models.",
         "note.run": "Node ≥ 22.19. One line, no clone. The hall is <code>http://127.0.0.1:7420</code>.",
-        copy: "Copy",
-        copied: "Copied",
+        "copy": "Copy",
+        "copied": "Copied",
         "copy.fail": "Select & copy",
         "th.limit": "Limit",
         "th.fact": "Fact",
@@ -1088,42 +1233,53 @@ pnpm dev</pre>
         "td.host": "Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, credential files. Home is still browsable.",
         "td.env": "HTTP shows keys; values are <code>***</code>. The child still gets the real env.",
         "note.security": "Read <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> before you point this at a machine you care about.",
-        footer: "Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.",
+        "footer": "Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.",
         "seat.infra": "Infra",
         "seat.pm": "Project Manager",
         "seat.rd": "RD",
         "seat.design": "Design",
         "seat.marketing": "Marketing",
-        you: "you",
+        "you": "you",
         "status.unchanged": "Unchanged. Ask @pm, then change Voice, then ask again.",
         "status.saved": "Voice saved in this tab only. Ask @pm again — the fixture now starts with Ship it:",
         "status.missing": "Voice missing Ship it: — not applied.",
         "pm.before": "The job on this channel is to explain Guild in one minute. The most important thing is to @mention the person you want — do not start a new feature.",
         "pm.after": "Ship it: @mention one seat. Do not start a new feature.",
         "rd.reply": "This repo is Guild: a local daemon on :7420. You staff named adventurers and @mention one. I am not starting a feature.",
-        channel: "#demo\nJob: explain Guild in one minute.\nMost important thing: @mention the person you want.",
+        "channel": "#demo\nJob: explain Guild in one minute.\nMost important thing: @mention the person you want.",
         "ask.pm": "@pm what is the one most important thing now?",
         "ask.rd": "@rd look at the current repo. Tell me what it is. Do not start a new feature.",
-        ship: 'Start every reply with "Ship it:" then exactly two short sentences. No bullets.'
+        "ship": "Start every reply with \"Ship it:\" then exactly two short sentences. No bullets.",
+        "h2.gallery": "The hall on disk",
+        "faq.title": "Before you npx",
+        "faq.q1": "Do I need an API key tonight?",
+        "faq.a1": "No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.",
+        "faq.q2": "Does this tab talk to the hall?",
+        "faq.a2": "No. Interactive preview — no model calls. Fixed replies. This tab does not talk to <code>127.0.0.1:7420</code>.",
+        "faq.q3": "Is the product a four-language app?",
+        "faq.a3": "No. This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.",
+        "faq.q4": "What can <code>run</code> and <code>write</code> do?",
+        "faq.a4": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.",
+        "faq.tail": "Free. Open source under the MIT license."
       },
       "zh-TW": {
-        title: "Guild 0.2.20 — 本機冒險者工會。點名一人。",
-        skip: "跳到大廳",
-        local: "本機優先",
+        "title": "Guild 0.2.21 — 本機冒險者工會。點名一人。",
+        "skip": "跳到大廳",
+        "local": "本機優先",
         "nav.run": "本機啟動",
         "lang.group": "語言",
         "kicker.hero": "本機冒險者工會",
-        h1: "本機冒險者工會。<br />用 @mention 點名你要的那個人。",
-        lead: "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>，不是按個 star。v0.2.20：從訊息開分支、<code>/m</code>、OpenCode Free。要用 pnpm checkout 是替代路徑。",
+        "h1": "本機冒險者工會。<br />用 @mention 點名你要的那個人。",
+        "lead": "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>，不是按個 star。v0.2.21：從訊息開分支、<code>/m</code>、OpenCode Free。要用 pnpm checkout 是替代路徑。",
         "cta.try": "試大廳",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定回覆。沒有 <code>run</code>、沒有 <code>write</code>、沒有 MCP、沒有瀏覽器、沒有 API key。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
         "img.alt": "本機冒險者工會。點名一人。",
-        figcaption: ":7420 上的真大廳 — 這頁是同一件事的靜態預覽。",
+        "figcaption": ":7420 上的真大廳 — 這頁是同一件事的靜態預覽。",
         "kicker.try": "試大廳",
         "h2.try": "五席。一個 @handle。",
         "note.try": "點 <code>@pm</code> — 只有 PM 回。點 <code>@rd</code> — 換一席。改 Voice，再問 PM — 同一個人，不同聲音。",
-        roster: "編制",
+        "roster": "編制",
         "pane.job": "頻道有一份委託",
         "chip.reset": "重設",
         "soul.label": "SOUL.md · @pm Voice（預覽）",
@@ -1138,7 +1294,7 @@ pnpm dev</pre>
         "note.steer": "引導下一輪以 <code>&lt;user_steer&gt;</code> 進模型。Stop 會 abort 這回合的 <code>AbortSignal</code>。技能目錄只有名字與摘要；正文要模型自己 call <code>skill</code> 才載入。",
         "note.hermes": "Guild 只借 Hermes 一個形做瀏覽器快照 — 不動正在跑的 Chrome。回合迴圈是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。預設 sandbox 是 <code>full_access</code>。",
         "note.files": "檔案：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
-        "kicker.tonight": "v0.2.20",
+        "kicker.tonight": "v0.2.21",
         "h2.tonight": "今晚大廳能做的事",
         "note.tonight": "這頁是四語靜態預覽。產品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四語 App。",
         "pl.branch.t": "從訊息開分支",
@@ -1156,8 +1312,8 @@ pnpm dev</pre>
         "kicker.run": "本機在跑什麼",
         "h2.run": "你的磁碟。你的模型。",
         "note.run": "Node ≥ 22.19。一行，不必 clone。大廳在 <code>http://127.0.0.1:7420</code>。",
-        copy: "複製",
-        copied: "已複製",
+        "copy": "複製",
+        "copied": "已複製",
         "copy.fail": "選取後複製",
         "th.limit": "限制",
         "th.fact": "事實",
@@ -1168,42 +1324,53 @@ pnpm dev</pre>
         "td.host": "黑名單：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、憑證檔。家目錄仍可瀏覽。",
         "td.env": "HTTP 看得到鍵，值是 <code>***</code>。子行程仍拿到真 env。",
         "note.security": "對你在意的機器動手之前，先讀 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
-        footer: "Guild 不是任務板，不是酒館，不是小隊出征。頻道是一張沒結案的委託。MIT.",
+        "footer": "Guild 不是任務板，不是酒館，不是小隊出征。頻道是一張沒結案的委託。MIT.",
         "seat.infra": "基建",
         "seat.pm": "專案經理",
         "seat.rd": "研發",
         "seat.design": "美術設計",
         "seat.marketing": "行銷",
-        you: "你",
+        "you": "你",
         "status.unchanged": "還沒改。先問 @pm，改 Voice，再問一次。",
         "status.saved": "Voice 只存在這個分頁。再問 @pm — 預覽現在以 Ship it: 開頭。",
         "status.missing": "Voice 沒有 Ship it: — 沒套用。",
         "pm.before": "這個頻道的委託是用一分鐘講清楚 Guild。最重要的事是 @mention 你要的那個人 — 不要開新功能。",
         "pm.after": "Ship it: 點名一席。不要開新功能。",
         "rd.reply": "這個 repo 是 Guild：本機 daemon，跑在 :7420。你編制有名字的冒險者，再 @mention 其中一個。我不會開新功能。",
-        channel: "#demo\n委託：用一分鐘講清楚 Guild。\n最重要的事：@mention 你要的那個人。",
+        "channel": "#demo\n委託：用一分鐘講清楚 Guild。\n最重要的事：@mention 你要的那個人。",
         "ask.pm": "@pm 現在最重要的一件事是什麼？",
         "ask.rd": "@rd 看目前這個 repo。告訴我它是什麼。不要開新功能。",
-        ship: '每則回覆以 "Ship it:" 開頭，再接兩句短句。不要條列。'
+        "ship": "每則回覆以 \"Ship it:\" 開頭，再接兩句短句。不要條列。",
+        "h2.gallery": "磁碟上的大廳",
+        "faq.title": "npx 之前",
+        "faq.q1": "今晚需要 API key 嗎？",
+        "faq.a1": "不用。OpenCode Free 是預設路徑。這條路上的 prompt 會到 <code>opencode.ai</code>。到 <code>/settings</code> 換 provider。",
+        "faq.q2": "這個分頁會連大廳嗎？",
+        "faq.a2": "不會。Interactive preview — no model calls. 固定回覆。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
+        "faq.q3": "產品是四語 App 嗎？",
+        "faq.a3": "不是。這頁是四語靜態預覽。產品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四語 App。",
+        "faq.q4": "<code>run</code> 與 <code>write</code> 會做什麼？",
+        "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
+        "faq.tail": "免費。MIT 開源。"
       },
       "zh-CN": {
-        title: "Guild 0.2.20 — 本地冒险者公会。点名一人。",
-        skip: "跳到大厅",
-        local: "本地优先",
+        "title": "Guild 0.2.21 — 本地冒险者公会。点名一人。",
+        "skip": "跳到大厅",
+        "local": "本地优先",
         "nav.run": "本地启动",
         "lang.group": "语言",
         "kicker.hero": "本地冒险者公会",
-        h1: "本地冒险者公会。<br />用 @mention 点名你要的那个人。",
-        lead: "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>，不是点个 star。v0.2.20：从消息开分支、<code>/m</code>、OpenCode Free。用 pnpm checkout 是替代路径。",
+        "h1": "本地冒险者公会。<br />用 @mention 点名你要的那个人。",
+        "lead": "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>，不是点个 star。v0.2.21：从消息开分支、<code>/m</code>、OpenCode Free。用 pnpm checkout 是替代路径。",
         "cta.try": "试大厅",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定回复。没有 <code>run</code>、没有 <code>write</code>、没有 MCP、没有浏览器、没有 API key。这个分页不会连到 <code>127.0.0.1:7420</code>。",
         "img.alt": "本地冒险者公会。点名一人。",
-        figcaption: ":7420 上的真大厅 — 这页是同一件事的静态预览。",
+        "figcaption": ":7420 上的真大厅 — 这页是同一件事的静态预览。",
         "kicker.try": "试大厅",
         "h2.try": "五席。一个 @handle。",
         "note.try": "点 <code>@pm</code> — 只有 PM 回。点 <code>@rd</code> — 换一席。改 Voice，再问 PM — 同一个人，不同声音。",
-        roster: "编制",
+        "roster": "编制",
         "pane.job": "频道有一份委托",
         "chip.reset": "重置",
         "soul.label": "SOUL.md · @pm Voice（预览）",
@@ -1218,7 +1385,7 @@ pnpm dev</pre>
         "note.steer": "引导下一轮以 <code>&lt;user_steer&gt;</code> 进模型。Stop 会 abort 这回合的 <code>AbortSignal</code>。技能目录只有名字与摘要；正文要模型自己 call <code>skill</code> 才载入。",
         "note.hermes": "Guild 只借 Hermes 一个形做浏览器快照 — 不动正在跑的 Chrome。回合循环是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。默认 sandbox 是 <code>full_access</code>。",
         "note.files": "文件：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
-        "kicker.tonight": "v0.2.20",
+        "kicker.tonight": "v0.2.21",
         "h2.tonight": "今晚大厅能做的事",
         "note.tonight": "这页是四语静态预览。产品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四语 App。",
         "pl.branch.t": "从消息开分支",
@@ -1236,8 +1403,8 @@ pnpm dev</pre>
         "kicker.run": "本地在跑什么",
         "h2.run": "你的磁盘。你的模型。",
         "note.run": "Node ≥ 22.19。一行，不必 clone。大厅在 <code>http://127.0.0.1:7420</code>。",
-        copy: "复制",
-        copied: "已复制",
+        "copy": "复制",
+        "copied": "已复制",
         "copy.fail": "选取后复制",
         "th.limit": "限制",
         "th.fact": "事实",
@@ -1248,42 +1415,53 @@ pnpm dev</pre>
         "td.host": "黑名单：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、凭证档。家目录仍可浏览。",
         "td.env": "HTTP 看得到键，值是 <code>***</code>。子进程仍拿到真 env。",
         "note.security": "对你在意的机器动手之前，先读 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
-        footer: "Guild 不是任务板，不是酒馆，不是小队出征。频道是一张没结案的委托。MIT.",
+        "footer": "Guild 不是任务板，不是酒馆，不是小队出征。频道是一张没结案的委托。MIT.",
         "seat.infra": "基建",
         "seat.pm": "项目经理",
         "seat.rd": "研发",
         "seat.design": "美术设计",
         "seat.marketing": "营销",
-        you: "你",
+        "you": "你",
         "status.unchanged": "还没改。先问 @pm，改 Voice，再问一次。",
         "status.saved": "Voice 只存在这个分页。再问 @pm — 预览现在以 Ship it: 开头。",
         "status.missing": "Voice 没有 Ship it: — 没套用。",
         "pm.before": "这个频道的委托是用一分钟讲清楚 Guild。最重要的事是 @mention 你要的那个人 — 不要开新功能。",
         "pm.after": "Ship it: 点名一席。不要开新功能。",
         "rd.reply": "这个 repo 是 Guild：本地 daemon，跑在 :7420。你编制有名字的冒险者，再 @mention 其中一个。我不会开新功能。",
-        channel: "#demo\n委托：用一分钟讲清楚 Guild。\n最重要的事：@mention 你要的那个人。",
+        "channel": "#demo\n委托：用一分钟讲清楚 Guild。\n最重要的事：@mention 你要的那个人。",
         "ask.pm": "@pm 现在最重要的一件事是什么？",
         "ask.rd": "@rd 看目前这个 repo。告诉我它是什么。不要开新功能。",
-        ship: '每则回复以 "Ship it:" 开头，再接两句短句。不要条列。'
+        "ship": "每则回复以 \"Ship it:\" 开头，再接两句短句。不要条列。",
+        "h2.gallery": "磁盘上的大厅",
+        "faq.title": "npx 之前",
+        "faq.q1": "今晚需要 API key 吗？",
+        "faq.a1": "不用。OpenCode Free 是默认路径。这条路上的 prompt 会到 <code>opencode.ai</code>。到 <code>/settings</code> 换 provider。",
+        "faq.q2": "这个分页会连大厅吗？",
+        "faq.a2": "不会。Interactive preview — no model calls. 固定回复。这个分页不会连到 <code>127.0.0.1:7420</code>。",
+        "faq.q3": "产品是四语 App 吗？",
+        "faq.a3": "不是。这页是四语静态预览。产品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四语 App。",
+        "faq.q4": "<code>run</code> 与 <code>write</code> 会做什么？",
+        "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。对你在意的机器动手之前，先读 SECURITY.md。",
+        "faq.tail": "免费。MIT 开源。"
       },
-      ja: {
-        title: "Guild 0.2.20 — ローカルの冒険者ギルド。ひとり指名。",
-        skip: "拠点へスキップ",
-        local: "ローカルファースト",
+      "ja": {
+        "title": "Guild 0.2.21 — ローカルの冒険者ギルド。ひとり指名。",
+        "skip": "拠点へスキップ",
+        "local": "ローカルファースト",
         "nav.run": "ローカルで起動",
         "lang.group": "言語",
         "kicker.hero": "ローカルの冒険者ギルド",
-        h1: "ローカルの冒険者ギルド。<br />@mention で欲しい一人を指名。",
-        lead: "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。Node ≥ 22.19 が必要。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。star ではない。v0.2.20：クエスト分岐、<code>/m</code>、OpenCode Free。pnpm の checkout は代替。",
+        "h1": "ローカルの冒険者ギルド。<br />@mention で欲しい一人を指名。",
+        "lead": "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。Node ≥ 22.19 が必要。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。star ではない。v0.2.21：クエスト分岐、<code>/m</code>、OpenCode Free。pnpm の checkout は代替。",
         "cta.try": "拠点を試す",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定の返信。<code>run</code> も <code>write</code> も MCP もブラウザも API key もない。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
         "img.alt": "ローカルのギルド。ひとり指名。",
-        figcaption: ":7420 の本番拠点 — このページは同じ発想の静的プレビュー。",
+        "figcaption": ":7420 の本番拠点 — このページは同じ発想の静的プレビュー。",
         "kicker.try": "拠点を試す",
         "h2.try": "五席。ひとりの @handle。",
         "note.try": "<code>@pm</code> を押すと PM だけが返す。<code>@rd</code> は別の席。Voice を変えて PM にもう一度 — 同じ人、違う声。",
-        roster: "ロスター",
+        "roster": "ロスター",
         "pane.job": "チャンネルには依頼がある",
         "chip.reset": "リセット",
         "soul.label": "SOUL.md · @pm Voice（プレビュー）",
@@ -1298,7 +1476,7 @@ pnpm dev</pre>
         "note.steer": "steer は次ラウンドで <code>&lt;user_steer&gt;</code> としてモデルへ。Stop はこの回合の <code>AbortSignal</code> を abort する。スキルカタログは名前と要約だけ。本文はモデルが <code>skill</code> を呼んでから読む。",
         "note.hermes": "Guild が Hermes から借りたのはブラウザスナップショットの形ひとつ — 稼働中の Chrome は触らない。回合ループは Guild 自身。Codex app-server のハーネスではない。OS jail ではない。既定の sandbox は <code>full_access</code>。",
         "note.files": "ファイル：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
-        "kicker.tonight": "v0.2.20",
+        "kicker.tonight": "v0.2.21",
         "h2.tonight": "今夜、拠点でできること",
         "note.tonight": "このページは四言語の静的プレビュー。製品の <code>:7420</code> は英語 chrome と五席の中国語名 — 四言語アプリではない。",
         "pl.branch.t": "メッセージから分岐",
@@ -1316,8 +1494,8 @@ pnpm dev</pre>
         "kicker.run": "ローカルで動くもの",
         "h2.run": "あなたのディスク。あなたのモデル。",
         "note.run": "Node ≥ 22.19。1 行、clone 不要。拠点は <code>http://127.0.0.1:7420</code>。",
-        copy: "コピー",
-        copied: "コピーした",
+        "copy": "コピー",
+        "copied": "コピーした",
         "copy.fail": "選択してコピー",
         "th.limit": "制限",
         "th.fact": "事実",
@@ -1328,23 +1506,34 @@ pnpm dev</pre>
         "td.host": "拒否リスト：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、資格情報。ホームはまだ閲覧できる。",
         "td.env": "HTTP はキーを出し、値は <code>***</code>。子プロセスは本物の env を受け取る。",
         "note.security": "大事なマシンに向ける前に <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> を読む。",
-        footer: "Guild はタスクボードではない。酒場ではない。パーティー出撃ではない。チャンネルは結案していない依頼書だ。MIT.",
+        "footer": "Guild はタスクボードではない。酒場ではない。パーティー出撃ではない。チャンネルは結案していない依頼書だ。MIT.",
         "seat.infra": "インフラ",
         "seat.pm": "PM",
         "seat.rd": "RD",
         "seat.design": "デザイン",
         "seat.marketing": "マーケティング",
-        you: "あなた",
+        "you": "あなた",
         "status.unchanged": "未変更。先に @pm へ聞き、Voice を変えて、もう一度。",
         "status.saved": "Voice はこのタブだけ。もう一度 @pm — プレビューは Ship it: で始まる。",
         "status.missing": "Voice に Ship it: がない — 未適用。",
         "pm.before": "このチャンネルの依頼は Guild を一分で説明すること。いちばん大事なのは欲しい人を @mention すること — 新機能は始めない。",
         "pm.after": "Ship it: 席をひとつ指名。新機能は始めない。",
         "rd.reply": "この repo は Guild：:7420 のローカル daemon。名前のある冒険者を編成し、ひとりを @mention する。新機能は始めない。",
-        channel: "#demo\n依頼: Guild を一分で説明する。\nいちばん大事なこと: 欲しい人を @mention する。",
+        "channel": "#demo\n依頼: Guild を一分で説明する。\nいちばん大事なこと: 欲しい人を @mention する。",
         "ask.pm": "@pm いま一番大事なことは何？",
         "ask.rd": "@rd いまの repo を見て、何か教えて。新機能は始めない。",
-        ship: 'すべての返信を "Ship it:" で始め、短い文を二つ。箇条書きは禁止。'
+        "ship": "すべての返信を \"Ship it:\" で始め、短い文を二つ。箇条書きは禁止。",
+        "h2.gallery": "ディスク上の拠点",
+        "faq.title": "npx の前に",
+        "faq.q1": "今夜 API key は要る？",
+        "faq.a1": "不要。OpenCode Free が既定経路。この経路の prompt は <code>opencode.ai</code> へ。<code>/settings</code> で provider を切る。",
+        "faq.q2": "このタブは拠点に繋がる？",
+        "faq.a2": "繋がらない。Interactive preview — no model calls. 固定の返信。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
+        "faq.q3": "製品は四言語アプリ？",
+        "faq.a3": "違う。このページは四言語の静的プレビュー。製品の <code>:7420</code> は英語 chrome と五席の中国語名 — 四言語アプリではない。",
+        "faq.q4": "<code>run</code> と <code>write</code> は何をする？",
+        "faq.a4": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。大事なマシンに向ける前に SECURITY.md を読む。",
+        "faq.tail": "無料。MIT のオープンソース。"
       }
     };
 
@@ -1479,6 +1668,17 @@ pnpm dev</pre>
         btn.textContent = t("copy.fail");
       }
     });
+    document.querySelector(".skip").addEventListener("click", (event) => {
+      const tryEl = document.getElementById("try");
+      if (!tryEl) return;
+      event.preventDefault();
+      const nav = document.querySelector(".nav");
+      const navH = nav ? nav.getBoundingClientRect().height : 0;
+      const y = Math.max(0, tryEl.getBoundingClientRect().top + window.scrollY - navH - 8);
+      window.scrollTo(0, y);
+      tryEl.focus({ preventScroll: true });
+      if (location.hash !== "#try") history.replaceState(null, "", "#try");
+    });
     document.querySelector(".locale-switch").addEventListener("click", (event) => {
       const btn = event.target.closest("[data-locale]");
       if (!btn) return;
@@ -1488,6 +1688,7 @@ pnpm dev</pre>
     currentLocale = detectLocale();
     applyI18n();
     reset();
+
   </script>
 </body>
 </html>
