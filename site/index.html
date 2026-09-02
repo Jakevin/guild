@@ -872,6 +872,9 @@
       letter-spacing: 0.02em;
       margin-bottom: 3px;
     }
+    .hero-tokens i {
+      font-style: normal;
+    }
     .section-head {
       display: flex;
       align-items: baseline;
@@ -961,13 +964,13 @@
       </div>
     </div>
     <p class="kicker" data-i18n="kicker.hero">A local guild of adventurers</p>
-    <h1 data-i18n-html="h1">A local bench of bots.<br />@mention the one you want.</h1>
-    <p class="lead" data-i18n-html="lead">Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.21: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.</p>
+    <h1 data-i18n-html="h1">A local guild.<br />@mention the one you want.</h1>
+    <p class="lead" data-i18n-html="lead">Not another omniscient chat. Staff named seats. A channel is an open contract. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.</p>
     <div class="hero-tokens">
-      <span><b>Node ≥ 22.19</b> engines</span>
-      <span><b>npx @kevin5251984/guild web</b> one line</span>
-      <span><b>http://127.0.0.1:7420</b> the hall</span>
-      <span><b>MIT</b> free</span>
+      <span><b>Node ≥ 22.19</b> <i data-i18n="tok.engines">engines</i></span>
+      <span><b>npx @kevin5251984/guild web</b> <i data-i18n="tok.npx">one line</i></span>
+      <span><b>http://127.0.0.1:7420</b> <i data-i18n="tok.hall">the hall</i></span>
+      <span><b>MIT</b> <i data-i18n="tok.mit">free</i></span>
     </div>
     <div class="cta-row">
       <a class="btn primary" href="#try" data-i18n="cta.try">Try the hall</a>
@@ -986,7 +989,7 @@
     <figure>
       <img src="demo-hall-en-2026-08-31.gif" width="960" height="600" data-i18n-alt="img.alt" alt="A local guild. @mention one adventurer." />
       <span class="rivets" aria-hidden="true"><i></i><i></i></span>
-      <figcaption data-i18n="figcaption">Live hall on :7420 — this page is a fixture of the same idea.</figcaption>
+      <figcaption data-i18n="figcaption">The hall on :7420. This tab is a fixture of the same idea.</figcaption>
     </figure>
   </div>
 
@@ -1068,7 +1071,7 @@
   </section>
 
   <section class="block">
-    <p class="kicker" data-i18n="kicker.harness">How the harness works</p>
+    <p class="kicker" data-i18n="kicker.harness">How a turn runs</p>
     <div class="section-head">
       <span class="section-num" aria-hidden="true">03</span>
       <h2 data-i18n="h2.harness">One turn. One process.</h2>
@@ -1148,8 +1151,8 @@ pnpm dev</pre>
         <p data-i18n-html="faq.a2">No. Interactive preview — no model calls. Fixed replies. This tab does not talk to <code>127.0.0.1:7420</code>.</p>
       </details>
       <details class="faq-pair">
-        <summary data-i18n="faq.q3">Is the product a four-language app?</summary>
-        <p data-i18n-html="faq.a3">No. This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.</p>
+        <summary data-i18n="faq.q3">Do I need to clone the repo?</summary>
+        <p data-i18n-html="faq.a3">No. Node ≥ 22.19 and <code>npx @kevin5251984/guild web</code> is enough. pnpm is only if you are reading the code.</p>
       </details>
       <details class="faq-pair">
         <summary data-i18n-html="faq.q4">What can <code>run</code> and <code>write</code> do?</summary>
@@ -1178,13 +1181,17 @@ pnpm dev</pre>
         "nav.run": "Run locally",
         "lang.group": "Language",
         "kicker.hero": "A local guild of adventurers",
-        "h1": "A local bench of bots.<br />@mention the one you want.",
-        "lead": "Not another omniscient chat. Staff people with names. A channel is an open contract. Need Node ≥ 22.19. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>, not a star. v0.2.21: branch a quest, <code>/m</code>, OpenCode Free. Checkout with pnpm is the alternative.",
+        "h1": "A local guild.<br />@mention the one you want.",
+        "lead": "Not another omniscient chat. Staff named seats. A channel is an open contract. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.",
         "cta.try": "Try the hall",
+        "tok.engines": "engines",
+        "tok.npx": "one line",
+        "tok.hall": "the hall",
+        "tok.mit": "free",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "Fixed replies. No <code>run</code>, no <code>write</code>, no MCP, no browser, no API keys. This tab does not talk to <code>127.0.0.1:7420</code>.",
         "img.alt": "A local guild. @mention one adventurer.",
-        "figcaption": "Live hall on :7420 — this page is a fixture of the same idea.",
+        "figcaption": "The hall on :7420. This tab is a fixture of the same idea.",
         "kicker.try": "Try the hall",
         "h2.try": "Five seats. One @handle.",
         "note.try": "Click <code>@pm</code> — only PM answers. Click <code>@rd</code> — a different seat. Edit Voice, ask PM again — same person, different voice.",
@@ -1193,7 +1200,7 @@ pnpm dev</pre>
         "chip.reset": "Reset",
         "soul.label": "SOUL.md · @pm Voice (fixture)",
         "soul.save": "Save Voice",
-        "kicker.harness": "How the harness works",
+        "kicker.harness": "How a turn runs",
         "h2.harness": "One turn. One process.",
         "flow.assign": "assignment",
         "h3.notool": "No tool calls",
@@ -1256,8 +1263,8 @@ pnpm dev</pre>
         "faq.a1": "No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.",
         "faq.q2": "Does this tab talk to the hall?",
         "faq.a2": "No. Interactive preview — no model calls. Fixed replies. This tab does not talk to <code>127.0.0.1:7420</code>.",
-        "faq.q3": "Is the product a four-language app?",
-        "faq.a3": "No. This page is a four-language fixture. The product on <code>:7420</code> is English chrome with five Chinese seat names — not a four-language app.",
+        "faq.q3": "Do I need to clone the repo?",
+        "faq.a3": "No. Node ≥ 22.19 and <code>npx @kevin5251984/guild web</code> is enough. pnpm is only if you are reading the code.",
         "faq.q4": "What can <code>run</code> and <code>write</code> do?",
         "faq.a4": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.",
         "faq.tail": "Free. Open source under the MIT license."
@@ -1270,13 +1277,17 @@ pnpm dev</pre>
         "lang.group": "語言",
         "kicker.hero": "本機冒險者工會",
         "h1": "本機冒險者工會。<br />用 @mention 點名你要的那個人。",
-        "lead": "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>，不是按個 star。v0.2.21：從訊息開分支、<code>/m</code>、OpenCode Free。要用 pnpm checkout 是替代路徑。",
-        "cta.try": "試大廳",
+        "lead": "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>。",
+        "cta.try": "進大廳",
+        "tok.engines": "最低版本",
+        "tok.npx": "一行",
+        "tok.hall": "大廳",
+        "tok.mit": "免費",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定回覆。沒有 <code>run</code>、沒有 <code>write</code>、沒有 MCP、沒有瀏覽器、沒有 API key。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
         "img.alt": "本機冒險者工會。點名一人。",
-        "figcaption": ":7420 上的真大廳 — 這頁是同一件事的靜態預覽。",
-        "kicker.try": "試大廳",
+        "figcaption": ":7420 上的大廳。這個分頁是同一件事的靜態預覽。",
+        "kicker.try": "進大廳",
         "h2.try": "五席。一個 @handle。",
         "note.try": "點 <code>@pm</code> — 只有 PM 回。點 <code>@rd</code> — 換一席。改 Voice，再問 PM — 同一個人，不同聲音。",
         "roster": "編制",
@@ -1284,7 +1295,7 @@ pnpm dev</pre>
         "chip.reset": "重設",
         "soul.label": "SOUL.md · @pm Voice（預覽）",
         "soul.save": "儲存 Voice",
-        "kicker.harness": "Harness 怎麼跑",
+        "kicker.harness": "一回合怎麼跑",
         "h2.harness": "一回合。一條 process。",
         "flow.assign": "分派",
         "h3.notool": "沒有工具呼叫",
@@ -1347,8 +1358,8 @@ pnpm dev</pre>
         "faq.a1": "不用。OpenCode Free 是預設路徑。這條路上的 prompt 會到 <code>opencode.ai</code>。到 <code>/settings</code> 換 provider。",
         "faq.q2": "這個分頁會連大廳嗎？",
         "faq.a2": "不會。Interactive preview — no model calls. 固定回覆。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
-        "faq.q3": "產品是四語 App 嗎？",
-        "faq.a3": "不是。這頁是四語靜態預覽。產品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四語 App。",
+        "faq.q3": "一定要 clone 嗎？",
+        "faq.a3": "不用。Node ≥ 22.19 加 <code>npx @kevin5251984/guild web</code> 就夠。要讀程式才用 pnpm checkout。",
         "faq.q4": "<code>run</code> 與 <code>write</code> 會做什麼？",
         "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
         "faq.tail": "免費。MIT 開源。"
@@ -1361,13 +1372,17 @@ pnpm dev</pre>
         "lang.group": "语言",
         "kicker.hero": "本地冒险者公会",
         "h1": "本地冒险者公会。<br />用 @mention 点名你要的那个人。",
-        "lead": "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。需要 Node ≥ 22.19。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>，不是点个 star。v0.2.21：从消息开分支、<code>/m</code>、OpenCode Free。用 pnpm checkout 是替代路径。",
-        "cta.try": "试大厅",
+        "lead": "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>。",
+        "cta.try": "进大厅",
+        "tok.engines": "最低版本",
+        "tok.npx": "一行",
+        "tok.hall": "大厅",
+        "tok.mit": "免费",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定回复。没有 <code>run</code>、没有 <code>write</code>、没有 MCP、没有浏览器、没有 API key。这个分页不会连到 <code>127.0.0.1:7420</code>。",
         "img.alt": "本地冒险者公会。点名一人。",
-        "figcaption": ":7420 上的真大厅 — 这页是同一件事的静态预览。",
-        "kicker.try": "试大厅",
+        "figcaption": ":7420 上的大厅。这个分页是同一件事的静态预览。",
+        "kicker.try": "进大厅",
         "h2.try": "五席。一个 @handle。",
         "note.try": "点 <code>@pm</code> — 只有 PM 回。点 <code>@rd</code> — 换一席。改 Voice，再问 PM — 同一个人，不同声音。",
         "roster": "编制",
@@ -1375,7 +1390,7 @@ pnpm dev</pre>
         "chip.reset": "重置",
         "soul.label": "SOUL.md · @pm Voice（预览）",
         "soul.save": "保存 Voice",
-        "kicker.harness": "Harness 怎么跑",
+        "kicker.harness": "一回合怎么跑",
         "h2.harness": "一回合。一条 process。",
         "flow.assign": "指派",
         "h3.notool": "没有工具调用",
@@ -1438,8 +1453,8 @@ pnpm dev</pre>
         "faq.a1": "不用。OpenCode Free 是默认路径。这条路上的 prompt 会到 <code>opencode.ai</code>。到 <code>/settings</code> 换 provider。",
         "faq.q2": "这个分页会连大厅吗？",
         "faq.a2": "不会。Interactive preview — no model calls. 固定回复。这个分页不会连到 <code>127.0.0.1:7420</code>。",
-        "faq.q3": "产品是四语 App 吗？",
-        "faq.a3": "不是。这页是四语静态预览。产品在 <code>:7420</code> 是英文 chrome、五席中文席名 — 不是四语 App。",
+        "faq.q3": "一定要 clone 吗？",
+        "faq.a3": "不用。Node ≥ 22.19 加 <code>npx @kevin5251984/guild web</code> 就够。要读代码才用 pnpm checkout。",
         "faq.q4": "<code>run</code> 与 <code>write</code> 会做什么？",
         "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。对你在意的机器动手之前，先读 SECURITY.md。",
         "faq.tail": "免费。MIT 开源。"
@@ -1452,13 +1467,17 @@ pnpm dev</pre>
         "lang.group": "言語",
         "kicker.hero": "ローカルの冒険者ギルド",
         "h1": "ローカルの冒険者ギルド。<br />@mention で欲しい一人を指名。",
-        "lead": "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。Node ≥ 22.19 が必要。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。star ではない。v0.2.21：クエスト分岐、<code>/m</code>、OpenCode Free。pnpm の checkout は代替。",
-        "cta.try": "拠点を試す",
+        "lead": "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。",
+        "cta.try": "拠点をひらく",
+        "tok.engines": "最低バージョン",
+        "tok.npx": "1 行",
+        "tok.hall": "拠点",
+        "tok.mit": "無料",
         "banner.title": "Interactive preview — no model calls.",
         "banner.body": "固定の返信。<code>run</code> も <code>write</code> も MCP もブラウザも API key もない。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
         "img.alt": "ローカルのギルド。ひとり指名。",
-        "figcaption": ":7420 の本番拠点 — このページは同じ発想の静的プレビュー。",
-        "kicker.try": "拠点を試す",
+        "figcaption": ":7420 の拠点。このタブは同じ発想の静的プレビュー。",
+        "kicker.try": "拠点をひらく",
         "h2.try": "五席。ひとりの @handle。",
         "note.try": "<code>@pm</code> を押すと PM だけが返す。<code>@rd</code> は別の席。Voice を変えて PM にもう一度 — 同じ人、違う声。",
         "roster": "ロスター",
@@ -1466,7 +1485,7 @@ pnpm dev</pre>
         "chip.reset": "リセット",
         "soul.label": "SOUL.md · @pm Voice（プレビュー）",
         "soul.save": "Voice を保存",
-        "kicker.harness": "ハーネスのまわし方",
+        "kicker.harness": "1 回合の流れ",
         "h2.harness": "1 回合。1 process。",
         "flow.assign": "指名",
         "h3.notool": "ツール呼び出しなし",
@@ -1529,8 +1548,8 @@ pnpm dev</pre>
         "faq.a1": "不要。OpenCode Free が既定経路。この経路の prompt は <code>opencode.ai</code> へ。<code>/settings</code> で provider を切る。",
         "faq.q2": "このタブは拠点に繋がる？",
         "faq.a2": "繋がらない。Interactive preview — no model calls. 固定の返信。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
-        "faq.q3": "製品は四言語アプリ？",
-        "faq.a3": "違う。このページは四言語の静的プレビュー。製品の <code>:7420</code> は英語 chrome と五席の中国語名 — 四言語アプリではない。",
+        "faq.q3": "clone は必要？",
+        "faq.a3": "不要。Node ≥ 22.19 と <code>npx @kevin5251984/guild web</code> で足りる。コードを読むときだけ pnpm checkout。",
         "faq.q4": "<code>run</code> と <code>write</code> は何をする？",
         "faq.a4": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。大事なマシンに向ける前に SECURITY.md を読む。",
         "faq.tail": "無料。MIT のオープンソース。"
