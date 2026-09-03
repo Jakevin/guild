@@ -19,6 +19,11 @@ function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "guild-harness-"));
 }
 
+/** Not under `/tmp` — Linux CI tmpdir is `/tmp`, which workspace_write now allows. */
+function awayDir(): string {
+  return mkdtempSync(join(homedir(), "guild-harness-out-"));
+}
+
 test("parseSandbox defaults to full_access", () => {
   assert.equal(parseSandbox(undefined), "full_access");
   assert.equal(parseSandbox("nope"), "full_access");
@@ -112,7 +117,7 @@ test("runAgentLoop runs a round's tools in parallel", async () => {
 test("workspace_write allows write inside and refuses outside", async () => {
   const workspace = tempDir();
   const inside = join(workspace, "ok.txt");
-  const outside = join(tempDir(), "nope.txt");
+  const outside = join(awayDir(), "nope.txt");
   const ctx = { sandbox: "workspace_write" as const, workspace };
   const ok = await executeTool("write", { path: inside, content: "in" }, ctx);
   assert.equal(ok.isError, false);
@@ -126,7 +131,7 @@ test("workspace_write allows write inside and refuses outside", async () => {
 
 test("workspace_write refuses run cwd outside the workspace", async () => {
   const workspace = tempDir();
-  const outside = tempDir();
+  const outside = awayDir();
   const ctx = { sandbox: "workspace_write" as const, workspace };
   const bad = await executeTool("run", { command: "pwd", workdir: outside }, ctx);
   assert.equal(bad.isError, true);
@@ -138,7 +143,7 @@ test("workspace_write refuses run cwd outside the workspace", async () => {
 
 test("workspace_write run is not a shell jail", async () => {
   const workspace = tempDir();
-  const leaked = join(tempDir(), "leaked.txt");
+  const leaked = join(awayDir(), "leaked.txt");
   writeFileSync(leaked, "payload-from-outside");
   const ctx = { sandbox: "workspace_write" as const, workspace };
   const viaRead = await executeTool("read", { path: leaked }, ctx);
@@ -180,7 +185,7 @@ test("workspace_write refuses browser", async () => {
 
 test("workspace_write refuses read and list outside the workspace", async () => {
   const workspace = tempDir();
-  const outside = tempDir();
+  const outside = awayDir();
   const leaked = join(outside, "secret.txt");
   writeFileSync(leaked, "do not read me");
   const ctx = { sandbox: "workspace_write" as const, workspace };
