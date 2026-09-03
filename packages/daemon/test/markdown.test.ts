@@ -8,9 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
-const { renderMarkdown, hydrateHtmlPreviews } = require("../src/public/md.js") as {
+const { renderMarkdown, hydrateHtmlPreviews, htmlPreviewSrcdoc } = require(
+  "../src/public/md.js",
+) as {
   renderMarkdown: (raw: string) => string;
   hydrateHtmlPreviews: (root: { querySelectorAll: (sel: string) => unknown }) => void;
+  htmlPreviewSrcdoc: (raw: string, lang?: string) => string;
 };
 const CHAT_HTML = fileURLToPath(
   new URL("../src/public/chat.html", import.meta.url),
@@ -36,9 +39,30 @@ test("renderMarkdown turns headings lists code and bold into HTML", () => {
 test("renderMarkdown shows generated images", () => {
   const html = renderMarkdown("![自畫像](/generated/abc.jpg)\n\n![remote](https://example.com/x.png)");
   assert.match(html, /class="md-img"/);
+  assert.match(html, /class="md-img-link"/);
   assert.match(html, /src="\/generated\/abc.jpg"/);
+  assert.match(html, /href="\/generated\/abc.jpg"/);
   assert.match(html, /src="https:\/\/example.com\/x.png"/);
   assert.doesNotMatch(html, /src="javascript:/);
+});
+
+test("renderMarkdown rewrites local /tmp screenshots through /local", () => {
+  const html = renderMarkdown(
+    "![紙面 hero](/tmp/kami-paper/shots/en-1280-hero.png)\n\n![file](file:///tmp/kami-paper/shots/zh-TW-1280-hero.png)",
+  );
+  assert.match(html, /class="md-img"/);
+  assert.match(
+    html,
+    /src="\/local\?p=%2Ftmp%2Fkami-paper%2Fshots%2Fen-1280-hero\.png"/,
+  );
+  assert.match(
+    html,
+    /src="\/local\?p=%2Ftmp%2Fkami-paper%2Fshots%2Fzh-TW-1280-hero\.png"/,
+  );
+  assert.doesNotMatch(html, /src="\/tmp\//);
+  const blocked = renderMarkdown("![no](javascript:alert(1))");
+  assert.doesNotMatch(blocked, /src="javascript:/);
+  assert.doesNotMatch(blocked, /<img/);
 });
 
 test("renderMarkdown code fences expose copy and insert chrome", () => {
@@ -70,29 +94,45 @@ test("html fences expose a sandboxed preview", () => {
 
 test("hydrateHtmlPreviews fills srcdoc from the escaped textarea", () => {
   assert.equal(typeof hydrateHtmlPreviews, "function");
-  const frames = [];
+  assert.match(htmlPreviewSrcdoc("<h1>Hi</h1>", "html"), /background:transparent/);
+  assert.equal(
+    htmlPreviewSrcdoc("<!doctype html><html><body>x</body></html>", "html"),
+    "<!doctype html><html><body>x</body></html>",
+  );
+  let sets = 0;
+  const frame = { dataset: {} };
+  Object.defineProperty(frame, "srcdoc", {
+    get() {
+      return this._doc || "";
+    },
+    set(value) {
+      sets += 1;
+      this._doc = value;
+    },
+  });
   const boxes = [
     {
       querySelector(sel) {
         if (sel === ".md-html-src") return { value: "<h1>Hi</h1>" };
-        if (sel === ".md-html-frame") {
-          const frame = { dataset: {}, srcdoc: "" };
-          frames.push(frame);
-          return frame;
-        }
+        if (sel === ".md-html-frame") return frame;
         if (sel === ".md-fence-lang") return { textContent: "html" };
         return null;
       },
     },
   ];
-  hydrateHtmlPreviews({
+  const root = {
     querySelectorAll(sel) {
       assert.equal(sel, ".md-html-preview");
       return boxes;
     },
-  });
-  assert.equal(frames[0].srcdoc, "<h1>Hi</h1>");
-  assert.equal(frames[0].dataset.ready, "1");
+  };
+  hydrateHtmlPreviews(root);
+  assert.match(frame.srcdoc, /<h1>Hi<\/h1>/);
+  assert.match(frame.srcdoc, /background:transparent/);
+  assert.equal(frame.dataset.ready, "1");
+  assert.equal(sets, 1);
+  hydrateHtmlPreviews(root);
+  assert.equal(sets, 1);
 });
 
 test("renderMarkdown escapes HTML", () => {
@@ -162,6 +202,11 @@ test("chat page loads the shipped markdown renderer", async () => {
   assert.match(home, /assistant-text md/);
   assert.match(home, /data-fence-copy/);
   assert.match(home, /insertDraft/);
+  assert.match(home, /holdHtmlFrames/);
+  assert.match(home, /putHtmlFrames/);
+  assert.match(home, /dropPending/);
+  assert.match(home, /htmlPreviewSrcdoc/);
+  assert.match(home, /chat\.css\?v=nav-fold/);
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
   const { server, origin } = await listenApp(dataDir, {});
   try {

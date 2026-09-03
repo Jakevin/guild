@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LibraryKind, ModelRef, ModelsFile } from "@guild/protocol";
 import {
@@ -66,6 +67,30 @@ import { hostGit, hostList, hostRead, hostTree } from "./host-browse.ts";
 import { listHostSkills } from "./host-skills.ts";
 import { listHostAgents } from "./host-agents.ts";
 import { generatedDir, isSafeGeneratedName } from "./image-gen.ts";
+import {
+  createCronJob,
+  fireCronJob,
+  pauseCronJob,
+  publicCronJob,
+  removeCronJob,
+  resumeCronJob,
+} from "./cron.ts";
+import {
+  allowedWorkspaceWritePath,
+  resolveToolPath,
+  workspaceFromEnv,
+} from "./harness.ts";
+
+const LOCAL_IMAGE_CAP = 12 * 1024 * 1024;
+
+function localImageType(path: string): string | null {
+  const ext = extname(path).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".webp") return "image/webp";
+  return null;
+}
 
 const PUBLIC = fileURLToPath(new URL("./public/", import.meta.url));
 
@@ -391,6 +416,38 @@ export async function handleRequest(
       return;
     }
 
+    if (method === "GET" && path === "/local") {
+      const raw = requestUrl(req).searchParams.get("p") || "";
+      const type = localImageType(raw);
+      if (!raw.startsWith("/") || raw.includes("\0") || raw.includes("..") || !type) {
+        json(res, 404, { error: "not_found", path });
+        return;
+      }
+      const target = resolveToolPath(raw);
+      if (!allowedWorkspaceWritePath(target, workspaceFromEnv(env), store.dataDir)) {
+        json(res, 404, { error: "not_found", path });
+        return;
+      }
+      if (!existsSync(target)) {
+        json(res, 404, { error: "not_found", path });
+        return;
+      }
+      const st = statSync(target);
+      if (!st.isFile() || st.size > LOCAL_IMAGE_CAP) {
+        json(res, 404, { error: "not_found", path });
+        return;
+      }
+      const bytes = readFileSync(target);
+      res.writeHead(200, {
+        "content-type": type,
+        "content-length": bytes.length,
+        "cache-control": "private, max-age=60",
+        "x-content-type-options": "nosniff",
+      });
+      res.end(bytes);
+      return;
+    }
+
     if (method === "GET" && path.startsWith("/generated/")) {
       const name = decodeURIComponent(path.slice("/generated/".length));
       if (!isSafeGeneratedName(name)) {
@@ -441,6 +498,45 @@ export async function handleRequest(
 
     if (method === "GET" && path === "/health") {
       json(res, 200, healthPayload());
+      return;
+    }
+
+    if (path === "/cron" && method === "GET") {
+      const room = requestUrl(req).searchParams.get("room") || "";
+      json(res, 200, {
+        jobs: store.listCronJobs(room || undefined).map(publicCronJob),
+      });
+      return;
+    }
+    if (path === "/cron" && method === "POST") {
+      const body = asRecord(await readJson(req));
+      const job = createCronJob(store, {
+        roomId: str(body, "roomId") || str(body, "room_id"),
+        botId: str(body, "botId") || str(body, "bot_id"),
+        prompt: str(body, "prompt"),
+        schedule: str(body, "schedule"),
+        name: str(body, "name"),
+      });
+      json(res, 201, publicCronJob(job));
+      return;
+    }
+    const cronAct = path.match(/^\/cron\/([^/]+)\/(pause|resume|run)$/);
+    if (cronAct && method === "POST") {
+      const id = decodeURIComponent(cronAct[1]);
+      if (cronAct[2] === "pause") {
+        json(res, 200, publicCronJob(pauseCronJob(store, id)));
+        return;
+      }
+      if (cronAct[2] === "resume") {
+        json(res, 200, publicCronJob(resumeCronJob(store, id)));
+        return;
+      }
+      json(res, 200, await fireCronJob(store, id, env));
+      return;
+    }
+    const cronOne = path.match(/^\/cron\/([^/]+)$/);
+    if (cronOne && method === "DELETE") {
+      json(res, 200, removeCronJob(store, decodeURIComponent(cronOne[1])));
       return;
     }
 

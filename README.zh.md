@@ -100,7 +100,7 @@ pnpm dev
 
 **你還在迴圈裡。** 有人在跑的時候回覆，是排隊；Cmd/Ctrl+↩ 把這句插入當前回合，下一輪以 `<user_steer>` 送到模型。暫停 abort 當下的 `AbortSignal`，但留下 live 氣泡，方便換模型後繼續（下一輪會看到目前的 Think 與已跑完的工具）。停止 abort 那一席的 signal 並結束這輪。沒有審批步驟，也不會先問你。
 
-**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn`；`workspace_write` 把 `write` / `run` 鎖在 workspace，MCP 和 `image_gen` 直接拒。這是單一 process 裡、跑在你權限下的 tool gate；它擋不掉什麼，`Current limits` 那段寫得很直。
+**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`；`workspace_write` 把 `write` / `run` 鎖在 workspace、`/tmp` 與 `{GUILD_HOME}/cache`，MCP 和 `image_gen` 直接拒。這是單一 process 裡、跑在你權限下的 tool gate；它擋不掉什麼，`Current limits` 那段寫得很直。
 
 **為什麼在這裡提 Hermes。** 我們借的是一個形，不是 codebase。Hermes 是最接近的公開範例：本機 agent 能用你的瀏覽器，又不動你正在跑的 Chrome。`browser.ts` 借的就是這個做法——不 CDP live profile（Chrome 136+），把 `last_used` 快照到 `~/.guild/browser-profile/chrome`，操作那份複本。借到這裡為止。回合迴圈是 Guild 自己的（`runAgentLoop` + `gateTool`）；sandbox 名稱是 Codex 形狀，但這不是 Codex app-server 的 harness；`docs/` 裡那個 `Harness` trait 也沒實作。
 

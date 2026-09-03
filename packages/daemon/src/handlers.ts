@@ -75,6 +75,8 @@ export type HandlerExtras = {
   turn?: (input: Parameters<typeof chatReply>[0]) => Promise<ChatReply>;
   /** Bot ids the client already resolved from @mentions. */
   mentions?: string[];
+  /** Hermes: cron child sessions cannot manage cron. */
+  cronRun?: boolean;
 };
 
 export function healthPayload(): HealthResponse {
@@ -914,6 +916,8 @@ export function chatTurnForBot(
     history,
     userMessage,
     dataDir: store.dataDir,
+    roomId,
+    botId,
     model: detail.model ?? null,
     skills: mergeSkillRefs(
       staffedSkills(store, botId),
@@ -1276,6 +1280,7 @@ async function generateReplies(
         env,
         signal: botSignal,
         mcpTools,
+        ...(extras.cronRun ? { cronRun: true } : {}),
         onProgress: (update) => {
           const prev = store.getLiveBotTurn(roomId, botId);
           if (prev?.paused) return;

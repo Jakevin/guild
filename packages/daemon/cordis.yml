@@ -12,6 +12,8 @@
   name: './src/plugins/llm.ts'
 - id: tools
   name: './src/plugins/tools.ts'
+- id: cron
+  name: './src/plugins/cron.ts'
 - id: mcp
   name: './src/plugins/mcp.ts'
 - id: memory

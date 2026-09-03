@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -73,10 +73,11 @@ test("read_only refuses run/write/mcp and allows read", async () => {
   const names = guildTools([], ctx).map((tool) => tool.name);
   assert.deepEqual(
     names.sort(),
-    ["list", "read", "read_spawn", "skill", "spawn"].sort(),
+    ["cronjob", "list", "read", "read_spawn", "skill", "spawn"].sort(),
   );
   assert.equal(gateTool("spawn", { prompt: "survey the tree" }, ctx), null);
   assert.equal(gateTool("read_spawn", { agent_id: "x" }, ctx), null);
+  assert.equal(gateTool("cronjob", { action: "list" }, ctx), null);
 });
 
 test("runAgentLoop runs a round's tools in parallel", async () => {
@@ -200,6 +201,39 @@ test("workspace_write refuses read and list outside the workspace", async () => 
   const listed = await executeTool("list", { path: "." }, ctx);
   assert.equal(listed.isError, false);
   assert.match(listed.text, /note\.txt/);
+});
+
+test("workspace_write can read and write /tmp and GUILD_HOME/cache", async () => {
+  const workspace = tempDir();
+  const dataDir = tempDir();
+  const ctx = { sandbox: "workspace_write" as const, workspace, dataDir };
+  const scratch = join("/tmp", `guild-sandbox-${Date.now()}`);
+  mkdirSync(scratch, { recursive: true });
+  try {
+    const note = join(scratch, "note.txt");
+    const wrote = await executeTool("write", { path: note, content: "tmp-ok" }, ctx);
+    assert.equal(wrote.isError, false);
+    const read = await executeTool("read", { path: note }, ctx);
+    assert.equal(read.isError, false);
+    assert.equal(read.text, "tmp-ok");
+    const listed = await executeTool("list", { path: scratch }, ctx);
+    assert.equal(listed.isError, false);
+    assert.match(listed.text, /note\.txt/);
+    const ran = await executeTool("run", { command: "pwd", workdir: scratch }, ctx);
+    assert.equal(ran.isError, false);
+    const cacheFile = join(dataDir, "cache", "spillover", "out.txt");
+    const cached = await executeTool(
+      "write",
+      { path: cacheFile, content: "spill" },
+      ctx,
+    );
+    assert.equal(cached.isError, false);
+    const cacheRead = await executeTool("read", { path: cacheFile }, ctx);
+    assert.equal(cacheRead.isError, false);
+    assert.equal(cacheRead.text, "spill");
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("workspace_write refuses mcp", async () => {

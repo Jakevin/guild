@@ -19,22 +19,39 @@ function isFileCode(text) {
   return /[A-Za-z0-9]\/[A-Za-z0-9._@+-]/.test(s);
 }
 
+function localImgSrc(href) {
+  const raw = String(href || "")
+    .trim()
+    .replace(/"/g, "");
+  if (!raw) return "";
+  if (/^\/generated\/[A-Za-z0-9._-]+$/.test(raw)) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  let path = raw;
+  if (/^file:\/\//i.test(path)) path = path.replace(/^file:\/\//i, "");
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("..")) {
+    return "";
+  }
+  if (!/\.(?:png|jpe?g|gif|webp)$/i.test(path)) return "";
+  return "/local?p=" + encodeURIComponent(path);
+}
+
 function inlineMd(text) {
   let out = escapeMd(text);
-  out = out.replace(
-    /!\[([^\]]*)\]\((\/generated\/[A-Za-z0-9._-]+|https?:[^)\s]+)\)/g,
-    function (_m, alt, href) {
-      const src = String(href).replace(/"/g, "");
-      const label = alt || "image";
-      return (
-        '<img class="md-img" src="' +
-        src +
-        '" alt="' +
-        label +
-        '" loading="lazy">'
-      );
-    },
-  );
+  out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, function (m, alt, href) {
+    const src = localImgSrc(href);
+    if (!src) return m;
+    const label = alt || "image";
+    return (
+      '<a class="md-img-link" href="' +
+      src +
+      '" target="_blank" rel="noopener noreferrer">' +
+      '<img class="md-img" src="' +
+      src +
+      '" alt="' +
+      label +
+      '" loading="lazy"></a>'
+    );
+  });
   out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, function (_m, label, href) {
     return (
       '<a href="' +
@@ -327,23 +344,83 @@ function renderMarkdown(raw) {
   return html.join("");
 }
 
+function htmlPreviewSrcdoc(raw, lang) {
+  const text = String(raw || "");
+  if (/svg/i.test(String(lang || ""))) {
+    return (
+      '<!doctype html><html><body style="margin:0;background:#fff">' +
+      text +
+      "</body></html>"
+    );
+  }
+  if (/<!doctype html|<html[\s>]/i.test(text)) return text;
+  return (
+    '<!doctype html><html><body style="margin:0;background:transparent">' +
+    text +
+    "</body></html>"
+  );
+}
+
 function hydrateHtmlPreviews(root) {
   if (!root || typeof root.querySelectorAll !== "function") return;
   root.querySelectorAll(".md-html-preview").forEach((box) => {
     const src = box.querySelector(".md-html-src");
     const frame = box.querySelector(".md-html-frame");
-    if (!src || !frame || frame.dataset.ready) return;
-    frame.dataset.ready = "1";
+    if (!src || !frame) return;
     const raw = src.value;
     const lang = (box.querySelector(".md-fence-lang") || {}).textContent || "";
-    frame.srcdoc = /svg/i.test(lang)
-      ? '<!doctype html><html><body style="margin:0;background:#fff">' +
-        raw +
-        "</body></html>"
-      : raw;
+    const doc = htmlPreviewSrcdoc(raw, lang);
+    if (frame.dataset.ready && frame.srcdoc === doc) return;
+    frame.dataset.ready = "1";
+    frame.srcdoc = doc;
+  });
+}
+
+function holdHtmlFrames(root) {
+  const frames = [];
+  if (!root || typeof root.querySelectorAll !== "function") return frames;
+  root.querySelectorAll("article.msg .md-html-preview").forEach((box) => {
+    const article = box.closest("article.msg[data-id]");
+    const frame = box.querySelector(".md-html-frame");
+    const src = box.querySelector(".md-html-src");
+    if (!article || !frame || !src || !frame.dataset.ready) return;
+    frames.push({
+      id: article.getAttribute("data-id"),
+      src: src.value,
+      view: box.getAttribute("data-view") || "preview",
+      frame: frame,
+    });
+  });
+  return frames;
+}
+
+function putHtmlFrames(root, frames) {
+  if (!root || typeof root.querySelector !== "function") return;
+  (frames || []).forEach((item) => {
+    const article = root.querySelector(
+      'article.msg[data-id="' + CSS.escape(item.id) + '"]',
+    );
+    const box = article && article.querySelector(".md-html-preview");
+    const src = box && box.querySelector(".md-html-src");
+    const fresh = box && box.querySelector(".md-html-frame");
+    if (!box || !src || !fresh || src.value !== item.src) return;
+    item.frame.dataset.ready = "1";
+    fresh.replaceWith(item.frame);
+    box.setAttribute("data-view", item.view);
+    box.querySelectorAll("[data-html-view]").forEach((tab) => {
+      tab.classList.toggle("on", tab.getAttribute("data-html-view") === item.view);
+    });
   });
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { renderMarkdown, inlineMd, hydrateHtmlPreviews };
+  module.exports = {
+    renderMarkdown,
+    inlineMd,
+    hydrateHtmlPreviews,
+    htmlPreviewSrcdoc,
+    holdHtmlFrames,
+    putHtmlFrames,
+    localImgSrc,
+  };
 }

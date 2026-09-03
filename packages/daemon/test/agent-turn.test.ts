@@ -154,6 +154,8 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.doesNotMatch(html, /\.disabled = stop/);
   assert.match(css, /dsh-trace:not\(\[open\]\)/);
   assert.match(css, /\.live-steps/);
+  assert.match(css, /\.md-img/);
+  assert.match(css, /max-height: min\(16rem, 40vh\)/);
   assert.match(css, /tbody tr:nth-child\(even\) td \{ background: #303030/);
   assert.doesNotMatch(css, /tbody tr:nth-child\(even\) \{ background: #111/);
 });

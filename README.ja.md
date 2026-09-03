@@ -100,7 +100,7 @@ pnpm dev
 
 **人が割り込める。** 実行中の発話はキュー。Cmd/Ctrl+↩ は今の回合に差し込み、次のラウンドで `<user_steer>` としてモデルに渡る。一時停止は進行中の `AbortSignal` を abort するが live バブルは残す。モデルを切り替えて続行できる（次ラウンドはここまでの Think とツールを見る）。停止はその席の signal を abort して回合を終える。承認ステップは無い。先に聞かない。
 
-**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` だけ。`workspace_write` は `write` / `run` を workspace に閉じ、MCP と `image_gen` は拒否。これはひとつの process 内、あなたの権限で動く tool gate。何を防がないかは `Current limits` にそのまま書いてある。
+**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob` だけ。`workspace_write` は `write` / `run` を workspace・`/tmp`・`{GUILD_HOME}/cache` に閉じ、MCP と `image_gen` は拒否。これはひとつの process 内、あなたの権限で動く tool gate。何を防がないかは `Current limits` にそのまま書いてある。
 
 **なぜ Hermes の名前を出すのか。** 借りたのは形ひとつで、codebase ではない。Hermes は「ローカル agent があなたのブラウザを使えて、稼働中の Chrome は触らない」公開例に最も近い。`browser.ts` はその形を踏む——live profile を CDP しない（Chrome 136+）、`last_used` を `~/.guild/browser-profile/chrome` にスナップショットして複製を操作する。ここまで。回合ループは Guild 自身のもの（`runAgentLoop` + `gateTool`）。sandbox の名前は Codex 形だが、Codex app-server のハーネスではない。`docs/` の `Harness` trait は未実装。
 

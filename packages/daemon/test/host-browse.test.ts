@@ -93,7 +93,7 @@ test("GET /host/read from a foreign Origin is refused", async () => {
   }
 });
 
-test("chat plus menu can attach files skills git rules and commands", () => {
+test("chat plus menu can attach files skills git rules schedule and commands", () => {
   const html = readFileSync(CHAT_HTML, "utf8");
   assert.match(html, /attach-pop/);
   assert.match(html, /data-attach="upload"/);
@@ -105,7 +105,14 @@ test("chat plus menu can attach files skills git rules and commands", () => {
   assert.match(html, /data-attach="rules"/);
   assert.match(html, /data-attach="term"/);
   assert.match(html, /data-attach="tree"/);
+  assert.match(html, /data-attach="cron"/);
   assert.match(html, /data-attach="slash"/);
+  assert.match(html, /kind === "cron"/);
+  assert.match(html, /openCronDialog/);
+  assert.match(html, /id="cron-ask"/);
+  assert.match(html, /cron\.askBody/);
+  assert.doesNotMatch(html, /id="cron-schedule"/);
+  assert.doesNotMatch(html, /id="cron-prompt"/);
   assert.match(html, /composeSendBody/);
   assert.match(html, /\/host\/ls/);
   assert.match(html, /data-chip-insert/);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer as createNetServer } from "node:net";
@@ -613,6 +613,13 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /sidebar-resizer/);
   assert.match(home, /id="nav-toggle"/);
   assert.match(home, /id="nav-scrim"/);
+  assert.match(home, /data-nav-sec="channels"/);
+  assert.match(home, /data-nav-sec="dms"/);
+  assert.match(home, /data-nav-sec="cron"/);
+  assert.match(home, /id="cron-nav"/);
+  assert.match(home, /data-fold="channels"/);
+  assert.match(home, /function applyNavFold/);
+  assert.match(home, /function loadNavCron/);
   assert.match(home, /function setNavOpen/);
   assert.match(home, /function partyStackHtml/);
   assert.match(home, /Array.from\(String\(name\)\.replace/);
@@ -632,6 +639,8 @@ test("home is chat and studio is the roster", () => {
     "utf8",
   );
   assert.match(chatCss, /body\.grok \.sidebar/);
+  assert.match(chatCss, /\.nav-sec\.folded/);
+  assert.match(chatCss, /#cron-nav/);
   assert.match(chatCss, /body\.nav-open \.sidebar/);
   assert.match(chatCss, /max-width: 760px/);
   assert.match(chatCss, /--bg:\s*#0B0E12/);
@@ -1078,6 +1087,38 @@ test("DELETE removes one chat message", async () => {
 test("clipNavPreview flattens and caps sidebar last-message text", () => {
   assert.equal(clipNavPreview("  hello\nworld  "), "hello world");
   assert.equal(clipNavPreview("x".repeat(200)).length, 120);
+});
+
+test("GET /local serves /tmp images and 404s secrets", async () => {
+  const { server, origin } = await listen(tempHome());
+  const dir = join("/tmp", `guild-local-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const file = join(dir, "en-1280-hero.png");
+  writeFileSync(file, png);
+  try {
+    const ok = await fetch(
+      `${origin}/local?p=${encodeURIComponent(file)}`,
+    );
+    assert.equal(ok.status, 200);
+    assert.match(ok.headers.get("content-type") || "", /image\/png/);
+    const body = Buffer.from(await ok.arrayBuffer());
+    assert.equal(body.length, png.length);
+    const secret = await fetch(
+      `${origin}/local?p=${encodeURIComponent("/etc/passwd")}`,
+    );
+    assert.equal(secret.status, 404);
+    const home = await fetch(
+      `${origin}/local?p=${encodeURIComponent(join(process.env.HOME || "/tmp", ".ssh", "id_rsa"))}`,
+    );
+    assert.equal(home.status, 404);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    await closeServer(server);
+  }
 });
 
 test("generated images 404 unknown and reject path traversal", async () => {

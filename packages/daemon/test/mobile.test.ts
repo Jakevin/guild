@@ -71,6 +71,10 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /live\.stop/);
   assert.match(html, /summonedBotIds|botsFromSend/);
   assert.match(html, /hydrateHtmlPreviews/);
+  assert.match(html, /holdHtmlFrames/);
+  assert.match(html, /putHtmlFrames/);
+  assert.match(html, /data-id="/);
+  assert.match(html, /sameMessages/);
   assert.match(html, /id="html-zoom"/);
   assert.match(html, /data-html-view/);
   assert.match(html, /openHtmlZoom/);
@@ -138,7 +142,7 @@ test("away page locks the five seats and can steer a live turn", () => {
   assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /classList\.toggle\("err"/);
-  assert.match(html, /mobile\.css\?v=html-preview/);
+  assert.match(html, /mobile\.css\?v=html-frame/);
   assert.doesNotMatch(html, /WebSocket/);
   assert.doesNotMatch(html, /fonts\.googleapis/);
   assert.doesNotMatch(html, /inn-street|#16100B/);

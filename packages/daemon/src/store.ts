@@ -10,7 +10,7 @@ import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { closeGuildDb, openGuildDb, type GuildDb } from "./db.ts";
+import { closeGuildDb, openGuildDb, type CronJobRow, type GuildDb } from "./db.ts";
 import type {
   Bot,
   ChatAttachment,
@@ -1328,6 +1328,27 @@ export class GuildStore {
   ): void {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
     this.db.writeCompact(roomId, compact);
+  }
+
+  listCronJobs(roomId?: string) {
+    if (roomId && !this.getRoom(roomId)) throw new StoreError(404, "room not found");
+    return this.db.listCronJobs(roomId);
+  }
+
+  getCronJob(id: string) {
+    const job = this.db.getCronJob(id);
+    if (!job) throw new StoreError(404, "cron job not found");
+    return job;
+  }
+
+  writeCronJob(job: CronJobRow): void {
+    if (!this.getRoom(job.roomId)) throw new StoreError(404, "room not found");
+    if (!this.getBot(job.botId)) throw new StoreError(400, "bot not found");
+    this.db.upsertCronJob(job);
+  }
+
+  deleteCronJob(id: string): boolean {
+    return this.db.deleteCronJob(id);
   }
 }
 

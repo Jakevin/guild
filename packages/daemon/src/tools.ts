@@ -78,6 +78,12 @@ export type ToolContext = {
   ) => Promise<ToolOutcome>;
   /** Devin-style background spawn handles for this turn. Same Map across dispatch clones. */
   spawnHandles?: Map<string, SpawnHandle>;
+  /** Channel or DM this turn is in. Cron jobs default here. */
+  roomId?: string;
+  /** Seat running this turn. cronjob create defaults here. */
+  botId?: string;
+  /** Hermes: cron child sessions cannot manage cron. */
+  cronRun?: boolean;
 };
 
 export type SpawnHandle = {
@@ -190,6 +196,33 @@ export function guildTools(
     tools = tools.filter(
       (tool) => tool.name !== "image_gen" && tool.name !== "browser",
     );
+  }
+  if (!ctx.cronRun) {
+    tools.push({
+      name: "cronjob",
+      description:
+        "Schedule a later hall turn (Hermes cronjob). Fresh @handle turn with a self-contained prompt. Actions: create, list, pause, resume, run, remove. schedule may be natural language (每10分鐘, 10分鐘後, 每天9點, in 30 minutes, every 2h, 0 9 * * *, ISO). Split when vs task: schedule is the time phrase, prompt is the work. bot_id defaults to this seat. Do not create cron jobs from a cron run.",
+      parameters: Type.Object({
+        action: Type.String({
+          description: "create | list | pause | resume | run | remove",
+        }),
+        schedule: Type.Optional(
+          Type.String({
+            description:
+              "Natural language or Hermes form: 每10分鐘, in 30m, every 2h, 每天9點, 0 9 * * *, ISO",
+          }),
+        ),
+        prompt: Type.Optional(
+          Type.String({ description: "Self-contained task for the seat" }),
+        ),
+        name: Type.Optional(Type.String({ description: "Short job name" })),
+        job_id: Type.Optional(Type.String({ description: "Job id or name" })),
+        bot_id: Type.Optional(Type.String({ description: "Seat to run" })),
+        room_id: Type.Optional(
+          Type.String({ description: "Room id. Defaults to this hall." }),
+        ),
+      }),
+    });
   }
   tools.push({
     name: "skill",
@@ -387,6 +420,21 @@ function openaiParameters(name: string): {
       required: ["prompt"],
     };
   }
+  if (name === "cronjob") {
+    return {
+      type: "object",
+      properties: {
+        action: { type: "string", description: "create | list | pause | resume | run | remove" },
+        schedule: { type: "string" },
+        prompt: { type: "string" },
+        name: { type: "string" },
+        job_id: { type: "string" },
+        bot_id: { type: "string" },
+        room_id: { type: "string" },
+      },
+      required: ["action"],
+    };
+  }
   if (name === "browser") {
     return {
       type: "object",
@@ -437,6 +485,7 @@ export const BUILTIN_TOOL_NAMES = [
   "read_spawn",
   "image_gen",
   "browser",
+  "cronjob",
 ] as const;
 
 export async function executeTool(
@@ -511,6 +560,12 @@ export async function builtinExecute(
         dataDir: ctx.dataDir,
         env: ctx.env,
       });
+    }
+    if (name === "cronjob") {
+      return {
+        text: "cronjob needs guildd (the cron plugin)",
+        isError: true,
+      };
     }
     if (name === "browser") {
       const { runBrowser } = await import("./browser.ts");
@@ -817,7 +872,7 @@ export function nextToolRound(round: number): ToolRoundPhase {
 }
 
 export const TOOL_SYSTEM = `You ARE already running on the user's local computer (Guild, same design as Pi / DeepSeek Harness).
-Tools: run, read, write, list, skill, spawn, image_gen, browser, plus any connected MCP tools (names start with mcp__).
+Tools: run, read, write, list, skill, spawn, image_gen, browser, cronjob, plus any connected MCP tools (names start with mcp__).
 You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.
@@ -827,4 +882,5 @@ You stay coordinator. Spawn is the specialist, not a last resort (Devin run_suba
 Independent tool calls in one round also run in parallel — fire several reads/searches together.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.
 To follow a staffed skill, call skill with its exact name (or slug) before applying it. Relative paths in a skill resolve against that skill's base directory.
+When the user asks to 排程 / schedule a later hall turn — including natural-language times like 每10分鐘, 10分鐘後, tomorrow 9am — call cronjob create. schedule is the time phrase; prompt is the self-contained task (the job will not see this live turn). bot_id defaults to you. Also accepts in 30m, every 2h, 0 9 * * *, ISO. A cron run cannot create more cron jobs.
 Prefer small commands. macOS RAM: sysctl hw.memsize ; memory_pressure. Disk: df -h.`;

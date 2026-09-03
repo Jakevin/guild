@@ -26,7 +26,7 @@ Names match Codex: `read_only` | `workspace_write` | `full_access`. Unset = `ful
 | Mode | `run` / `write` | MCP / `image_gen` |
 |---|---|---|
 | `full_access` (default) | Any path the process can touch. `run` cwd defaults to `$HOME`. | Allowed |
-| `workspace_write` | Only inside `GUILD_WORKSPACE` (else the Guild checkout). Relative paths resolve there. | Refused (child is unsandboxed) |
+| `workspace_write` | `GUILD_WORKSPACE` (else the Guild checkout), plus `/tmp` and `{GUILD_HOME}/cache`. Relative paths resolve in the workspace. | Refused (child is unsandboxed) |
 | `read_only` | Refused | Refused |
 
 This is a Guild gate around `executeTool`, not Codex `app-server` isolation and not a kernel sandbox. `spawn` inherits the same mode.
@@ -43,7 +43,7 @@ Data lives under `GUILD_HOME` (default `~/.guild`): `guild.sqlite` (rooms, messa
 
 **MCP env is masked on HTTP, not in the process.** `GET /mcp/servers`, `GET /mcp/host`, and the `POST` replies replace every `launch.env` value with `***` (keys stay, so the UI can show that env is set). `{GUILD_HOME}/mcp.json` is mode `0600` and still holds the real values; spawned children receive them. Anything that can read that file as your uid can read the keys.
 
-**`workspace_write` is a Guild tool gate, not a shell jail.** `gateTool` checks the `run` cwd and `write` / `read` / `list` paths against `GUILD_WORKSPACE` (else this checkout). MCP, `image_gen`, and `browser` are refused because they are unsandboxed. The command body is still `execFile($SHELL, ["-lc", command])` as you. A `run` whose cwd is inside the workspace can `cat ~/.npmrc`, `curl`, or `rm` whatever your user can. It is not Seatbelt, bubblewrap, or Codex `app-server` isolation.
+**`workspace_write` is a Guild tool gate, not a shell jail.** `gateTool` checks the `run` cwd and `write` / `read` / `list` paths against `GUILD_WORKSPACE` (else this checkout), plus `/tmp` and `{GUILD_HOME}/cache`. MCP, `image_gen`, and `browser` are refused because they are unsandboxed. The command body is still `execFile($SHELL, ["-lc", command])` as you. A `run` whose cwd is inside the workspace can `cat ~/.npmrc`, `curl`, or `rm` whatever your user can. It is not Seatbelt, bubblewrap, or Codex `app-server` isolation.
 
 ## What is not here
 

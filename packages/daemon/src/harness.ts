@@ -133,6 +133,23 @@ export function pathInsideWorkspace(target: string, workspace: string): boolean 
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
+/** Scratch dirs `workspace_write` may also read / write / run-cwd. Not `$HOME`. */
+export function extraWriteRoots(dataDir?: string): string[] {
+  const roots = [resolve("/tmp")];
+  const home = dataDir?.trim();
+  if (home) roots.push(resolve(home, "cache"));
+  return roots;
+}
+
+export function allowedWorkspaceWritePath(
+  target: string,
+  workspace: string,
+  dataDir?: string,
+): boolean {
+  if (pathInsideWorkspace(target, workspace)) return true;
+  return extraWriteRoots(dataDir).some((root) => pathInsideWorkspace(target, root));
+}
+
 export function mutatingTool(name: string): boolean {
   return (
     name === "run" ||
@@ -150,6 +167,7 @@ export function gateTool(
   input: {
     sandbox?: Sandbox;
     workspace?: string;
+    dataDir?: string;
   } = {},
 ): SandboxRefusal | null {
   const sandbox = parseSandbox(input.sandbox);
@@ -161,7 +179,8 @@ export function gateTool(
       name === "list" ||
       name === "skill" ||
       name === "spawn" ||
-      name === "read_spawn"
+      name === "read_spawn" ||
+      name === "cronjob"
     ) {
       return null;
     }
@@ -187,7 +206,7 @@ export function gateTool(
     const raw = typeof args.path === "string" ? args.path : "";
     if (name === "list" && !raw.trim()) return null;
     const target = resolveToolPath(raw, workspace);
-    if (!pathInsideWorkspace(target, workspace)) {
+    if (!allowedWorkspaceWritePath(target, workspace, input.dataDir)) {
       return {
         text: `sandbox=workspace_write refused ${name} outside workspace: ${target}`,
         isError: true,
@@ -199,7 +218,8 @@ export function gateTool(
   if (
     name === "skill" ||
     name === "spawn" ||
-    name === "read_spawn"
+    name === "read_spawn" ||
+    name === "cronjob"
   ) {
     return null;
   }
@@ -208,7 +228,7 @@ export function gateTool(
     const raw = typeof args.path === "string" ? args.path : "";
     if (!raw.trim()) return null;
     const target = resolveToolPath(raw, workspace);
-    if (!pathInsideWorkspace(target, workspace)) {
+    if (!allowedWorkspaceWritePath(target, workspace, input.dataDir)) {
       return {
         text: `sandbox=workspace_write refused write outside workspace: ${target}`,
         isError: true,
@@ -220,7 +240,7 @@ export function gateTool(
   if (name === "run") {
     const workdir = typeof args.workdir === "string" ? args.workdir.trim() : "";
     const cwd = workdir ? resolveToolPath(workdir, workspace) : workspace;
-    if (!pathInsideWorkspace(cwd, workspace)) {
+    if (!allowedWorkspaceWritePath(cwd, workspace, input.dataDir)) {
       return {
         text: `sandbox=workspace_write refused run cwd outside workspace: ${cwd}`,
         isError: true,

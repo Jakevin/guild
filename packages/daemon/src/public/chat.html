@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=quest-nest" />
+    <link rel="stylesheet" href="/chat.css?v=nav-fold" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -18,17 +18,38 @@
       <div class="side-top">
         <input class="search" id="filter" placeholder="搜尋" data-i18n-placeholder="search" />
       </div>
-      <div class="section-h">
-        <span data-i18n="channels">委託</span>
-        <button type="button" class="add-ch" id="toggle-create" title="新委託" data-i18n-title="newChannel">+</button>
+      <div class="nav-sec" data-nav-sec="channels">
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="channels" aria-expanded="true" aria-controls="channels">
+            <span class="sec-chev" aria-hidden="true">▾</span>
+            <span data-i18n="channels">委託</span>
+          </button>
+          <button type="button" class="add-ch" id="toggle-create" title="新委託" data-i18n-title="newChannel">+</button>
+        </div>
+        <form class="create-row" id="create-row">
+          <input id="new-channel" placeholder="委託名稱" data-i18n-placeholder="newChannelName" />
+          <button type="submit" data-i18n="create">建立</button>
+        </form>
+        <ul class="navlist" id="channels"></ul>
       </div>
-      <form class="create-row" id="create-row">
-        <input id="new-channel" placeholder="委託名稱" data-i18n-placeholder="newChannelName" />
-        <button type="submit" data-i18n="create">建立</button>
-      </form>
-      <ul class="navlist" id="channels"></ul>
-      <div class="section-h" data-i18n="dms">密談</div>
-      <ul class="navlist" id="dms"></ul>
+      <div class="nav-sec" data-nav-sec="dms">
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="dms" aria-expanded="true" aria-controls="dms">
+            <span class="sec-chev" aria-hidden="true">▾</span>
+            <span data-i18n="dms">密談</span>
+          </button>
+        </div>
+        <ul class="navlist" id="dms"></ul>
+      </div>
+      <div class="nav-sec" data-nav-sec="cron">
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="cron" aria-expanded="true" aria-controls="cron-nav">
+            <span class="sec-chev" aria-hidden="true">▾</span>
+            <span data-i18n="cron.title">排程</span>
+          </button>
+        </div>
+        <ul class="navlist" id="cron-nav"></ul>
+      </div>
       <div class="side-foot">
         <a href="/studio" data-i18n="nav.studio">編制</a>
         <a href="/library" data-i18n="nav.library">工坊</a>
@@ -116,6 +137,7 @@
                   <button type="button" class="attach-item" data-attach="rules"><span class="attach-ico">☰</span><span data-i18n="attach.rules">規則</span></button>
                   <button type="button" class="attach-item" data-attach="term"><span class="attach-ico">&gt;_</span><span data-i18n="attach.term">終端</span></button>
                   <button type="button" class="attach-item" data-attach="tree"><span class="attach-ico">🗺</span><span data-i18n="attach.tree">工作區</span></button>
+                  <button type="button" class="attach-item" data-attach="cron"><span class="attach-ico">⏱</span><span data-i18n="attach.cron">排程</span></button>
                   <button type="button" class="attach-item" data-attach="slash"><span class="attach-ico">/</span><span data-i18n="attach.slash">指令</span></button>
                 </div>
               </div>
@@ -230,6 +252,19 @@
         <button type="button" id="channel-md-save" data-i18n="save">儲存</button>
       </div>
     </dialog>
+    <dialog id="cron-dialog">
+      <h2 data-i18n="cron.title">排程</h2>
+      <p data-i18n="cron.help">新增會請這席呼叫 cronjob。時間用自然語言寫即可，例如「每10分鐘跟我說一次 Hi」。guildd 每 60 秒看一次；到點後這席開一輪新的 @handle，prompt 必須自包含。</p>
+      <div id="cron-list" class="cron-list"></div>
+      <label for="cron-bot" data-i18n="cron.seat">席</label>
+      <select id="cron-bot"></select>
+      <label for="cron-ask" data-i18n="cron.ask">要排什麼</label>
+      <textarea id="cron-ask" rows="4" placeholder="每10分鐘跟我說一次 Hi" data-i18n-placeholder="cron.askPh"></textarea>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="cron-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="cron-add" data-i18n="cron.add">請他排</button>
+      </div>
+    </dialog>
     <dialog id="bot-memory">
       <h2 data-i18n="memory.bot">MEMORY.md</h2>
       <p data-i18n="memory.botHelp">這名冒險者學會的站立筆記。有用的回合後會自動更新。</p>
@@ -318,6 +353,19 @@
             );
           } catch {
             return new Set();
+          }
+        })(),
+        cronJobs: [],
+        navFold: (function () {
+          try {
+            const raw = JSON.parse(localStorage.getItem("guild-nav-fold") || "{}");
+            return {
+              channels: Boolean(raw.channels),
+              dms: Boolean(raw.dms),
+              cron: Boolean(raw.cron),
+            };
+          } catch {
+            return { channels: false, dms: false, cron: false };
           }
         })(),
       };
@@ -1422,6 +1470,65 @@
         const nb = Number.isFinite(tb) ? tb : 0;
         return nb - na;
       }
+      function navSecFolded(sec) {
+        const q = (document.getElementById("filter").value || "").trim();
+        if (q) return false;
+        return Boolean(state.navFold[sec]);
+      }
+      function applyNavFold() {
+        ["channels", "dms", "cron"].forEach((sec) => {
+          const el = document.querySelector('[data-nav-sec="' + sec + '"]');
+          if (!el) return;
+          const folded = navSecFolded(sec);
+          el.classList.toggle("folded", folded);
+          const btn = el.querySelector("[data-fold]");
+          if (btn) btn.setAttribute("aria-expanded", folded ? "false" : "true");
+        });
+      }
+      function saveNavFold() {
+        try {
+          localStorage.setItem("guild-nav-fold", JSON.stringify(state.navFold));
+        } catch {
+          /* ignore quota */
+        }
+      }
+      function cronJobHref(job) {
+        const id = String((job && job.roomId) || "");
+        if ((state.channels || []).some((ch) => ch.id === id)) {
+          return "#c/" + encodeURIComponent(id);
+        }
+        if (id.indexOf("dm-") === 0) {
+          return "#d/" + encodeURIComponent(id.slice(3));
+        }
+        return "#c/" + encodeURIComponent(id);
+      }
+      function cronNavPreview(job) {
+        const bot = botById(job.botId);
+        const handle = bot ? bot.handle : "bot";
+        return t("cron.navWhere", {
+          handle: handle,
+          schedule: job.schedule || "",
+        });
+      }
+      async function loadNavCron() {
+        try {
+          const res = await fetch("/cron");
+          const body = await res.json().catch(() => ({}));
+          const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+          const sig = jobs
+            .map((job) =>
+              [job.id, job.nextRunAt, job.paused ? "1" : "0", job.running ? "1" : "0", job.name].join(":"),
+            )
+            .join("|");
+          if (sig === state.cronSig) return;
+          state.cronSig = sig;
+          state.cronJobs = jobs;
+        } catch {
+          if (state.cronSig != null) return;
+          state.cronJobs = [];
+        }
+        renderNav();
+      }
       function renderNav() {
         const q = document.getElementById("filter").value.toLowerCase();
         const all = state.channels || [];
@@ -1544,6 +1651,53 @@
             });
           })
           .join("");
+        const cronBox = document.getElementById("cron-nav");
+        if (cronBox) {
+          const jobs = (state.cronJobs || []).filter((job) => {
+            if (!q) return true;
+            const bot = botById(job.botId);
+            const hay = [
+              job.name,
+              job.schedule,
+              job.prompt,
+              bot && bot.handle,
+              bot && bot.name,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            return hay.includes(q);
+          });
+          cronBox.innerHTML = jobs.length
+            ? jobs
+                .map((job) => {
+                  const bot = botById(job.botId);
+                  const onRoom =
+                    cronJobHref(job) ===
+                    (state.kind === "dm"
+                      ? "#d/" + encodeURIComponent(state.id)
+                      : "#c/" + encodeURIComponent(state.id));
+                  return navRowHtml({
+                    href: cronJobHref(job),
+                    on: onRoom,
+                    av: bot
+                      ? '<span class="avatar" style="background:' +
+                        hue(bot.handle) +
+                        '">' +
+                        avatarFace(bot) +
+                        "</span>"
+                      : "",
+                    name: job.name || t("cron.title"),
+                    updatedAt: job.nextRunAt,
+                    preview: cronNavPreview(job),
+                    busy: Boolean(job.running),
+                    chip: job.paused ? t("cron.pause") : "",
+                  });
+                })
+                .join("")
+            : '<li class="nav-empty">' + escapeHtml(t("cron.navEmpty")) + "</li>";
+        }
+        applyNavFold();
       }
 
       function memberRowHtml(bot, action, locked, full) {
@@ -2087,6 +2241,7 @@
           syncThreadChrome();
           return;
         }
+        const keptHtml = holdHtmlFrames(root);
         root.innerHTML =
           rows
             .map((msg, index) => {
@@ -2242,6 +2397,7 @@
           root.scrollTop = Math.max(0, root.scrollHeight - fromBottom);
         }
         syncThreadChrome();
+        putHtmlFrames(root, keptHtml);
         hydrateHtmlPreviews(root);
       }
       function hydrateHtmlPreviews(root) {
@@ -2249,15 +2405,16 @@
         root.querySelectorAll(".md-html-preview").forEach((box) => {
           const src = box.querySelector(".md-html-src");
           const frame = box.querySelector(".md-html-frame");
-          if (!src || !frame || frame.dataset.ready) return;
-          frame.dataset.ready = "1";
+          if (!src || !frame) return;
           const raw = src.value;
           const lang = (box.querySelector(".md-fence-lang") || {}).textContent || "";
-          frame.srcdoc = /svg/i.test(lang)
-            ? '<!doctype html><html><body style="margin:0;background:#fff">' +
-              raw +
-              "</body></html>"
-            : raw;
+          const doc =
+            typeof htmlPreviewSrcdoc === "function"
+              ? htmlPreviewSrcdoc(raw, lang)
+              : raw;
+          if (frame.dataset.ready && frame.srcdoc === doc) return;
+          frame.dataset.ready = "1";
+          frame.srcdoc = doc;
         });
       }
       function openHtmlZoom(raw) {
@@ -2285,6 +2442,7 @@
         renderNav();
         renderHead();
         setHash();
+        loadNavCron().catch(() => {});
       }
       async function deleteChannel(id, name) {
         if (!id || id === "channel-general") {
@@ -2593,8 +2751,11 @@
           const pending = (state.messages || []).filter(
             (msg) => String(msg.id).indexOf("pending-") === 0,
           );
-          if (!extras.length && !pending.length) return;
           const serverYou = incoming.filter((msg) => msg.author === "you");
+          const dropPending = pending.filter((msg) =>
+            serverYou.some((row) => row.body === msg.body),
+          );
+          if (!extras.length && !dropPending.length) return;
           state.messages = (state.messages || [])
             .filter((msg) => {
               if (String(msg.id).indexOf("pending-") === 0) {
@@ -3000,6 +3161,19 @@
         }
       });
       document.getElementById("filter").addEventListener("input", renderNav);
+      document.getElementById("nav-drawer").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-fold]");
+        if (!btn || event.target.closest(".add-ch")) return;
+        event.preventDefault();
+        const sec = btn.getAttribute("data-fold");
+        if (!sec) return;
+        state.navFold[sec] = !state.navFold[sec];
+        saveNavFold();
+        applyNavFold();
+        if (sec === "cron" && !state.navFold.cron) {
+          loadNavCron().catch(() => {});
+        }
+      });
       document.getElementById("toggle-create").addEventListener("click", () => {
         document.getElementById("create-row").classList.toggle("open");
         document.getElementById("new-channel").focus();
@@ -3263,6 +3437,64 @@
         }
         channelMdDialog.close();
         await loadWorkspace();
+      });
+      document.getElementById("cron-cancel").addEventListener("click", () => {
+        document.getElementById("cron-dialog").close();
+      });
+      document.getElementById("cron-add").addEventListener("click", async () => {
+        const botId = document.getElementById("cron-bot").value;
+        const ask = document.getElementById("cron-ask").value.trim();
+        const bot = botById(botId);
+        if (!bot) {
+          alert(t("cron.needSeat"));
+          return;
+        }
+        if (!ask) {
+          alert(t("cron.needAsk"));
+          return;
+        }
+        const raw = "@" + bot.handle + " " + t("cron.askBody", { ask: ask });
+        document.getElementById("cron-ask").value = "";
+        document.getElementById("cron-dialog").close();
+        const split = splitSendTargets([botId]);
+        if (split.fresh.length) {
+          await flushSend(raw, [], "", [botId], botId);
+        } else {
+          enqueuePending({
+            raw: raw,
+            packed: [],
+            replyTo: "",
+            botIds: [botId],
+            assigneeId: botId,
+          });
+        }
+      });
+      document.getElementById("cron-list").addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-cron-act]");
+        const row = event.target.closest("[data-cron-id]");
+        if (!btn || !row) return;
+        const id = row.getAttribute("data-cron-id");
+        const act = btn.getAttribute("data-cron-act");
+        if (act === "remove") {
+          const res = await fetch("/cron/" + encodeURIComponent(id), { method: "DELETE" });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            alert(body.error || "cron failed");
+            return;
+          }
+        } else {
+          const res = await fetch(
+            "/cron/" + encodeURIComponent(id) + "/" + act,
+            { method: "POST" },
+          );
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            alert(body.error || "cron failed");
+            return;
+          }
+        }
+        await renderCronList();
+        loadNavCron().catch(() => {});
       });
       document.getElementById("bot-memory-cancel").addEventListener("click", () => {
         botMemoryDialog.close();
@@ -4299,6 +4531,85 @@
           body: chunks.join("\n\n") || t("attach.noPersona"),
         });
       }
+      function cronRoomId() {
+        if (state.kind === "dm") return "dm-" + state.id;
+        return state.id;
+      }
+      async function loadCronJobs() {
+        const id = cronRoomId();
+        if (!id) return [];
+        const res = await fetch("/cron?room=" + encodeURIComponent(id));
+        const body = await res.json().catch(() => ({}));
+        return Array.isArray(body.jobs) ? body.jobs : [];
+      }
+      function cronWhen(iso) {
+        const d = new Date(iso || "");
+        if (!Number.isFinite(d.getTime())) return String(iso || "");
+        return d.toLocaleString();
+      }
+      async function renderCronList() {
+        const box = document.getElementById("cron-list");
+        const jobs = await loadCronJobs();
+        if (!jobs.length) {
+          box.innerHTML = '<div class="cron-empty">' + t("cron.empty") + "</div>";
+          return;
+        }
+        box.innerHTML = jobs
+          .map((job) => {
+            const pauseLabel = job.paused ? t("cron.resume") : t("cron.pause");
+            const pauseAct = job.paused ? "resume" : "pause";
+            const err =
+              job.lastStatus === "failed" && job.lastError
+                ? " · " + escapeHtml(job.lastError)
+                : "";
+            return (
+              '<div class="cron-row" data-cron-id="' +
+              escapeHtml(job.id) +
+              '"><div><b>' +
+              escapeHtml(job.name) +
+              "</b><span>" +
+              escapeHtml(job.schedule) +
+              " · " +
+              t("cron.next", { when: cronWhen(job.nextRunAt) }) +
+              (job.paused ? " · paused" : "") +
+              err +
+              '</span></div><div class="cron-acts">' +
+              '<button type="button" data-cron-act="' +
+              pauseAct +
+              '">' +
+              pauseLabel +
+              '</button><button type="button" data-cron-act="run">' +
+              t("cron.run") +
+              '</button><button type="button" class="ghost danger" data-cron-act="remove">' +
+              t("cron.remove") +
+              "</button></div></div>"
+            );
+          })
+          .join("");
+      }
+      async function openCronDialog() {
+        const dialog = document.getElementById("cron-dialog");
+        const sel = document.getElementById("cron-bot");
+        const ch = currentChannel();
+        const members = ch ? ch.members || [] : [];
+        const dmBot =
+          state.kind === "dm" && state.id ? botById(state.id) : null;
+        const bots = members.length ? members : dmBot ? [dmBot] : [];
+        sel.innerHTML = bots
+          .map(
+            (bot) =>
+              '<option value="' +
+              escapeHtml(bot.id) +
+              '">@' +
+              escapeHtml(bot.handle) +
+              "</option>",
+          )
+          .join("");
+        await renderCronList();
+        dialog.showModal();
+        const ask = document.getElementById("cron-ask");
+        if (ask) ask.focus();
+      }
       function openSlashSheet() {
         const rows = [
           { id: "channel-md", label: t("slash.editMd"), hint: t("slash.editMdHint") },
@@ -4306,6 +4617,7 @@
           { id: "git", label: t("slash.git"), hint: "status + diff" },
           { id: "here", label: t("slash.here"), hint: t("slash.hereHint") },
           { id: "library", label: t("slash.library"), hint: "/library" },
+          { id: "cron", label: t("slash.cron"), hint: t("slash.cronHint") },
         ];
         if (state.kind !== "channel") {
           rows.splice(0, 1);
@@ -4335,6 +4647,11 @@
         }
         if (id === "library") {
           window.location.href = "/library";
+          return;
+        }
+        if (id === "cron") {
+          hideAttach();
+          openCronDialog();
         }
       }
       async function runAttach(kind) {
@@ -4355,6 +4672,10 @@
           state.attachSheet = { kind: "term", title: t("attach.term"), q: "", rows: [] };
           renderAttachSheet();
           return;
+        }
+        if (kind === "cron") {
+          hideAttach();
+          return openCronDialog();
         }
         if (kind === "slash") return openSlashSheet();
       }
@@ -5165,6 +5486,15 @@
             insert: "",
             name: t("slash.library"),
             hint: "/library",
+            glyph: "/",
+          },
+          {
+            kind: "cmd",
+            section: "cmd",
+            cmdId: "cron",
+            insert: "",
+            name: t("slash.cron"),
+            hint: t("slash.cronHint"),
             glyph: "/",
           },
         ];
@@ -6064,6 +6394,11 @@
         setNavOpen(false);
         openFromHash().catch((err) => alert(err.message));
       });
+      applyNavFold();
+      setInterval(() => {
+        if (document.hidden || navSecFolded("cron")) return;
+        loadNavCron().catch(() => {});
+      }, 15000);
       Promise.all([openFromHash(), loadModelPick()])
         .then(() => loadSlashCatalog().catch(() => {}))
         .catch((err) => {

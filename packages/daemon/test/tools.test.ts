@@ -99,6 +99,8 @@ test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /read_only seat can still spawn/);
   assert.match(TOOL_SYSTEM, /run in parallel/i);
   assert.match(TOOL_SYSTEM, /read_spawn/);
+  assert.match(TOOL_SYSTEM, /cronjob/);
+  assert.match(TOOL_SYSTEM, /每10分鐘/);
   assert.match(hostContext(), /home=/);
 });
 

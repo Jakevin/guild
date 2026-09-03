@@ -97,6 +97,27 @@ CREATE TABLE IF NOT EXISTS compact (
   updated_at TEXT NOT NULL,
   message_count INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS cron_jobs (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  bot_id TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  schedule TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('once', 'every', 'cron')),
+  every_ms INTEGER,
+  cron_expr TEXT,
+  at_ms INTEGER,
+  next_run_at TEXT NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  last_run_at TEXT,
+  last_status TEXT,
+  last_error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS cron_jobs_next ON cron_jobs(paused, next_run_at);
 `;
 
 type CompactRow = {
@@ -105,6 +126,54 @@ type CompactRow = {
   updatedAt: string;
   messageCount: number;
 };
+
+export type CronJobRow = {
+  id: string;
+  name: string;
+  roomId: string;
+  botId: string;
+  prompt: string;
+  schedule: string;
+  kind: "once" | "every" | "cron";
+  everyMs?: number;
+  cronExpr?: string;
+  atMs?: number;
+  nextRunAt: string;
+  paused: boolean;
+  createdAt: string;
+  lastRunAt?: string;
+  lastStatus?: string;
+  lastError?: string;
+};
+
+function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
+  const job: CronJobRow = {
+    id: asString(row.id),
+    name: asString(row.name),
+    roomId: asString(row.room_id),
+    botId: asString(row.bot_id),
+    prompt: asString(row.prompt),
+    schedule: asString(row.schedule),
+    kind:
+      asString(row.kind) === "once" || asString(row.kind) === "cron"
+        ? asString(row.kind)
+        : "every",
+    nextRunAt: asString(row.next_run_at),
+    paused: asNumber(row.paused) === 1,
+    createdAt: asString(row.created_at),
+  };
+  if (row.every_ms != null) job.everyMs = asNumber(row.every_ms);
+  const cronExpr = asString(row.cron_expr);
+  if (cronExpr) job.cronExpr = cronExpr;
+  if (row.at_ms != null) job.atMs = asNumber(row.at_ms);
+  const lastRun = asString(row.last_run_at);
+  if (lastRun) job.lastRunAt = lastRun;
+  const lastStatus = asString(row.last_status);
+  if (lastStatus) job.lastStatus = lastStatus;
+  const lastError = asString(row.last_error);
+  if (lastError) job.lastError = lastError;
+  return job;
+}
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
@@ -769,6 +838,72 @@ export class GuildDb {
       this.sqlite.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  listCronJobs(roomId?: string): CronJobRow[] {
+    const rows = roomId
+      ? (this.sqlite
+          .prepare("SELECT * FROM cron_jobs WHERE room_id = ? ORDER BY created_at")
+          .all(roomId) as Record<string, unknown>[])
+      : (this.sqlite
+          .prepare("SELECT * FROM cron_jobs ORDER BY next_run_at")
+          .all() as Record<string, unknown>[]);
+    return rows.map(cronJobFromRow);
+  }
+
+  getCronJob(id: string): CronJobRow | null {
+    const row = this.sqlite
+      .prepare("SELECT * FROM cron_jobs WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+    return row ? cronJobFromRow(row) : null;
+  }
+
+  upsertCronJob(job: CronJobRow): void {
+    this.sqlite
+      .prepare(
+        `INSERT INTO cron_jobs (
+           id, name, room_id, bot_id, prompt, schedule, kind, every_ms, cron_expr, at_ms,
+           next_run_at, paused, created_at, last_run_at, last_status, last_error
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           room_id = excluded.room_id,
+           bot_id = excluded.bot_id,
+           prompt = excluded.prompt,
+           schedule = excluded.schedule,
+           kind = excluded.kind,
+           every_ms = excluded.every_ms,
+           cron_expr = excluded.cron_expr,
+           at_ms = excluded.at_ms,
+           next_run_at = excluded.next_run_at,
+           paused = excluded.paused,
+           last_run_at = excluded.last_run_at,
+           last_status = excluded.last_status,
+           last_error = excluded.last_error`,
+      )
+      .run(
+        job.id,
+        job.name,
+        job.roomId,
+        job.botId,
+        job.prompt,
+        job.schedule,
+        job.kind,
+        job.everyMs ?? null,
+        job.cronExpr ?? null,
+        job.atMs ?? null,
+        job.nextRunAt,
+        job.paused ? 1 : 0,
+        job.createdAt,
+        job.lastRunAt ?? null,
+        job.lastStatus ?? null,
+        job.lastError ?? null,
+      );
+  }
+
+  deleteCronJob(id: string): boolean {
+    const result = this.sqlite.prepare("DELETE FROM cron_jobs WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   private messageCount(roomId: string): number {

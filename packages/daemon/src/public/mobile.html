@@ -9,7 +9,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=html-preview" />
+    <link rel="stylesheet" href="/mobile.css?v=html-frame" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -484,6 +484,8 @@
           return (
             '<article class="msg' +
             (you ? " you" : " bot") +
+            '" data-id="' +
+            escapeHtml(msg.id || "") +
             '"><span class="avatar" style="' +
             avStyle +
             '">' +
@@ -520,7 +522,10 @@
               escapeHtml(t("mobile.recent", { n: cap })) +
               "</div>"
             : "";
+          const keptHtml =
+            typeof holdHtmlFrames === "function" ? holdHtmlFrames(root) : [];
           root.innerHTML = notice + rows.map(msgHtml).join("") + turnStatusHtml();
+          if (typeof putHtmlFrames === "function") putHtmlFrames(root, keptHtml);
           if (typeof hydrateHtmlPreviews === "function") {
             hydrateHtmlPreviews(root);
           }
@@ -662,12 +667,25 @@
           renderList();
           if (state.kind) renderHead();
         }
+        function sameMessages(next) {
+          const prev = state.messages || [];
+          if (prev.length !== next.length) return false;
+          return next.every(
+            (msg, i) =>
+              prev[i].id === msg.id &&
+              prev[i].body === msg.body &&
+              Boolean(prev[i].finishedAt) === Boolean(msg.finishedAt),
+          );
+        }
         async function loadMessages(opts) {
           if (!state.kind) return;
           const res = await fetch(roomMessagesUrl());
           const body = await res.json().catch(() => []);
           if (!res.ok) throw new Error(body.error || "load failed");
-          state.messages = Array.isArray(body) ? body : [];
+          const incoming = Array.isArray(body) ? body : [];
+          const unchanged = sameMessages(incoming);
+          state.messages = incoming;
+          if (opts && opts.merge && unchanged) return;
           renderThread({ pinBottom: !(opts && opts.merge) });
         }
         async function pollLive() {
@@ -684,10 +702,10 @@
             state.lives = lives;
             if (!lives.length && !state.posting) {
               if (was) await loadMessages({ merge: true }).catch(() => {});
-              else renderThread();
+            } else if (now !== was) {
+              await loadMessages({ merge: true }).catch(() => {});
             } else {
-              if (now !== was) await loadMessages({ merge: true }).catch(() => {});
-              else renderThread();
+              renderThread();
             }
             syncComposer();
           } catch {

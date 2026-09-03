@@ -504,6 +504,9 @@ export async function chatReply(input: {
   mcpTools?: McpToolRef[];
   sandbox?: Sandbox;
   workspace?: string;
+  roomId?: string;
+  botId?: string;
+  cronRun?: boolean;
   dispatch?: ToolContext["dispatch"];
 }): Promise<ChatReply> {
   const env = input.env ?? process.env;
@@ -569,6 +572,9 @@ async function tryChatLlm(
     mcpTools?: McpToolRef[];
     sandbox?: Sandbox;
     workspace?: string;
+    roomId?: string;
+    botId?: string;
+    cronRun?: boolean;
     dispatch?: ToolContext["dispatch"];
   },
   env: NodeJS.ProcessEnv,
@@ -625,6 +631,9 @@ async function tryChatLlm(
       signal: input.signal,
       mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
       spawnHandles: new Map(),
+      ...(input.roomId ? { roomId: input.roomId } : {}),
+      ...(input.botId ? { botId: input.botId } : {}),
+      ...(input.cronRun ? { cronRun: true } : {}),
       ...policyFor(env, {
         sandbox: input.sandbox,
         workspace: input.workspace,

@@ -391,7 +391,8 @@ textarea:focus-visible {
   min-height: 220px;
   height: 52vh;
   border: 0;
-  background: #fff;
+  background: transparent;
+  color-scheme: dark;
   border-radius: 0 0 12px 12px;
 }
 .assistant-text .md-html-preview[data-view="code"] .md-html-frame { display: none; }
@@ -441,8 +442,17 @@ textarea:focus-visible {
   border-radius: 16px;
   background: #fff;
 }
-.assistant-text img.md-img {
+.assistant-text .md-img-link {
+  display: inline-block;
   max-width: 100%;
+  line-height: 0;
+}
+.assistant-text img.md-img {
+  max-width: min(100%, 22rem);
+  max-height: min(16rem, 40vh);
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: 10px;
 }
 .turn-live {
