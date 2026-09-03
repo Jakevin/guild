@@ -38,7 +38,7 @@ git tag v0.2.14
 git push origin main v0.2.14
 ```
 
-CI (`.github/workflows/release.yml`) tests, publishes the daemon package, then creates the GitHub Release. A Release existing means that version is on npm. Catch-up a tag that already has a GitHub Release: Actions → Release → Run workflow → tag `v0.2.13`.
+CI (`.github/workflows/release.yml`) tests, publishes the daemon package, waits until `npm view` and the tarball match the tag, then creates the GitHub Release. A Release existing means that version is on npm. If publish looks successful but the registry never serves the tarball, the job fails — bump the version, do not reuse the tag. Catch-up a tag that already has a GitHub Release: Actions → Release → Run workflow → tag `v0.2.13`.
 
 ### First time: Trusted Publisher on npmjs.com
 

@@ -61,6 +61,27 @@ jobs:
         working-directory: packages/daemon
         run: npm publish --access public
 
+      - name: Registry has this version as latest
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          WANT="${TAG#v}"
+          TAR="https://registry.npmjs.org/@kevin5251984/guild/-/guild-${WANT}.tgz"
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            GOT=$(npm view "@kevin5251984/guild@${WANT}" version 2>/dev/null || true)
+            LATEST=$(npm view @kevin5251984/guild version 2>/dev/null || true)
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$TAR" || true)
+            echo "try $i view=${GOT:-none} latest=${LATEST:-none} tarball=$CODE"
+            if [ "$GOT" = "$WANT" ] && [ "$LATEST" = "$WANT" ] && [ "$CODE" = "200" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "npm publish returned ok but registry does not serve $WANT (latest=$LATEST tarball=$CODE)" >&2
+          echo "bump the version and tag again; do not reuse $WANT" >&2
+          exit 1
+
       - name: GitHub Release after npm
         env:
           GH_TOKEN: ${{ github.token }}
