@@ -187,12 +187,13 @@ a:hover { color: var(--brand-light); }
   color: var(--stone);
   margin: 0 0 22px;
 }
-.version-link {
-  /* Bright blue on parchment; --brand stays ink for the rest of the page. */
+a.version-link,
+a.version-link:visited {
+  /* Beat a / a:visited (ink / browser purple). Nav .ver is the circled chip. */
   color: var(--brand-bright);
   font-weight: 600;
 }
-.version-link:hover { color: var(--brand); }
+a.version-link:hover { color: var(--brand); }
 
 .hero-links {
   display: flex;
@@ -916,8 +917,13 @@ footer.foot {
 .nav .ver {
   font-family: var(--latin-ui);
   font-size: 12px;
-  color: var(--stone);
+  color: var(--brand-bright);
+  font-weight: 600;
   letter-spacing: 0.2px;
+}
+.ver [data-i18n="local"] {
+  color: var(--stone);
+  font-weight: 500;
 }
 .nav nav {
   margin-left: auto;
