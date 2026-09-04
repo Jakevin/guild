@@ -68,6 +68,7 @@
 
   --brand:        #1B365D;
   --brand-light:  #2D5A8A;
+  --brand-bright: #2563EB;
   --brand-tint:   #EEF2F7;
 
   --near-black:   #141413;
@@ -187,10 +188,11 @@ a:hover { color: var(--brand-light); }
   margin: 0 0 22px;
 }
 .version-link {
-  color: var(--brand);
+  /* Bright blue on parchment; --brand stays ink for the rest of the page. */
+  color: var(--brand-bright);
   font-weight: 600;
 }
-.version-link:hover { color: var(--brand-light); }
+.version-link:hover { color: var(--brand); }
 
 .hero-links {
   display: flex;
