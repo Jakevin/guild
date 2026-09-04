@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildChatSystem, HALL_RULES, localGenerate } from "../src/generate.ts";
+import { buildChatSystem, HALL_RULES, WHISPER_RULES, localGenerate } from "../src/generate.ts";
 import {
   childSpawnPolicy,
   readSpawn,
@@ -262,6 +262,23 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(HALL_RULES, /Spawn first when/);
   assert.match(HALL_RULES, /Do not skip spawn/);
   assert.match(HALL_RULES, /do not start this turn/);
+});
+
+test("whisper system does not hand off to other seats", () => {
+  const system = buildChatSystem({
+    botName: "PM",
+    handle: "pm",
+    soul: "# Soul",
+    agent: "# Agent",
+    position: "# Position",
+    whisper: true,
+  });
+  assert.match(system, /# Whisper/);
+  assert.match(system, /Only you speak here/);
+  assert.match(system, /Do not @handle other bots/);
+  assert.doesNotMatch(system, /# Hall/);
+  assert.doesNotMatch(system, /even if the human only named you this turn/);
+  assert.match(WHISPER_RULES, /1:1 whisper/);
 });
 
 test("child spawn cannot escalate a read_only parent", () => {

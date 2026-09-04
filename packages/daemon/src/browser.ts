@@ -11,14 +11,16 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { chromeBinary, freePort } from "./chrome-launch.ts";
 import { generatedDir, generatedPublicPath } from "./image-gen.ts";
 import { defaultDataDir } from "./store.ts";
 import type { ToolOutcome } from "./tools.ts";
+
+export { chromeBinary };
 
 /**
  * Real-profile browsing follows Hermes (nousresearch/hermes-agent
@@ -324,45 +326,6 @@ export function syncRealProfile(
   }
   writeFileSync(marker, `${leaf}\n`);
   return root;
-}
-
-export function chromeBinary(platform = process.platform): string | null {
-  if (platform === "darwin") {
-    const candidates = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-      "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-    ];
-    return candidates.find((path) => existsSync(path)) ?? null;
-  }
-  if (platform === "win32") {
-    const local = process.env.LOCALAPPDATA || "";
-    const candidates = [
-      join(local, "Google", "Chrome", "Application", "chrome.exe"),
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    ];
-    return candidates.find((path) => existsSync(path)) ?? null;
-  }
-  const candidates = ["google-chrome", "chromium", "chromium-browser", "brave-browser"];
-  for (const name of candidates) {
-    const path = `/usr/bin/${name}`;
-    if (existsSync(path)) return path;
-  }
-  return null;
-}
-
-async function freePort(): Promise<number> {
-  const probe = createServer();
-  await new Promise<void>((resolve, reject) => {
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => resolve());
-  });
-  const address = probe.address();
-  const port =
-    address && typeof address === "object" ? address.port : 18742;
-  await new Promise<void>((resolve) => probe.close(() => resolve()));
-  return port;
 }
 
 async function waitJson(url: string, ms = 20_000): Promise<unknown> {

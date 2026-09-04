@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=nav-fold" />
+    <link rel="stylesheet" href="/chat.css?v=cron-sheet" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -18,10 +18,32 @@
       <div class="side-top">
         <input class="search" id="filter" placeholder="搜尋" data-i18n-placeholder="search" />
       </div>
+      <div class="nav-scroll">
+      <div class="nav-sec folded" data-nav-sec="cron">
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="cron" aria-expanded="false" aria-controls="cron-nav">
+            <span class="sec-chev" aria-hidden="true"></span>
+            <span class="sec-ico" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <circle cx="8" cy="8.2" r="5.3"/>
+                <path d="M8 5.4V8.2l2.1 1.3"/>
+              </svg>
+            </span>
+            <span data-i18n="cron.title">排程</span>
+          </button>
+        </div>
+        <ul class="navlist" id="cron-nav"></ul>
+      </div>
       <div class="nav-sec" data-nav-sec="channels">
         <div class="section-h">
           <button type="button" class="sec-fold" data-fold="channels" aria-expanded="true" aria-controls="channels">
-            <span class="sec-chev" aria-hidden="true">▾</span>
+            <span class="sec-chev" aria-hidden="true"></span>
+            <span class="sec-ico" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <rect x="3.5" y="2.5" width="9" height="11" rx="1.2"/>
+                <path d="M6 6h4M6 8.5h4M6 11h2.5"/>
+              </svg>
+            </span>
             <span data-i18n="channels">委託</span>
           </button>
           <button type="button" class="add-ch" id="toggle-create" title="新委託" data-i18n-title="newChannel">+</button>
@@ -35,20 +57,17 @@
       <div class="nav-sec" data-nav-sec="dms">
         <div class="section-h">
           <button type="button" class="sec-fold" data-fold="dms" aria-expanded="true" aria-controls="dms">
-            <span class="sec-chev" aria-hidden="true">▾</span>
+            <span class="sec-chev" aria-hidden="true"></span>
+            <span class="sec-ico" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <path d="M3.2 4.3c0-.7.6-1.3 1.3-1.3h7c.7 0 1.3.6 1.3 1.3v5.2c0 .7-.6 1.3-1.3 1.3H7.1L4.2 13V10.8h-.7c-.7 0-1.3-.6-1.3-1.3V4.3Z"/>
+              </svg>
+            </span>
             <span data-i18n="dms">密談</span>
           </button>
         </div>
         <ul class="navlist" id="dms"></ul>
       </div>
-      <div class="nav-sec" data-nav-sec="cron">
-        <div class="section-h">
-          <button type="button" class="sec-fold" data-fold="cron" aria-expanded="true" aria-controls="cron-nav">
-            <span class="sec-chev" aria-hidden="true">▾</span>
-            <span data-i18n="cron.title">排程</span>
-          </button>
-        </div>
-        <ul class="navlist" id="cron-nav"></ul>
       </div>
       <div class="side-foot">
         <a href="/studio" data-i18n="nav.studio">編制</a>
@@ -217,6 +236,33 @@
           <div class="traj-detail" id="traj-detail"></div>
         </div>
       </div>
+      <div class="cron-sheet" id="cron-sheet" hidden>
+        <div class="cron-sheet-bar">
+          <button type="button" class="cron-sheet-back" id="cron-sheet-back" aria-label="返回" data-i18n-aria="cron.back">‹</button>
+          <strong data-i18n="cron.jobTitle">例行任務</strong>
+        </div>
+        <div class="cron-sheet-body">
+          <div class="cron-sheet-tools">
+            <label class="cron-switch">
+              <input type="checkbox" id="cron-sheet-on" />
+              <span id="cron-sheet-on-label" data-i18n="cron.enabled">啟用中</span>
+            </label>
+            <div class="cron-sheet-acts">
+              <button type="button" class="ghost danger" id="cron-sheet-del" data-i18n="cron.remove">刪除</button>
+              <button type="button" id="cron-sheet-run" data-i18n="cron.test">測試執行</button>
+            </div>
+          </div>
+          <label for="cron-sheet-name" data-i18n="cron.name">名稱</label>
+          <input id="cron-sheet-name" autocomplete="off" />
+          <label for="cron-sheet-prompt" data-i18n="cron.prompt">指示</label>
+          <textarea id="cron-sheet-prompt" rows="7"></textarea>
+          <label for="cron-sheet-when" data-i18n="cron.when">執行時機</label>
+          <input id="cron-sheet-when" autocomplete="off" />
+          <p class="cron-sheet-next" id="cron-sheet-next"></p>
+          <h3 data-i18n="cron.history">執行歷史紀錄</h3>
+          <ul class="cron-runs" id="cron-sheet-runs"></ul>
+        </div>
+      </div>
     </section>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="html-zoom" id="html-zoom" hidden>
@@ -356,16 +402,17 @@
           }
         })(),
         cronJobs: [],
+        cronOpen: "",
         navFold: (function () {
           try {
             const raw = JSON.parse(localStorage.getItem("guild-nav-fold") || "{}");
             return {
               channels: Boolean(raw.channels),
               dms: Boolean(raw.dms),
-              cron: Boolean(raw.cron),
+              cron: raw.cron == null ? true : Boolean(raw.cron),
             };
           } catch {
-            return { channels: false, dms: false, cron: false };
+            return { channels: false, dms: false, cron: true };
           }
         })(),
       };
@@ -925,6 +972,11 @@
       }
       function parseHash() {
         const raw = location.hash.replace(/^#/, "");
+        if (raw.startsWith("s/")) {
+          state.cronOpen = decodeURIComponent(raw.slice(2));
+          return;
+        }
+        state.cronOpen = "";
         if (raw.startsWith("d/")) {
           state.kind = "dm";
           state.id = raw.slice(2);
@@ -939,7 +991,11 @@
         state.id = "channel-general";
       }
       function setHash() {
-        const next = state.kind === "dm" ? "#d/" + state.id : "#c/" + state.id;
+        const next = state.cronOpen
+          ? "#s/" + encodeURIComponent(state.cronOpen)
+          : state.kind === "dm"
+            ? "#d/" + state.id
+            : "#c/" + state.id;
         if (location.hash !== next) history.replaceState(null, "", next);
       }
       function roomKey(kind, id) {
@@ -1493,14 +1549,7 @@
         }
       }
       function cronJobHref(job) {
-        const id = String((job && job.roomId) || "");
-        if ((state.channels || []).some((ch) => ch.id === id)) {
-          return "#c/" + encodeURIComponent(id);
-        }
-        if (id.indexOf("dm-") === 0) {
-          return "#d/" + encodeURIComponent(id.slice(3));
-        }
-        return "#c/" + encodeURIComponent(id);
+        return "#s/" + encodeURIComponent(String((job && job.id) || ""));
       }
       function cronNavPreview(job) {
         const bot = botById(job.botId);
@@ -1672,14 +1721,9 @@
             ? jobs
                 .map((job) => {
                   const bot = botById(job.botId);
-                  const onRoom =
-                    cronJobHref(job) ===
-                    (state.kind === "dm"
-                      ? "#d/" + encodeURIComponent(state.id)
-                      : "#c/" + encodeURIComponent(state.id));
                   return navRowHtml({
                     href: cronJobHref(job),
-                    on: onRoom,
+                    on: state.cronOpen === job.id,
                     av: bot
                       ? '<span class="avatar" style="background:' +
                         hue(bot.handle) +
@@ -1812,8 +1856,37 @@
         if (name === "handoff") return t("handoff");
         return toolTitle(name);
       }
+      function liveFreebuffCopy(text) {
+        const raw = String(text || "").trim();
+        if (!raw) return "";
+        const zh = (I18N && I18N["zh-Hant"]) || {};
+        const en = (I18N && I18N.en) || {};
+        const keys = [
+          "live.freebuffWait",
+          "live.freebuffQueue",
+          "live.freebuffPaste",
+          "live.freebuffSend",
+        ];
+        for (const key of keys) {
+          if (raw === zh[key] || raw === en[key] || raw === t(key)) return t(key);
+        }
+        return "";
+      }
+      function liveStatusLabel(live) {
+        if (live && live.paused) return t("live.paused");
+        const mapped = liveFreebuffCopy(live && live.thinking);
+        if (mapped) return mapped;
+        const steps = (live && live.steps) || [];
+        for (let i = 0; i < steps.length; i++) {
+          const hit = liveFreebuffCopy(steps[i] && steps[i].detail);
+          if (hit) return hit;
+        }
+        return t("deepDiving");
+      }
       function liveStepsHtml(steps) {
-        const rows = (steps || []).slice(-5);
+        const rows = (steps || [])
+          .slice(-5)
+          .filter((step) => !(step.name === "think" && liveFreebuffCopy(step.detail)));
         if (!rows.length) return "";
         return (
           '<ul class="live-steps">' +
@@ -1978,7 +2051,7 @@
         return (
           '<div class="turn-live">' +
           '<div class="turn-status">' +
-          (paused ? t("live.paused") : t("deepDiving")) +
+          liveStatusLabel(live) +
           clock +
           "</div>" +
           liveStepsHtml(live && live.steps) +
@@ -2052,7 +2125,7 @@
               elapsed >= 15000
                 ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
                 : "";
-            status.innerHTML = (paused ? t("live.paused") : t("deepDiving")) + clock;
+            status.innerHTML = liveStatusLabel(live) + clock;
           }
           const html = liveStepsHtml(live.steps);
           const existing = block.querySelector(".live-steps");
@@ -2947,6 +3020,16 @@
         if (pop) pop.hidden = true;
         renderReplyBar();
         await loadWorkspace();
+        if (state.cronOpen) {
+          const ok = await showCronSheet(state.cronOpen);
+          if (!ok) {
+            state.cronOpen = "";
+            setHash();
+            hideCronSheet();
+          }
+        } else {
+          hideCronSheet();
+        }
         await loadMessages();
         syncSendButton();
       }
@@ -3438,6 +3521,83 @@
         channelMdDialog.close();
         await loadWorkspace();
       });
+      document.getElementById("cron-sheet-back").addEventListener("click", () => {
+        closeCronSheet();
+      });
+      document.getElementById("cron-sheet-on").addEventListener("change", async (event) => {
+        const id = state.cronOpen;
+        if (!id) return;
+        const act = event.target.checked ? "resume" : "pause";
+        const res = await fetch(
+          "/cron/" + encodeURIComponent(id) + "/" + act,
+          { method: "POST" },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          event.target.checked = !event.target.checked;
+          alert(body.error || t("cron.saveFailed"));
+          return;
+        }
+        await showCronSheet(id);
+        loadNavCron().catch(() => {});
+      });
+      document.getElementById("cron-sheet-del").addEventListener("click", async () => {
+        const id = state.cronOpen;
+        if (!id) return;
+        if (!confirm(t("cron.deleteConfirm"))) return;
+        const res = await fetch("/cron/" + encodeURIComponent(id), { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(body.error || t("deleteFailed"));
+          return;
+        }
+        closeCronSheet();
+        loadNavCron().catch(() => {});
+      });
+      document.getElementById("cron-sheet-run").addEventListener("click", async () => {
+        const id = state.cronOpen;
+        if (!id) return;
+        const btn = document.getElementById("cron-sheet-run");
+        if (btn) btn.disabled = true;
+        let job;
+        try {
+          job = await loadCronJob(id);
+        } catch (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = t("cron.test");
+          }
+          alert(err.message || t("cron.saveFailed"));
+          return;
+        }
+        applyCronRoom(job);
+        closeCronSheet();
+        loadNavCron().catch(() => {});
+        const res = await fetch("/cron/" + encodeURIComponent(id) + "/run", {
+          method: "POST",
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) alert(body.error || t("cron.saveFailed"));
+      });
+      ["cron-sheet-name", "cron-sheet-prompt", "cron-sheet-when"].forEach((fid) => {
+        const el = document.getElementById(fid);
+        if (!el) return;
+        el.addEventListener("blur", () => {
+          const fields =
+            fid === "cron-sheet-name"
+              ? { name: el.value }
+              : fid === "cron-sheet-prompt"
+                ? { prompt: el.value }
+                : { schedule: el.value };
+          saveCronSheet(fields);
+        });
+        el.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && fid !== "cron-sheet-prompt") {
+            event.preventDefault();
+            el.blur();
+          }
+        });
+      });
       document.getElementById("cron-cancel").addEventListener("click", () => {
         document.getElementById("cron-dialog").close();
       });
@@ -3472,8 +3632,13 @@
       document.getElementById("cron-list").addEventListener("click", async (event) => {
         const btn = event.target.closest("[data-cron-act]");
         const row = event.target.closest("[data-cron-id]");
-        if (!btn || !row) return;
+        if (!row) return;
         const id = row.getAttribute("data-cron-id");
+        if (!btn) {
+          document.getElementById("cron-dialog").close();
+          location.hash = "#s/" + encodeURIComponent(id);
+          return;
+        }
         const act = btn.getAttribute("data-cron-act");
         if (act === "remove") {
           const res = await fetch("/cron/" + encodeURIComponent(id), { method: "DELETE" });
@@ -4546,6 +4711,153 @@
         const d = new Date(iso || "");
         if (!Number.isFinite(d.getTime())) return String(iso || "");
         return d.toLocaleString();
+      }
+      function formatAgo(iso) {
+        const when = new Date(iso || "");
+        const ms = Date.now() - when.getTime();
+        if (!Number.isFinite(ms) || ms < 0) return cronWhen(iso);
+        if (ms < 45 * 1000) return t("cron.justNow");
+        if (ms < 50 * 60 * 1000) {
+          return t("cron.minsAgo", { n: Math.max(1, Math.round(ms / 60000)) });
+        }
+        if (ms < 20 * 60 * 60 * 1000) {
+          return t("cron.hoursAgo", { n: Math.max(1, Math.round(ms / 3600000)) });
+        }
+        return formatUpdated(iso);
+      }
+      function cronSheetEl() {
+        return document.getElementById("cron-sheet");
+      }
+      function hideCronSheet() {
+        const el = cronSheetEl();
+        if (el) el.hidden = true;
+      }
+      function cronSheetEditing() {
+        const root = cronSheetEl();
+        const a = document.activeElement;
+        return Boolean(
+          root &&
+            a &&
+            root.contains(a) &&
+            (a.tagName === "INPUT" || a.tagName === "TEXTAREA"),
+        );
+      }
+      function applyCronRoom(job) {
+        const roomId = String((job && job.roomId) || "");
+        if (roomId.indexOf("dm-") === 0) {
+          state.kind = "dm";
+          state.id = roomId.slice(3);
+          return;
+        }
+        if (roomId) {
+          state.kind = "channel";
+          state.id = roomId;
+        }
+      }
+      function fillCronSheet(job, opts) {
+        const historyOnly = opts && opts.historyOnly;
+        if (!historyOnly) {
+          const on = document.getElementById("cron-sheet-on");
+          const label = document.getElementById("cron-sheet-on-label");
+          const name = document.getElementById("cron-sheet-name");
+          const prompt = document.getElementById("cron-sheet-prompt");
+          const when = document.getElementById("cron-sheet-when");
+          const next = document.getElementById("cron-sheet-next");
+          const runBtn = document.getElementById("cron-sheet-run");
+          if (on) on.checked = !job.paused;
+          if (label) {
+            label.textContent = job.paused ? t("cron.pausedLabel") : t("cron.enabled");
+          }
+          if (name && document.activeElement !== name) name.value = job.name || "";
+          if (prompt && document.activeElement !== prompt) prompt.value = job.prompt || "";
+          if (when && document.activeElement !== when) when.value = job.schedule || "";
+          if (next) {
+            next.textContent = job.paused
+              ? t("cron.pausedLabel")
+              : t("cron.next", { when: cronWhen(job.nextRunAt) });
+          }
+          if (runBtn) {
+            runBtn.disabled = Boolean(job.running);
+            runBtn.textContent = job.running ? t("busy") : t("cron.test");
+          }
+        }
+        const box = document.getElementById("cron-sheet-runs");
+        if (!box) return;
+        const runs = Array.isArray(job.runs) ? job.runs : [];
+        if (!runs.length) {
+          box.innerHTML =
+            '<li class="cron-runs-empty">' + escapeHtml(t("cron.historyEmpty")) + "</li>";
+          return;
+        }
+        box.innerHTML = runs
+          .map((run) => {
+            const status = run.status === "failed" || run.status === "skipped" ? run.status : "ok";
+            const mark =
+              status === "ok" ? "✓" : status === "failed" ? "✕" : "–";
+            const title = run.error
+              ? escapeHtml(run.error)
+              : escapeHtml(t("cron." + status));
+            return (
+              '<li class="cron-run"><span>' +
+              escapeHtml(formatAgo(run.finishedAt || run.startedAt)) +
+              '</span><span class="cron-run-mark ' +
+              status +
+              '" title="' +
+              title +
+              '">' +
+              mark +
+              "</span></li>"
+            );
+          })
+          .join("");
+      }
+      async function loadCronJob(id) {
+        const res = await fetch("/cron/" + encodeURIComponent(id));
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("cron.saveFailed"));
+        return body;
+      }
+      async function showCronSheet(id, opts) {
+        if (!id) {
+          hideCronSheet();
+          return false;
+        }
+        try {
+          const job = await loadCronJob(id);
+          applyCronRoom(job);
+          fillCronSheet(job, opts);
+          renderHead();
+          renderNav();
+          const el = cronSheetEl();
+          if (el) el.hidden = false;
+          return true;
+        } catch {
+          hideCronSheet();
+          return false;
+        }
+      }
+      function closeCronSheet() {
+        state.cronOpen = "";
+        hideCronSheet();
+        setHash();
+        renderNav();
+        loadMessages().catch(() => {});
+      }
+      async function saveCronSheet(fields) {
+        const id = state.cronOpen;
+        if (!id) return;
+        const res = await fetch("/cron/" + encodeURIComponent(id), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(fields),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(body.error || t("cron.saveFailed"));
+          return;
+        }
+        fillCronSheet(body);
+        loadNavCron().catch(() => {});
       }
       async function renderCronList() {
         const box = document.getElementById("cron-list");
@@ -5788,6 +6100,7 @@
       }
       function modelGlyph(kind, name) {
         const hay = String(name || "");
+        if (kind === "web-bridge") return { mark: "◌", tone: "" };
         if (/claude|anthropic/i.test(hay)) return { mark: "✶", tone: "claude" };
         if (/grok|xai/i.test(hay)) return { mark: "✦", tone: "grok" };
         if (/gpt|openai|codex/i.test(hay)) return { mark: "◎", tone: "openai" };
@@ -6387,6 +6700,7 @@
           }
         }
         if (!trajEl.hidden) renderTrajList();
+        if (state.cronOpen) showCronSheet(state.cronOpen).catch(() => {});
         syncSendButton();
       });
       window.addEventListener("hashchange", () => {
@@ -6396,7 +6710,13 @@
       });
       applyNavFold();
       setInterval(() => {
-        if (document.hidden || navSecFolded("cron")) return;
+        if (document.hidden) return;
+        if (state.cronOpen && !cronSheetEditing()) {
+          showCronSheet(state.cronOpen).then((ok) => {
+            if (!ok && state.cronOpen) closeCronSheet();
+          }).catch(() => {});
+        }
+        if (navSecFolded("cron")) return;
         loadNavCron().catch(() => {});
       }, 15000);
       Promise.all([openFromHash(), loadModelPick()])

@@ -1,12 +1,17 @@
 import type { ChatPart, ChatUsage, ModelRef } from "@guild/protocol";
 import { assembleParts, bodyFromParts } from "./chat-parts.ts";
 import {
+  DEFAULT_AUTO_COMPACT_TOKENS,
   packHistory,
   type CompactCheckpoint,
   type HistoryItem,
 } from "./compact.ts";
 import { MEMORY_INJECT_CAP } from "./memory.ts";
-import { llmComplete } from "./llm.ts";
+import { isWebBridgeTarget, llmComplete, resolveLlm } from "./llm.ts";
+import {
+  withFreebuffToolSystem,
+  type FreebuffLeaseParts,
+} from "./freebuff-chat.ts";
 import { policyFor, type Sandbox } from "./harness.ts";
 import { listMcpToolRefs, type McpToolRef } from "./mcp.ts";
 import { CHANNEL_ROSTER_CAP, StoreError } from "./store.ts";
@@ -361,6 +366,19 @@ Harness this turn (Memory → Plan → Skills → Act):
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
 - Act: you coordinate this seat. Spawn first when the work is a repo survey (\`explorer\` / luna-explore), a critique (\`reviewer\`), or a bounded isolated patch (\`worker\` / luna-general); then verify the child's evidence and decide. Independent surveys: spawn background=true, keep working, then read_spawn before you answer. Sequential: background=false and wait. Do not spawn for one known file, a one-line change, or a question that needs no repo. Do not let children commit, push, or make the architecture call. Do not skip spawn just because you can do the work yourself. Do not spawn to do another staffed bot's job — @handle them instead.`;
 
+/** 1:1 whisper: only this seat speaks. No hall handoffs. */
+export const WHISPER_RULES = `# Whisper
+This is a 1:1 whisper with the human. Only you speak here.
+Do not @handle other bots. Do not hand off, recruit, or start another seat in this thread.
+If the work belongs to another adventurer, say so in prose and ask the human to take it to that quest or that bot's whisper. Do not write a line-start @handle spec here.
+Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.
+
+Harness this turn (Memory → Plan → Skills → Act):
+- Memory: MEMORY.md is standing notes. There is no Channel.md in a whisper. Do not recap the whole thread.
+- Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
+- Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
+- Act: you may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
+
 export function buildChatSystem(input: {
   botName: string;
   handle: string;
@@ -373,6 +391,7 @@ export function buildChatSystem(input: {
   channelMd?: string;
   botMemory?: string;
   channelMemory?: string;
+  whisper?: boolean;
 }): string {
   const skills = input.skills ?? [];
   const subagents = input.subagents ?? [];
@@ -463,7 +482,7 @@ export function buildChatSystem(input: {
   return [
     `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
     "Reply in the user's language. Be brief. Stay in character.",
-    HALL_RULES,
+    input.whisper ? WHISPER_RULES : HALL_RULES,
     hostContext(),
     TOOL_SYSTEM,
     skillLine,
@@ -496,6 +515,7 @@ export async function chatReply(input: {
   channelMd?: string;
   botMemory?: string;
   channelMemory?: string;
+  whisper?: boolean;
   compact?: CompactCheckpoint | null;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
@@ -522,6 +542,7 @@ export async function chatReply(input: {
     channelMd: input.channelMd,
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
+    whisper: input.whisper,
   });
   const llm = input.dataDir
     ? await tryChatLlm(input, env, input.dataDir, input.model, input.skills ?? [])
@@ -564,6 +585,7 @@ async function tryChatLlm(
     channelMd?: string;
     botMemory?: string;
     channelMemory?: string;
+    whisper?: boolean;
     compact?: CompactCheckpoint | null;
     onCompact?: (checkpoint: CompactCheckpoint) => void;
     onProgress?: (update: ToolProgress) => void;
@@ -582,7 +604,7 @@ async function tryChatLlm(
   prefer: ModelRef | null | undefined,
   skills: SkillRef[],
 ): Promise<Omit<ChatReply, "source"> | null> {
-  const system = buildChatSystem({
+  let system = buildChatSystem({
     botName: input.botName,
     handle: input.handle,
     soul: input.soul,
@@ -594,7 +616,28 @@ async function tryChatLlm(
     channelMd: input.channelMd,
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
+    whisper: input.whisper,
   });
+  const peek = resolveLlm(dataDir, env, "chat", prefer);
+  const webBridge = Boolean(peek && isWebBridgeTarget(peek));
+  const policy = policyFor(env, {
+    sandbox: input.sandbox,
+    workspace: input.workspace,
+    position: input.position,
+  });
+  const mcpTools = input.mcpTools ?? (await listMcpToolRefs(dataDir));
+  if (webBridge) {
+    system = withFreebuffToolSystem(system, {
+      skills,
+      subagents: input.subagents ?? [],
+      mcpTools,
+      allowWrite: true,
+      spawnDepth: 0,
+      cronRun: input.cronRun,
+      sandbox: policy.sandbox,
+      workspace: policy.workspace,
+    });
+  }
   const packed = await packHistory({
     system,
     history: input.history,
@@ -603,12 +646,25 @@ async function tryChatLlm(
     env,
     prefer,
     checkpoint: input.compact,
+    tokenLimit: DEFAULT_AUTO_COMPACT_TOKENS,
+    onCompact: input.onCompact,
     onProgress: input.onProgress,
     signal: input.signal,
   });
-  if (packed.compacted && packed.checkpoint && input.onCompact) {
-    input.onCompact(packed.checkpoint);
-  }
+  const lease: FreebuffLeaseParts = {
+    roomId: input.roomId,
+    botId: input.botId,
+    throughId: packed.checkpoint?.throughId ?? "none",
+    soul: input.soul,
+    agent: input.agent,
+    position: input.position,
+    skillIds: skills.map((skill) => skill.slug || skill.name),
+    channelMd: input.channelMd ?? "",
+    botMemory: input.botMemory ?? "",
+    channelMemory: input.channelMemory ?? "",
+    userMessage: input.userMessage,
+    hallRules: input.whisper ? WHISPER_RULES : HALL_RULES,
+  };
   const result = await llmComplete({
     dataDir,
     env,
@@ -619,6 +675,7 @@ async function tryChatLlm(
     prefer,
     tools: true,
     skills,
+    lease,
     toolCtx: {
       skills,
       subagents: input.subagents ?? [],
@@ -629,16 +686,12 @@ async function tryChatLlm(
       onProgress: input.onProgress,
       pullSteers: input.pullSteers,
       signal: input.signal,
-      mcpTools: input.mcpTools ?? (await listMcpToolRefs(dataDir)),
+      mcpTools,
       spawnHandles: new Map(),
       ...(input.roomId ? { roomId: input.roomId } : {}),
       ...(input.botId ? { botId: input.botId } : {}),
       ...(input.cronRun ? { cronRun: true } : {}),
-      ...policyFor(env, {
-        sandbox: input.sandbox,
-        workspace: input.workspace,
-        position: input.position,
-      }),
+      ...policy,
       ...(input.dispatch ? { dispatch: input.dispatch } : {}),
     },
   });

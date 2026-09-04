@@ -69,6 +69,7 @@ export type TurnComplete = {
 export type HandlerExtras = {
   mcp?: boolean;
   oauth?: boolean;
+  freebuff?: boolean;
   harvest?: boolean;
   mcpTools?: McpToolRef[] | Promise<McpToolRef[]>;
   onTurnComplete?: (turn: TurnComplete) => void;
@@ -929,6 +930,7 @@ export function chatTurnForBot(
     botMemory: store.readBotMemory(botId),
     channelMemory:
       room?.kind === "channel" ? store.readChannelMemory(roomId) : "",
+    whisper: room?.kind === "dm",
     compact: store.readCompact(roomId),
     onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),
   };
@@ -1371,7 +1373,9 @@ async function generateReplies(
       }),
     );
     let seen = 0;
+    const roomForHops = store.getRoom(roomId);
     for (let wave = 0; wave < CHANNEL_ROSTER_CAP && !signal.aborted; wave++) {
+      if (roomForHops?.kind !== "channel") break;
       const fresh = replies.slice(seen);
       seen = replies.length;
       const hops = handoffTargets(store, memberIds, replies, asked, history, fresh);

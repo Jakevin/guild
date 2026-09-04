@@ -8,6 +8,8 @@
   name: './src/plugins/harness.ts'
 - id: oauth
   name: './src/plugins/oauth.ts'
+- id: freebuff
+  name: './src/plugins/freebuff.ts'
 - id: llm
   name: './src/plugins/llm.ts'
 - id: tools

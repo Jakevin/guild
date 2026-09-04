@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CronJobRow } from "./db.ts";
+import type { CronJobRow, CronRunRow } from "./db.ts";
 import type { HandlerExtras } from "./handlers.ts";
 import { StoreError, type GuildStore } from "./store.ts";
 import type { ToolContext, ToolOutcome } from "./tools.ts";
@@ -14,6 +14,7 @@ import {
 } from "./cron-schedule.ts";
 
 const inflight = new Set<string>();
+const CRON_RUN_KEEP = 50;
 
 function specOf(job: CronJobRow): CronSpec {
   return {
@@ -42,6 +43,41 @@ export function publicCronJob(job: CronJobRow) {
     lastError: job.lastError,
     running: inflight.has(job.id),
   };
+}
+
+export function publicCronRun(run: CronRunRow) {
+  return {
+    id: run.id,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    status: run.status,
+    error: run.error,
+  };
+}
+
+function recordCronRun(
+  store: GuildStore,
+  jobId: string,
+  status: CronRunRow["status"],
+  error?: string,
+  startedAt?: string,
+): void {
+  const now = new Date().toISOString();
+  try {
+    store.addCronRun(
+      {
+        id: randomUUID(),
+        jobId,
+        startedAt: startedAt || now,
+        finishedAt: now,
+        status,
+        error: error ? error.slice(0, 400) : undefined,
+      },
+      CRON_RUN_KEEP,
+    );
+  } catch {
+    /* job may already be gone (once) */
+  }
 }
 
 export function createCronJob(
@@ -114,6 +150,47 @@ export function resumeCronJob(store: GuildStore, id: string): CronJobRow {
   return job;
 }
 
+export function updateCronJob(
+  store: GuildStore,
+  id: string,
+  patch: { name?: string; prompt?: string; schedule?: string },
+): CronJobRow {
+  const job = store.getCronJob(id);
+  if (patch.name != null) {
+    const name = patch.name.trim();
+    if (name) job.name = name.slice(0, 80);
+  }
+  if (patch.prompt != null) {
+    const prompt = patch.prompt.trim();
+    if (!prompt) throw new StoreError(400, "prompt is required");
+    job.prompt = prompt;
+  }
+  if (patch.schedule != null) {
+    const schedule = patch.schedule.trim();
+    if (!schedule) throw new StoreError(400, "schedule is required");
+    let spec: CronSpec;
+    try {
+      spec = parseCronSchedule(schedule);
+    } catch (error) {
+      throw new StoreError(
+        400,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    delete job.everyMs;
+    delete job.cronExpr;
+    delete job.atMs;
+    job.schedule = spec.raw;
+    job.kind = spec.kind;
+    if (spec.everyMs != null) job.everyMs = spec.everyMs;
+    if (spec.cron) job.cronExpr = spec.cron;
+    if (spec.atMs != null) job.atMs = spec.atMs;
+    job.nextRunAt = new Date(nextRunAt(spec, Date.now())).toISOString();
+  }
+  store.writeCronJob(job);
+  return job;
+}
+
 export function removeCronJob(store: GuildStore, id: string): { ok: true; id: string } {
   if (!store.deleteCronJob(id)) throw new StoreError(404, "cron job not found");
   return { ok: true, id };
@@ -177,12 +254,20 @@ export async function fireCronJob(
   id: string,
   env: NodeJS.ProcessEnv = process.env,
   extras: HandlerExtras = {},
+  opts: { force?: boolean } = {},
 ): Promise<{ ok: boolean; skipped?: string; error?: string }> {
   const job = store.getCronJob(id);
-  if (job.paused) return { ok: false, skipped: "paused" };
-  if (inflight.has(job.id)) return { ok: false, skipped: "already running" };
+  const force = Boolean(opts.force);
+  if (job.paused && !force) return { ok: false, skipped: "paused" };
+  if (inflight.has(job.id)) {
+    if (force) recordCronRun(store, job.id, "skipped", "already running");
+    return { ok: false, skipped: "already running" };
+  }
   const blocked = seatBlocked(store, job.roomId, job.botId);
-  if (blocked) return { ok: false, skipped: blocked };
+  if (blocked) {
+    if (force) recordCronRun(store, job.id, "skipped", blocked);
+    return { ok: false, skipped: blocked };
+  }
   const room = store.getRoom(job.roomId);
   if (!room) {
     commitFiredJob(store, job.id, {
@@ -190,6 +275,7 @@ export async function fireCronJob(
       lastStatus: "failed",
       lastError: "room not found",
     });
+    recordCronRun(store, job.id, "failed", "room not found");
     return { ok: false, error: "room not found" };
   }
   if (room.kind === "channel" && !room.memberIds.includes(job.botId)) {
@@ -198,6 +284,7 @@ export async function fireCronJob(
       lastStatus: "failed",
       lastError: "bot is not on this quest",
     });
+    recordCronRun(store, job.id, "failed", "bot is not on this quest");
     return { ok: false, error: "bot is not on this quest" };
   }
   const bot = store.getBot(job.botId);
@@ -207,6 +294,7 @@ export async function fireCronJob(
       lastStatus: "failed",
       lastError: "bot not found",
     });
+    recordCronRun(store, job.id, "failed", "bot not found");
     return { ok: false, error: "bot not found" };
   }
   inflight.add(job.id);
@@ -236,13 +324,16 @@ export async function fireCronJob(
       job.botId,
       { ...extras, mentions: [job.botId], harvest: false, cronRun: true },
     );
+    const startedAt = new Date(now).toISOString();
     const spoke = (posted.replies || []).some((msg) => msg.author === job.botId);
     if (!spoke) {
       commitFiredJob(store, job.id, failPatch("no reply", true));
+      recordCronRun(store, job.id, "failed", "no reply", startedAt);
       return { ok: false, skipped: "no reply" };
     }
     const next = followingRun(specOf(job), now);
     if (next == null) {
+      recordCronRun(store, job.id, "ok", undefined, startedAt);
       commitFiredJob(store, job.id, "delete");
     } else {
       commitFiredJob(store, job.id, {
@@ -251,11 +342,13 @@ export async function fireCronJob(
         lastError: undefined,
         nextRunAt: new Date(next).toISOString(),
       });
+      recordCronRun(store, job.id, "ok", undefined, startedAt);
     }
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     commitFiredJob(store, job.id, failPatch(message, true));
+    recordCronRun(store, job.id, "failed", message, new Date(now).toISOString());
     return { ok: false, error: message };
   } finally {
     inflight.delete(job.id);
@@ -345,9 +438,20 @@ export function executeCronjob(
       removeCronJob(store, job.id);
       return { text: `removed ${job.id} · ${job.name}`, isError: false };
     }
+    if (action === "update") {
+      const job = updateCronJob(store, findCronJob(store, ref).id, {
+        name: typeof args.name === "string" ? args.name : undefined,
+        prompt: typeof args.prompt === "string" ? args.prompt : undefined,
+        schedule: typeof args.schedule === "string" ? args.schedule : undefined,
+      });
+      return {
+        text: `updated ${job.id} · ${job.name} · next ${job.nextRunAt} · ${job.schedule}`,
+        isError: false,
+      };
+    }
     if (action === "run") {
       const job = findCronJob(store, ref);
-      return fireCronJob(store, job.id, ctx.env).then((result) => ({
+      return fireCronJob(store, job.id, ctx.env, {}, { force: true }).then((result) => ({
         text: result.ok
           ? `ran ${job.id}`
           : result.skipped

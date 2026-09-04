@@ -118,6 +118,17 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS cron_jobs_next ON cron_jobs(paused, next_run_at);
+
+CREATE TABLE IF NOT EXISTS cron_runs (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES cron_jobs(id) ON DELETE CASCADE,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  status TEXT NOT NULL,
+  error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS cron_runs_job ON cron_runs(job_id, started_at DESC);
 `;
 
 type CompactRow = {
@@ -145,6 +156,30 @@ export type CronJobRow = {
   lastStatus?: string;
   lastError?: string;
 };
+
+export type CronRunRow = {
+  id: string;
+  jobId: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: "ok" | "failed" | "skipped";
+  error?: string;
+};
+
+function cronRunFromRow(row: Record<string, unknown>): CronRunRow {
+  const status = asString(row.status);
+  const run: CronRunRow = {
+    id: asString(row.id),
+    jobId: asString(row.job_id),
+    startedAt: asString(row.started_at),
+    status: status === "failed" || status === "skipped" ? status : "ok",
+  };
+  const finished = asString(row.finished_at);
+  if (finished) run.finishedAt = finished;
+  const error = asString(row.error);
+  if (error) run.error = error;
+  return run;
+}
 
 function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
   const job: CronJobRow = {
@@ -904,6 +939,42 @@ export class GuildDb {
   deleteCronJob(id: string): boolean {
     const result = this.sqlite.prepare("DELETE FROM cron_jobs WHERE id = ?").run(id);
     return result.changes > 0;
+  }
+
+  listCronRuns(jobId: string): CronRunRow[] {
+    const rows = this.sqlite
+      .prepare(
+        "SELECT * FROM cron_runs WHERE job_id = ? ORDER BY started_at DESC, id DESC",
+      )
+      .all(jobId) as Record<string, unknown>[];
+    return rows.map(cronRunFromRow);
+  }
+
+  insertCronRun(run: CronRunRow): void {
+    this.sqlite
+      .prepare(
+        `INSERT INTO cron_runs (id, job_id, started_at, finished_at, status, error)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        run.id,
+        run.jobId,
+        run.startedAt,
+        run.finishedAt ?? null,
+        run.status,
+        run.error ?? null,
+      );
+  }
+
+  pruneCronRuns(jobId: string, keep: number): void {
+    const cap = Math.max(1, Math.floor(keep));
+    this.sqlite
+      .prepare(
+        `DELETE FROM cron_runs WHERE job_id = ? AND id NOT IN (
+           SELECT id FROM cron_runs WHERE job_id = ? ORDER BY started_at DESC, id DESC LIMIT ?
+         )`,
+      )
+      .run(jobId, jobId, cap);
   }
 
   private messageCount(roomId: string): number {

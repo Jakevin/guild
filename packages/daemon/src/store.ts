@@ -10,7 +10,7 @@ import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { closeGuildDb, openGuildDb, type CronJobRow, type GuildDb } from "./db.ts";
+import { closeGuildDb, openGuildDb, type CronJobRow, type CronRunRow, type GuildDb } from "./db.ts";
 import type {
   Bot,
   ChatAttachment,
@@ -1349,6 +1349,17 @@ export class GuildStore {
 
   deleteCronJob(id: string): boolean {
     return this.db.deleteCronJob(id);
+  }
+
+  listCronRuns(jobId: string) {
+    this.getCronJob(jobId);
+    return this.db.listCronRuns(jobId);
+  }
+
+  addCronRun(run: CronRunRow, keep = 50): void {
+    this.getCronJob(run.jobId);
+    this.db.insertCronRun(run);
+    this.db.pruneCronRuns(run.jobId, keep);
   }
 }
 

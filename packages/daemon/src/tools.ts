@@ -201,10 +201,10 @@ export function guildTools(
     tools.push({
       name: "cronjob",
       description:
-        "Schedule a later hall turn (Hermes cronjob). Fresh @handle turn with a self-contained prompt. Actions: create, list, pause, resume, run, remove. schedule may be natural language (每10分鐘, 10分鐘後, 每天9點, in 30 minutes, every 2h, 0 9 * * *, ISO). Split when vs task: schedule is the time phrase, prompt is the work. bot_id defaults to this seat. Do not create cron jobs from a cron run.",
+        "Schedule a later hall turn (Hermes cronjob). Fresh @handle turn with a self-contained prompt. Actions: create, list, pause, resume, run, remove, update. schedule may be natural language (每10分鐘, 10分鐘後, 每天9點, in 30 minutes, every 2h, 0 9 * * *, ISO). Split when vs task: schedule is the time phrase, prompt is the work. bot_id defaults to this seat. Do not create cron jobs from a cron run.",
       parameters: Type.Object({
         action: Type.String({
-          description: "create | list | pause | resume | run | remove",
+          description: "create | list | pause | resume | run | remove | update",
         }),
         schedule: Type.Optional(
           Type.String({
@@ -424,7 +424,7 @@ function openaiParameters(name: string): {
     return {
       type: "object",
       properties: {
-        action: { type: "string", description: "create | list | pause | resume | run | remove" },
+        action: { type: "string", description: "create | list | pause | resume | run | remove | update" },
         schedule: { type: "string" },
         prompt: { type: "string" },
         name: { type: "string" },
@@ -882,5 +882,5 @@ You stay coordinator. Spawn is the specialist, not a last resort (Devin run_suba
 Independent tool calls in one round also run in parallel — fire several reads/searches together.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.
 To follow a staffed skill, call skill with its exact name (or slug) before applying it. Relative paths in a skill resolve against that skill's base directory.
-When the user asks to 排程 / schedule a later hall turn — including natural-language times like 每10分鐘, 10分鐘後, tomorrow 9am — call cronjob create. schedule is the time phrase; prompt is the self-contained task (the job will not see this live turn). bot_id defaults to you. Also accepts in 30m, every 2h, 0 9 * * *, ISO. A cron run cannot create more cron jobs.
+When the user asks to 排程 / schedule a later hall turn — including natural-language times like 每10分鐘, 10分鐘後, tomorrow 9am — call cronjob create. schedule is the time phrase; prompt is the self-contained task (the job will not see this live turn). bot_id defaults to you. Also accepts in 30m, every 2h, 0 9 * * *, ISO. To change name, prompt, or time, call cronjob update. A cron run cannot create more cron jobs.
 Prefer small commands. macOS RAM: sysctl hw.memsize ; memory_pressure. Disk: df -h.`;

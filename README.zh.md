@@ -53,7 +53,7 @@ pnpm dev
 - **單位是有名字的冒險者：** Soul / Agent / Skill / Position，用 `@handle` 叫。
 - 預設小隊五席——是編制，不是出征：`@infra` `@pm` `@rd` `@design` `@marketing`。出活仍點名一人。
 - 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。同一張表單也能叫模型替這席挑技能，上限 8 項；沒接模型時退回本機比對。
-- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。
+- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Freebuff Chat 是可選的 chat-role 分頁（官方免費 session）；工具仍由 Guild 執行。
 
 ![編制：五位有名字的冒險者。](docs/readme-roster-2026-08-29.png)
 

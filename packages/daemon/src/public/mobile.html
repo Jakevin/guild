@@ -9,7 +9,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=html-frame" />
+    <link rel="stylesheet" href="/mobile.css?v=code-cyan" />
     <script src="/i18n.js"></script>
     <script src="/md.js"></script>
   </head>
@@ -381,8 +381,37 @@
           if (name === "list") return t("list");
           return name || "";
         }
+        function liveFreebuffCopy(text) {
+          const raw = String(text || "").trim();
+          if (!raw) return "";
+          const zh = (I18N && I18N["zh-Hant"]) || {};
+          const en = (I18N && I18N.en) || {};
+          const keys = [
+            "live.freebuffWait",
+            "live.freebuffQueue",
+            "live.freebuffPaste",
+            "live.freebuffSend",
+          ];
+          for (const key of keys) {
+            if (raw === zh[key] || raw === en[key] || raw === t(key)) return t(key);
+          }
+          return "";
+        }
+        function liveStatusLabel(live) {
+          if (live && live.paused) return t("live.paused");
+          const mapped = liveFreebuffCopy(live && live.thinking);
+          if (mapped) return mapped;
+          const steps = (live && live.steps) || [];
+          for (let i = 0; i < steps.length; i++) {
+            const hit = liveFreebuffCopy(steps[i] && steps[i].detail);
+            if (hit) return hit;
+          }
+          return t("deepDiving");
+        }
         function liveStepsHtml(steps) {
-          const rows = (steps || []).slice(-5);
+          const rows = (steps || [])
+            .slice(-5)
+            .filter((step) => !(step.name === "think" && liveFreebuffCopy(step.detail)));
           if (!rows.length) return "";
           return (
             '<ul class="live-steps">' +
@@ -432,7 +461,7 @@
                 '</span><span class="handle">@' +
                 escapeHtml(bot.handle) +
                 '</span></div><div class="turn-live"><div class="turn-status">' +
-                (live.paused ? t("live.paused") : t("deepDiving")) +
+                liveStatusLabel(live) +
                 clock +
                 "</div>" +
                 liveStepsHtml(live.steps) +

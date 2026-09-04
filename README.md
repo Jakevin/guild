@@ -53,7 +53,7 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 - **The unit is a named adventurer:** Soul / Agent / Skill / Position, invoked with `@handle`.
 - Default roster of five: `@infra` `@pm` `@rd` `@design` `@marketing`. A roster, not a sortie — work still goes to one `@handle` at a time.
 - Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI. On the same form, ask the model to pick up to 8 skills for that seat; with no model wired it falls back to a local match.
-- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius).
+- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius). Freebuff Chat is an optional chat-role picker (official free session); Guild still runs the tools.
 
 ![Roster of five named adventurers.](docs/readme-roster-2026-08-29.png)
 

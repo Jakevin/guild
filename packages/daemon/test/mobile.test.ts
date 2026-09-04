@@ -103,7 +103,9 @@ test("away page shares the hall's enamel tokens and press language", () => {
   // Send is the one paper CTA; Stop stays a ghost on --fill/--lift.
   assert.match(css, /\.send \{\s*background: var\(--paper\);\s*color: var\(--ink\);/);
   assert.match(css, /\.turn-stop,\n\.stop-all \{\s*color: var\(--danger\);\s*background: var\(--fill\);/);
-  assert.match(css, /\.msg\.bot \.bubble \{\s*background: var\(--bubble\);/);
+  assert.match(css, /\.msg\.bot \.bubble \{\s*background: var\(--bubble\); color: var\(--assistant\);/);
+  assert.match(css, /--you-text:/);
+  assert.match(css, /--assistant:/);
   assert.match(
     css,
     /box-shadow: 0 0 0 1px color-mix\(in srgb, var\(--steel\) 38%, transparent\)/,
@@ -142,7 +144,7 @@ test("away page locks the five seats and can steer a live turn", () => {
   assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /classList\.toggle\("err"/);
-  assert.match(html, /mobile\.css\?v=html-frame/);
+  assert.match(html, /mobile\.css\?v=code-cyan/);
   assert.doesNotMatch(html, /WebSocket/);
   assert.doesNotMatch(html, /fonts\.googleapis/);
   assert.doesNotMatch(html, /inn-street|#16100B/);

@@ -4,6 +4,7 @@ import {
   DEFAULT_GUILD_HOST,
   DEFAULT_GUILD_PORT,
 } from "@guild/protocol";
+import { setFreebuffPluginActive } from "../freebuff-chat.ts";
 import { handleRequest } from "../router.ts";
 import { guildEnvOf } from "../start.ts";
 
@@ -39,11 +40,16 @@ export class ServerService extends Service {
     void this.listening.catch(() => {});
 
     const env = () => guildEnvOf(ctx);
+    setFreebuffPluginActive(Boolean(ctx.get("freebuff")));
+    ctx.effect(() => () => {
+      setFreebuffPluginActive(true);
+    });
     this.node = http.createServer((req, res) => {
       const store = ctx.store.guild;
       void handleRequest(req, res, store, env(), {
         mcp: Boolean(ctx.get("mcp")),
         oauth: Boolean(ctx.get("oauth")),
+        freebuff: Boolean(ctx.get("freebuff")),
         harvest: false,
         onTurnComplete: (turn) => {
           ctx.emit("guild/turn-complete", turn);

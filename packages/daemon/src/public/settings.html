@@ -62,6 +62,7 @@
           </div>
           <button type="button" id="apply" data-i18n="settings.apply">套用</button>
         </div>
+        <p class="sub" id="picker-hint" hidden></p>
         <p class="main-now" id="main-now"></p>
         <div class="toggles">
           <span id="reasoning-wrap">
@@ -134,11 +135,13 @@
         auxRoles: [],
         providers: [],
         subscriptions: [],
+        webBridges: [],
         picker: [],
         recent: [],
         active: null,
       };
       let pendingOauth = null;
+      let pendingWeb = null;
       let auxRole = null;
       let keyTab = 0;
       const PRESETS = {
@@ -233,6 +236,12 @@
         el.className = kind;
         el.textContent = text;
       }
+      function webBridgeError(code) {
+        if (!code) return "";
+        const key = "error." + String(code);
+        const msg = t(key);
+        return msg !== key ? msg : String(code);
+      }
       function escapeHtml(value) {
         return String(value)
           .replace(/&/g, "&amp;")
@@ -242,6 +251,12 @@
       }
       function pickerGroups() {
         return data.picker || [];
+      }
+      function pickerLabel(p) {
+        if (p && p.kind === "web-bridge" && p.id === "freebuff-chat") {
+          return t("settings.freebuffChat");
+        }
+        return (p && p.name) || (p && p.id) || "";
       }
       function fillSelect(sel, groups, preferred) {
         sel.innerHTML = groups
@@ -253,7 +268,7 @@
               '"' +
               (p.ready ? "" : " data-locked=1") +
               ">" +
-              escapeHtml((p.name || p.id) + mark) +
+              escapeHtml(pickerLabel(p) + mark) +
               "</option>"
             );
           })
@@ -261,6 +276,7 @@
         const pid = (preferred && preferred.provider) || groups.find((p) => p.ready)?.id || groups[0]?.id || "";
         if (pid) sel.value = pid;
         fillModels(sel, document.getElementById(sel.id === "provider" ? "model" : "aux-model"), preferred);
+        updatePickerHint(sel);
       }
       function fillModels(psel, msel, preferred) {
         const group = pickerGroups().find((p) => p.id === psel.value);
@@ -276,6 +292,19 @@
           .join("");
         if (preferred && preferred.provider === psel.value) msel.value = preferred.model;
         if (psel.id === "provider") fillReasoning();
+        updatePickerHint(psel);
+      }
+      function updatePickerHint(psel) {
+        const hint = document.getElementById("picker-hint");
+        if (!hint || !psel || psel.id !== "provider") return;
+        const group = pickerGroups().find((p) => p.id === psel.value);
+        if (group && group.kind === "web-bridge") {
+          hint.hidden = false;
+          hint.textContent = t("settings.freebuffChatHint");
+        } else {
+          hint.hidden = true;
+          hint.textContent = "";
+        }
       }
       function reasonLabel(value) {
         if (value === "none") return t("reason.none");
@@ -351,7 +380,7 @@
         const group = pickerGroups().find((p) => p.id === ref.provider);
         const hit = ((group && group.models) || []).find((m) => m.id === ref.model);
         const name = prettyModelName(ref.model, hit && hit.name);
-        const vendor = (group && group.name) || ref.provider;
+        const vendor = pickerLabel(group) || ref.provider;
         return name + " · " + vendor;
       }
       function modelWire(ref) {
@@ -372,32 +401,60 @@
         while (used.has(base + "-" + n)) n += 1;
         return base + "-" + n;
       }
+      function accountCard(s, kind) {
+        const badge = s.connected || s.ready
+          ? '<span class="badge">' + t("settings.connected") + "</span>"
+          : s.pending
+            ? '<span class="badge wait">' + t("settings.pending") + "</span>"
+            : "";
+        const id = escapeHtml(s.id);
+        let actions;
+        if (kind === "web-bridge") {
+          const doctor =
+            '<button type="button" class="secondary" data-web-doctor="' +
+            id +
+            '">' +
+            t("settings.doctor") +
+            "</button>";
+          actions = s.connected || s.ready
+            ? '<button type="button" class="secondary" data-web-logout="' +
+              id +
+              '">' +
+              t("settings.logout") +
+              "</button>" +
+              doctor
+            : '<button type="button" data-web-login="' +
+              id +
+              '">' +
+              t("settings.connect") +
+              "</button>" +
+              doctor;
+        } else {
+          actions = s.connected || s.ready
+            ? '<button type="button" class="secondary" data-logout="' + s.id + '">' + t("settings.logout") + "</button>"
+            : '<button type="button" data-login="' + s.id + '">' + t("settings.connect") + "</button>";
+        }
+        const title = kind === "web-bridge" ? t("settings.freebuffChat") : s.name;
+        const hint = kind === "web-bridge" ? t("settings.freebuffChatHint") : (s.hint || "");
+        const loginHint = kind === "web-bridge" ? t("settings.freebuffLoginHint") : (s.loginHint || "");
+        return (
+          '<div class="account"><div class="account-copy"><strong>' +
+          escapeHtml(title) +
+          badge +
+          "</strong><span class='sub'>" +
+          escapeHtml(hint) +
+          (s.importHint ? " · " + escapeHtml(s.importHint) : "") +
+          "</span>" +
+          (loginHint ? '<p class="warn">' + escapeHtml(loginHint) + "</p>" : "") +
+          "</div><div class='account-act'>" +
+          actions +
+          "</div></div>"
+        );
+      }
       function renderAccounts() {
-        document.getElementById("accounts").innerHTML = (data.subscriptions || [])
-          .map((s) => {
-            const badge = s.connected || s.ready
-              ? '<span class="badge">' + t("settings.connected") + "</span>"
-              : s.pending
-                ? '<span class="badge wait">' + t("settings.pending") + "</span>"
-                : "";
-            const actions = s.connected || s.ready
-              ? '<button type="button" class="secondary" data-logout="' + s.id + '">' + t("settings.logout") + "</button>"
-              : '<button type="button" data-login="' + s.id + '">' + t("settings.connect") + "</button>";
-            return (
-              '<div class="account"><div class="account-copy"><strong>' +
-              escapeHtml(s.name) +
-              badge +
-              "</strong><span class='sub'>" +
-              escapeHtml(s.hint || "") +
-              (s.importHint ? " · " + escapeHtml(s.importHint) : "") +
-              "</span>" +
-              (s.loginHint ? '<p class="warn">' + escapeHtml(s.loginHint) + "</p>" : "") +
-              "</div><div class='account-act'>" +
-              actions +
-              "</div></div>"
-            );
-          })
-          .join("");
+        const oauth = (data.subscriptions || []).map((s) => accountCard(s, "oauth"));
+        const web = (data.webBridges || []).map((s) => accountCard(s, "web-bridge"));
+        document.getElementById("accounts").innerHTML = oauth.concat(web).join("");
       }
       function renderPicker() {
         fillSelect(document.getElementById("provider"), pickerGroups(), data.default);
@@ -712,7 +769,11 @@
       async function applyPicker(extra) {
         const ref = currentRef();
         if (ref && !groupReady(ref.provider)) {
-          flash("error", t("settings.notReady"));
+          const group = pickerGroups().find((p) => p.id === ref.provider);
+          flash(
+            "error",
+            t(group && group.kind === "web-bridge" ? "settings.connectFirst" : "settings.notReady"),
+          );
           return;
         }
         const res = await fetch("/settings/models", {
@@ -787,6 +848,50 @@
         await applyPicker({ aux });
       });
       document.getElementById("accounts").addEventListener("click", async (event) => {
+        const webLogin = event.target.closest("[data-web-login]");
+        const webLogout = event.target.closest("[data-web-logout]");
+        const webDoctor = event.target.closest("[data-web-doctor]");
+        if (webLogin) {
+          const id = webLogin.getAttribute("data-web-login");
+          const res = await fetch("/settings/web/" + id + "/login", { method: "POST" });
+          const body = await res.json();
+          if (res.status === 409) { flash("error", webBridgeError(body.error) || t("error.freebuff_busy")); return; }
+          if (!res.ok) { flash("error", webBridgeError(body.error) || body.error || "login failed"); return; }
+          if (body.error) { flash("error", webBridgeError(body.error) || body.error); return; }
+          if (body.connected || body.ready) {
+            pendingWeb = null;
+            document.getElementById("oauth-panel").hidden = true;
+            flash("health", t("settings.connectedId", { id: id }));
+            await load();
+            return;
+          }
+          if (body.loginUrl) {
+            window.open(body.loginUrl, "_blank", "noopener");
+            showOauthPanel({ verificationUri: body.loginUrl, flow: "device" });
+          }
+          pendingWeb = id;
+          flash("muted", t("settings.webLoginOpened"));
+          pollWeb(id);
+          return;
+        }
+        if (webLogout) {
+          await fetch("/settings/web/" + webLogout.getAttribute("data-web-logout") + "/logout", { method: "POST" });
+          pendingWeb = null;
+          await load();
+          return;
+        }
+        if (webDoctor) {
+          const id = webDoctor.getAttribute("data-web-doctor");
+          const res = await fetch("/settings/web/" + id + "/doctor", { method: "POST" });
+          const body = await res.json();
+          if (res.status === 409) { flash("error", webBridgeError(body.error) || t("error.freebuff_busy")); return; }
+          if (!res.ok) { flash("error", webBridgeError(body.error) || body.error || "doctor failed"); return; }
+          const failed = (body.failed || []).join(", ");
+          if (body.ok) flash("health", t("settings.probeOk"));
+          else flash("error", failed ? t("settings.freebuffDoctorFail", { names: failed }) : (webBridgeError(body.code || body.error) || t("settings.probeFail")));
+          await load();
+          return;
+        }
         const login = event.target.closest("[data-login]");
         const logout = event.target.closest("[data-logout]");
         if (login) {
@@ -833,6 +938,34 @@
           return;
         }
         if (body.pending) setTimeout(() => poll(id), 3000);
+      }
+      async function pollWeb(id) {
+        if (pendingWeb !== id) return;
+        const res = await fetch("/settings/web/" + id + "/poll", { method: "POST" });
+        const body = await res.json();
+        if (!res.ok) {
+          flash("error", webBridgeError(body.error) || body.error || "poll failed");
+          return;
+        }
+        if (body.connected || body.ready) {
+          pendingWeb = null;
+          document.getElementById("oauth-panel").hidden = true;
+          flash("health", t("settings.connectedId", { id: id }));
+          await load();
+          return;
+        }
+        if (body.error && body.error !== "freebuff_busy") {
+          if (
+            (body.pending || pendingWeb === id) &&
+            (body.error === "freebuff_login_required" || body.error === "freebuff_ui_drift")
+          ) {
+            setTimeout(() => pollWeb(id), 3000);
+            return;
+          }
+          flash("error", webBridgeError(body.error) || body.error);
+          return;
+        }
+        if (body.pending || pendingWeb === id) setTimeout(() => pollWeb(id), 3000);
       }
       document.getElementById("paste-go").addEventListener("click", async () => {
         if (!pendingOauth) return;

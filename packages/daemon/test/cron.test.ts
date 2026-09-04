@@ -13,7 +13,9 @@ import {
   createCronJob,
   executeCronjob,
   fireCronJob,
+  pauseCronJob,
   publicCronJob,
+  updateCronJob,
 } from "../src/cron.ts";
 import { writeModelsFile } from "../src/llm.ts";
 import { GuildStore } from "../src/store.ts";
@@ -146,6 +148,12 @@ test("fireCronJob skips when the hall is already busy", async () => {
     assert.equal(skipped.ok, false);
     assert.equal(skipped.skipped, "seat busy");
     assert.equal(store.listMessages(room.id).length, 0);
+    assert.equal(store.listCronRuns(job.id).length, 0);
+    const forced = await fireCronJob(store, job.id, {}, {}, { force: true });
+    assert.equal(forced.ok, false);
+    assert.equal(forced.skipped, "seat busy");
+    assert.equal(store.listCronRuns(job.id).length, 1);
+    assert.equal(store.listCronRuns(job.id)[0].status, "skipped");
   } finally {
     store.close();
   }
@@ -199,16 +207,68 @@ test("fireCronJob does not consume a once job when the seat aborts", async () =>
     });
     const err = new Error("stopped");
     err.name = "AbortError";
-    const result = await fireCronJob(store, job.id, {}, {
-      turn: async () => {
-        throw err;
+    pauseCronJob(store, job.id);
+    const pausedSkip = await fireCronJob(store, job.id, {});
+    assert.equal(pausedSkip.skipped, "paused");
+    assert.equal(store.listCronRuns(job.id).length, 0);
+    const result = await fireCronJob(
+      store,
+      job.id,
+      {},
+      {
+        turn: async () => {
+          throw err;
+        },
       },
-    });
+      { force: true },
+    );
     assert.equal(result.ok, false);
     assert.equal(result.skipped, "no reply");
     const kept = store.getCronJob(job.id);
     assert.equal(kept.paused, true);
     assert.equal(kept.lastStatus, "failed");
+    const runs = store.listCronRuns(job.id);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].status, "failed");
+  } finally {
+    store.close();
+  }
+});
+
+test("updateCronJob rewrites name, prompt, and schedule", () => {
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const store = new GuildStore(dataDir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    assert.ok(infra);
+    const room = store.createChannel("ops");
+    store.addMember(room.id, infra.id);
+    const job = createCronJob(store, {
+      roomId: room.id,
+      botId: infra.id,
+      prompt: "Check disk.",
+      schedule: "every 2h",
+      name: "disk",
+    });
+    pauseCronJob(store, job.id);
+    const updated = updateCronJob(store, job.id, {
+      name: "disk-watch",
+      prompt: "Say hi.",
+      schedule: "每10分鐘",
+    });
+    assert.equal(updated.name, "disk-watch");
+    assert.equal(updated.prompt, "Say hi.");
+    assert.equal(updated.kind, "every");
+    assert.equal(updated.everyMs, 10 * 60_000);
+    assert.equal(updated.paused, true);
+    const viaTool = executeCronjob(
+      store,
+      { action: "update", job_id: job.id, name: "via-tool" },
+      { roomId: room.id },
+    );
+    assert.equal(viaTool.isError, false);
+    assert.match(viaTool.text, /via-tool/);
   } finally {
     store.close();
   }
@@ -264,6 +324,21 @@ test("POST /cron round-trips and DELETE removes", async () => {
     assert.equal(body.jobs.length, 1);
     const paused = await fetch(`${origin}/cron/${job.id}/pause`, { method: "POST" });
     assert.equal(paused.status, 200);
+    const got = await fetch(`${origin}/cron/${job.id}`);
+    assert.equal(got.status, 200);
+    const one = (await got.json()) as { name: string; runs: unknown[]; paused: boolean };
+    assert.equal(one.name, "disk");
+    assert.equal(one.paused, true);
+    assert.ok(Array.isArray(one.runs));
+    const patched = await fetch(`${origin}/cron/${job.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "disk-2", schedule: "every 3h" }),
+    });
+    assert.equal(patched.status, 200);
+    const afterPatch = (await patched.json()) as { name: string; schedule: string };
+    assert.equal(afterPatch.name, "disk-2");
+    assert.equal(afterPatch.schedule, "every 3h");
     const removed = await fetch(`${origin}/cron/${job.id}`, { method: "DELETE" });
     assert.equal(removed.status, 200);
     const empty = await fetch(`${origin}/cron?room=${channel.id}`);

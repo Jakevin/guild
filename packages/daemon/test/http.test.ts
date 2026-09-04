@@ -16,7 +16,15 @@ import type { IncomingMessage } from "node:http";
 import { listenGuildServer } from "../src/server.ts";
 import { healthPayload } from "../src/handlers.ts";
 import { handleRequest, isLocalAuthority, sameOrigin } from "../src/router.ts";
-import { writeModelsFile } from "../src/llm.ts";
+import { DEFAULT_MODELS, writeModelsFile } from "../src/llm.ts";
+import {
+  formatFreebuffError,
+  FREEBUFF_PROGRESS_QUEUE,
+  FREEBUFF_PROGRESS_PASTE,
+  FREEBUFF_PROGRESS_SEND,
+  FREEBUFF_PROGRESS_WAIT,
+} from "../src/freebuff-chat.ts";
+import { OPENCODE_FREE_PROVIDER_ID } from "../src/opencode-free.ts";
 import { clipNavPreview, GuildStore } from "../src/store.ts";
 import { closeServer, listen as listenApp, tempHome as makeHome } from "./app.ts";
 
@@ -613,13 +621,19 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /sidebar-resizer/);
   assert.match(home, /id="nav-toggle"/);
   assert.match(home, /id="nav-scrim"/);
-  assert.match(home, /data-nav-sec="channels"/);
-  assert.match(home, /data-nav-sec="dms"/);
+  assert.match(home, /class="nav-scroll"/);
+  assert.match(home, /data-nav-sec="cron"[\s\S]*data-nav-sec="channels"[\s\S]*data-nav-sec="dms"/);
   assert.match(home, /data-nav-sec="cron"/);
   assert.match(home, /id="cron-nav"/);
+  assert.match(home, /cron: raw\.cron == null \? true : Boolean\(raw\.cron\)/);
   assert.match(home, /data-fold="channels"/);
+  assert.match(home, /class="sec-ico"/);
   assert.match(home, /function applyNavFold/);
   assert.match(home, /function loadNavCron/);
+  assert.match(home, /id="cron-sheet"/);
+  assert.match(home, /#s\//);
+  assert.match(home, /function showCronSheet/);
+  assert.match(home, /cron-sheet-run[\s\S]*applyCronRoom\(job\);\s*closeCronSheet\(\)/);
   assert.match(home, /function setNavOpen/);
   assert.match(home, /function partyStackHtml/);
   assert.match(home, /Array.from\(String\(name\)\.replace/);
@@ -639,11 +653,21 @@ test("home is chat and studio is the roster", () => {
     "utf8",
   );
   assert.match(chatCss, /body\.grok \.sidebar/);
+  assert.match(chatCss, /\.nav-scroll \{[\s\S]*?overflow-y:\s*auto/);
   assert.match(chatCss, /\.nav-sec\.folded/);
+  assert.match(chatCss, /#cron-nav\.navlist \{[\s\S]*?overflow:\s*visible/);
+  assert.doesNotMatch(chatCss, /data-nav-sec="dms"\],\s*\n\.nav-sec\[data-nav-sec="cron"\] \{\s*\n\s*flex:\s*1 1 0;/);
+  assert.match(chatCss, /\.sec-ico/);
+  assert.match(chatCss, /\.sec-chev \{[\s\S]*?border-width:\s*5px 4px 0/);
+  assert.match(chatCss, /\.nav-sec\.folded \.sec-chev \{[\s\S]*?border-width:\s*0 4px 5px/);
+  assert.doesNotMatch(chatCss, /folded \.sec-chev \{ transform: rotate/);
   assert.match(chatCss, /#cron-nav/);
+  assert.match(chatCss, /\.cron-sheet/);
   assert.match(chatCss, /body\.nav-open \.sidebar/);
   assert.match(chatCss, /max-width: 760px/);
   assert.match(chatCss, /--bg:\s*#0B0E12/);
+  assert.match(chatCss, /--you-text:\s*#1A2420/);
+  assert.match(chatCss, /--assistant:\s*#ececec/);
   assert.match(chatCss, /--signal:\s*#C9A227/);
   assert.match(chatCss, /:focus-visible/);
   assert.match(chatCss, /--press:\s*0\.97/);
@@ -873,6 +897,58 @@ test("home is chat and studio is the roster", () => {
   assert.doesNotMatch(studio, /已推薦/);
   assert.doesNotMatch(studio, /data-tab="catalog"/);
   assert.doesNotMatch(studio, />已安裝</);
+});
+
+test("Freebuff hall copy: error prefix, web-bridge glyph, README default stays OpenCode Free", () => {
+  const chat = readFileSync(CHAT_HTML, "utf8");
+  assert.match(chat, /function modelGlyph/);
+  assert.match(chat, /if \(kind === "web-bridge"\) return \{ mark: "◌"/);
+  assert.doesNotMatch(chat, /kind === "web-bridge"[^;]*mark:\s*"web"/);
+  assert.match(chat, /function liveFreebuffCopy/);
+  assert.match(chat, /function liveStatusLabel/);
+  assert.match(chat, /live\.freebuffWait/);
+  assert.match(chat, /live\.freebuffQueue/);
+  assert.match(chat, /live\.freebuffPaste/);
+  assert.match(chat, /live\.freebuffSend/);
+
+  const i18n = readFileSync(
+    fileURLToPath(new URL("../src/public/i18n.js", import.meta.url)),
+    "utf8",
+  );
+  assert.match(i18n, /\["live\.freebuffWait", "Freebuff：等待官方 session…"/);
+  assert.match(i18n, /\["live\.freebuffQueue", "Freebuff：排隊中…"/);
+  assert.match(i18n, /\["live\.freebuffPaste", "Freebuff：準備提示詞…"/);
+  assert.match(i18n, /\["live\.freebuffSend", "Freebuff：呼叫 SDK…"/);
+  assert.match(i18n, /error\.freebuff_login_required/);
+  assert.match(i18n, /error\.freebuff_busy/);
+  assert.match(i18n, /error\.freebuff_window_closed/);
+  assert.match(i18n, /settings\.freebuffChat/);
+  assert.match(i18n, /settings\.freebuffLoginHint/);
+  assert.equal(FREEBUFF_PROGRESS_WAIT, "Freebuff：等待官方 session…");
+  assert.equal(FREEBUFF_PROGRESS_QUEUE, "Freebuff：排隊中…");
+  assert.equal(FREEBUFF_PROGRESS_PASTE, "Freebuff：準備提示詞…");
+  assert.equal(FREEBUFF_PROGRESS_SEND, "Freebuff：呼叫 SDK…");
+
+  const login = formatFreebuffError("freebuff_login_required");
+  assert.match(login, /^模型請求失敗：Freebuff Chat: freebuff_login_required — /);
+  assert.equal(formatFreebuffError(login), login);
+  for (const code of [
+    "freebuff_busy",
+    "freebuff_window_closed",
+    "freebuff_login_required",
+    "freebuff_unreachable_dispatch",
+  ]) {
+    assert.match(
+      formatFreebuffError(code),
+      new RegExp(`^模型請求失敗：Freebuff Chat: ${code} — `),
+    );
+  }
+
+  const readme = readFileSync(join(DAEMON_ROOT, "..", "..", "README.md"), "utf8");
+  assert.match(readme, /npx @kevin5251984\/guild web/);
+  assert.doesNotMatch(readme, /default[^.]*Freebuff/i);
+  assert.equal(DEFAULT_MODELS.default.provider, OPENCODE_FREE_PROVIDER_ID);
+  assert.notEqual(DEFAULT_MODELS.default.provider, "freebuff-chat");
 });
 
 test("skills add page is HTML", async () => {
@@ -1261,6 +1337,11 @@ test("models.json can add a Pi-style provider", async () => {
     const freePick = listedPicker.find((p) => p.id === "opencode-free");
     assert.equal(freePick?.kind, "keyless");
     assert.equal(freePick?.ready, true);
+    const webPick = listedPicker.find((p) => p.id === "freebuff-chat");
+    assert.equal(webPick?.kind, "web-bridge");
+    assert.notEqual(webPick?.kind, "web");
+    const listedDefault = (listed.body as { default?: { provider: string } }).default;
+    assert.equal(listedDefault?.provider, "opencode-free");
     const openai = body.providers.find((p) => p.id === "openai");
     assert.equal(openai?.stored, "env");
     assert.equal(openai?.apiKey, "$OPENAI_API_KEY");

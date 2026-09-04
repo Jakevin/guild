@@ -340,12 +340,16 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(
     html,
     new RegExp(
-      `"description": "Guild ${pkg.version}\\. Node 22\\.19\\+\\. npx @kevin5251984/guild web opens http://127\\.0\\.0\\.1:7420\\. Branch, /m, OpenCode Free, reasoning, local-origin`,
+      `"description": "Guild ${pkg.version}\\. Node 22\\.19\\+\\. npx @kevin5251984/guild web opens http://127\\.0\\.0\\.1:7420\\. Branch, /m, OpenCode Free, reasoning, local-origin, schedule`,
     ),
   );
   assert.match(html, /data-i18n-html="td\.origin"/);
   assert.match(html, /data-i18n-html="td\.host"/);
   assert.match(html, /data-i18n-html="td\.env"/);
+  assert.match(html, /data-i18n-html="td\.cron"/);
+  assert.match(html, /name="description" content="[^"]*, schedule/);
+  assert.match(html, /"faq\.q5"/);
+  assert.match(html, /<tr><td>Schedule<\/td><td data-i18n-html="td\.cron">/);
   assert.doesNotMatch(html, /property="og:image"/);
   assert.doesNotMatch(html, /name="twitter:site"/);
   assert.doesNotMatch(html, /twitter:creator/);
@@ -525,6 +529,7 @@ test("Pages locks six enamel plaques and 390px no-overflow CSS", () => {
   assert.match(html, /<tr><td>Origin<\/td><td data-i18n-html="td\.origin">/);
   assert.match(html, /<tr><td>Host files<\/td><td data-i18n-html="td\.host">/);
   assert.match(html, /<tr><td>MCP env<\/td><td data-i18n-html="td\.env">/);
+  assert.match(html, /<tr><td>Schedule<\/td><td data-i18n-html="td\.cron">/);
   assert.doesNotMatch(html, /white-space:\s*nowrap/);
   assert.doesNotMatch(html, /overflow-x\s*:/);
   assert.doesNotMatch(html, /<table[^>]*style=/);

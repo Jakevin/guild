@@ -154,6 +154,12 @@ test("hostRead refuses guild secrets before touching the disk", () => {
   refused(() => hostRead(join(homedir(), ".guild", "browser-profile", "Default", "Cookies")));
   refused(() => hostList(join(homedir(), ".guild", "browser-profile")));
   refused(() => hostTree(join(homedir(), ".guild", "browser-profile")));
+  refused(() => hostRead(join(homedir(), ".guild", "freebuff.json")));
+  refused(() => hostList(join(homedir(), ".guild", "freebuff-profile")));
+  refused(() => hostRead(join(homedir(), ".guild", "freebuff-profile", "Cookies")));
+  refused(() => hostTree(join(homedir(), ".guild", "freebuff-profile")));
+  refused(() => hostList(join(homedir(), ".guild", "freebuff-scratch")));
+  refused(() => hostRead(join(homedir(), ".guild", "freebuff-scratch", "note.txt")));
   refused(() => assertHostPathAllowed(join(homedir(), ".guild", "oauth.json")));
   // The rest of ~/.guild stays browsable for the attach picker.
   notRefused(() => hostList(join(homedir(), ".guild")));
@@ -195,6 +201,8 @@ test("hostRead refuses credential directories under $HOME", () => {
   refused(() => hostRead(join(homedir(), ".azure", "accessTokens.json")));
   refused(() => hostRead(join(homedir(), ".config", "gcloud", "credentials.json")));
   refused(() => hostRead(join(homedir(), ".config", "gh", "hosts.yml")));
+  refused(() => hostRead(join(homedir(), ".config", "manicode", "credentials.json")));
+  refused(() => hostList(join(homedir(), ".config", "manicode")));
   refused(() => hostRead(join(homedir(), "Library", "Keychains", "login.keychain-db")));
   refused(() => hostTree(join(homedir(), ".cursor")));
   // ~/.config itself is not a secret folder.

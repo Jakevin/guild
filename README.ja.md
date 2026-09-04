@@ -53,7 +53,7 @@ pnpm dev
 - **単位は名のある冒険者：** Soul / Agent / Skill / Position。`@handle` で呼ぶ。
 - 既定の五人はロスター（出撃パーティーではない）：`@infra` `@pm` `@rd` `@design` `@marketing`。仕事はいつも一人の `@handle` へ。
 - Bot Studio（`/studio`）で迎える。スキルは markdown。ローカル CLI からコピーできる。同じフォームで、その席のスキルをモデルに選ばせられる（最大 8 件）。モデル未接続ならローカルの照合に落ちる。
-- モデルは自分で繋ぐ：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key または OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。
+- モデルは自分で繋ぐ：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key または OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Freebuff Chat は任意の chat-role ピッカー（公式無料 session）。ツールは Guild が実行する。
 
 ![ロスター：名前のある五人の冒険者。](docs/readme-roster-2026-08-29.png)
 

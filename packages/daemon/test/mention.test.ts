@@ -789,6 +789,48 @@ test("bot line-start specs hand off to each named seat in parallel", async () =>
   assert.deepEqual(posted.replies[0].mentions, [design.id, infra.id]);
 });
 
+test("a whisper does not hand off to another bot", async () => {
+  const store = new GuildStore(tempHome());
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(pm && infra);
+  const dm = store.openDm(pm.id);
+  const asked: string[] = [];
+  const posted = await postUserMessage(
+    store,
+    dm.id,
+    "去請 infra 做版本監測",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async (input) => {
+        asked.push(input.handle);
+        return {
+          body: [
+            "@infra",
+            "Goal: 完成本次 Cathay TechCon 版號監測。",
+            "Done when: 讀到底部版號。",
+          ].join("\n"),
+          parts: [],
+          source: "local" as const,
+          system: "",
+        };
+      },
+    },
+  );
+  assert.deepEqual(asked, ["pm"]);
+  assert.equal(posted.replies.length, 1);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.equal(
+    posted.replies.some((row) => row.author === infra.id),
+    false,
+  );
+});
+
 test("stored mentions list dispatches without @handles in the body", async () => {
   const store = new GuildStore(tempHome());
   const room = store.createChannel("mentions-list");

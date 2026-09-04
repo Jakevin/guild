@@ -63,6 +63,14 @@ import {
   pollLogin,
   startLogin,
 } from "./oauth.ts";
+import { isFreebuffChatEnabled, stripWebBridgePicker } from "./freebuff-chat.ts";
+import {
+  doctorFreebuff,
+  freebuffWebStatus,
+  logoutFreebuff,
+  pollFreebuffLogin,
+  startFreebuffLogin,
+} from "./freebuff-bridge.ts";
 import { hostGit, hostList, hostRead, hostTree } from "./host-browse.ts";
 import { listHostSkills } from "./host-skills.ts";
 import { listHostAgents } from "./host-agents.ts";
@@ -72,8 +80,10 @@ import {
   fireCronJob,
   pauseCronJob,
   publicCronJob,
+  publicCronRun,
   removeCronJob,
   resumeCronJob,
+  updateCronJob,
 } from "./cron.ts";
 import {
   allowedWorkspaceWritePath,
@@ -311,6 +321,23 @@ function strList(record: Record<string, unknown>, key: string): string[] {
   return [];
 }
 
+function freebuffHttpDisabled(
+  extras: HandlerExtras,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  return extras.freebuff === false || !isFreebuffChatEnabled(env);
+}
+
+function modelsPayload(
+  dataDir: string,
+  extras: HandlerExtras,
+  env: NodeJS.ProcessEnv,
+) {
+  const body = publicModels(dataDir, env);
+  if (freebuffHttpDisabled(extras, env)) return stripWebBridgePicker(body);
+  return body;
+}
+
 function extrasWithMentions(
   extras: HandlerExtras,
   body: Record<string, unknown>,
@@ -531,10 +558,33 @@ export async function handleRequest(
         json(res, 200, publicCronJob(resumeCronJob(store, id)));
         return;
       }
-      json(res, 200, await fireCronJob(store, id, env));
+      json(res, 200, await fireCronJob(store, id, env, {}, { force: true }));
       return;
     }
     const cronOne = path.match(/^\/cron\/([^/]+)$/);
+    if (cronOne && method === "GET") {
+      const id = decodeURIComponent(cronOne[1]);
+      const job = store.getCronJob(id);
+      json(res, 200, {
+        ...publicCronJob(job),
+        runs: store.listCronRuns(id).map(publicCronRun),
+      });
+      return;
+    }
+    if (cronOne && method === "PATCH") {
+      const id = decodeURIComponent(cronOne[1]);
+      const body = asRecord(await readJson(req));
+      const job = updateCronJob(store, id, {
+        name: str(body, "name") || undefined,
+        prompt: str(body, "prompt") || undefined,
+        schedule: str(body, "schedule") || undefined,
+      });
+      json(res, 200, {
+        ...publicCronJob(job),
+        runs: store.listCronRuns(id).map(publicCronRun),
+      });
+      return;
+    }
     if (cronOne && method === "DELETE") {
       json(res, 200, removeCronJob(store, decodeURIComponent(cronOne[1])));
       return;
@@ -1118,13 +1168,13 @@ export async function handleRequest(
       await refreshCopilotCatalog(store.dataDir);
       await refreshOpenCodeFreeCatalog(store.dataDir);
       await refreshReasoningCatalog().catch(() => {});
-      json(res, 200, publicModels(store.dataDir));
+      json(res, 200, modelsPayload(store.dataDir, extras, env));
       return;
     }
     if (method === "POST" && path === "/settings/models/opencode-free/sync") {
       const refreshed = await refreshOpenCodeFreeCatalog(store.dataDir, true);
       json(res, 200, {
-        ...publicModels(store.dataDir),
+        ...modelsPayload(store.dataDir, extras, env),
         probe: refreshed.probe ?? [],
       });
       return;
@@ -1153,7 +1203,7 @@ export async function handleRequest(
         patch.aux = body.aux as ModelsFile["aux"];
       }
       mergeModelsFile(store.dataDir, patch);
-      json(res, 200, publicModels(store.dataDir));
+      json(res, 200, modelsPayload(store.dataDir, extras, env));
       return;
     }
 
@@ -1208,6 +1258,47 @@ export async function handleRequest(
         return;
       }
       json(res, 200, await logoutOAuth(store.dataDir, decodeURIComponent(oauthLogout[1])));
+      return;
+    }
+
+    if (method === "GET" && path === "/settings/web") {
+      if (freebuffHttpDisabled(extras, env)) {
+        json(res, 200, { bridges: [] });
+        return;
+      }
+      json(res, 200, { bridges: [freebuffWebStatus(store.dataDir)] });
+      return;
+    }
+    if (method === "POST" && path === "/settings/web/freebuff-chat/login") {
+      if (freebuffHttpDisabled(extras, env)) {
+        json(res, 503, { error: "freebuff_disabled" });
+        return;
+      }
+      json(res, 200, await startFreebuffLogin(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/web/freebuff-chat/poll") {
+      if (freebuffHttpDisabled(extras, env)) {
+        json(res, 503, { error: "freebuff_disabled" });
+        return;
+      }
+      json(res, 200, await pollFreebuffLogin(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/web/freebuff-chat/logout") {
+      if (freebuffHttpDisabled(extras, env)) {
+        json(res, 503, { error: "freebuff_disabled" });
+        return;
+      }
+      json(res, 200, await logoutFreebuff(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/web/freebuff-chat/doctor") {
+      if (freebuffHttpDisabled(extras, env)) {
+        json(res, 503, { error: "freebuff_disabled" });
+        return;
+      }
+      json(res, 200, await doctorFreebuff(store.dataDir));
       return;
     }
 

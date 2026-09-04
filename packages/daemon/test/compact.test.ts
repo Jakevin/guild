@@ -109,6 +109,35 @@ test("few huge messages compact instead of sending the lot", () => {
   assert.ok(plan.old.length >= 1);
 });
 
+test("packHistory summarize:local does not need an LLM and skips onCompact when omitted", async () => {
+  let compactCalls = 0;
+  const history = items(16, "y".repeat(1_200));
+  const packed = await packHistory({
+    system: "You are RD.",
+    history,
+    userMessage: "what next",
+    dataDir: tempDir(),
+    tokenLimit: 1_500,
+    summarize: "local",
+  });
+  assert.equal(packed.compacted, true);
+  assert.ok(packed.checkpoint?.summary);
+  assert.match(packed.checkpoint?.summary || "", /compacted/i);
+  const withCb = await packHistory({
+    system: "You are RD.",
+    history,
+    userMessage: "what next",
+    dataDir: tempDir(),
+    tokenLimit: 1_500,
+    summarize: "local",
+    onCompact: () => {
+      compactCalls += 1;
+    },
+  });
+  assert.equal(withCb.compacted, true);
+  assert.equal(compactCalls, 1);
+});
+
 test("trimSendMessages drops the oldest prefix to fit the budget", () => {
   const messages = Array.from({ length: 20 }, (_, i) => ({
     role: i % 2 === 0 ? "user" : "assistant",

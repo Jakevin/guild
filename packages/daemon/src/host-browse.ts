@@ -42,7 +42,12 @@ function guildHomes(): string[] {
 
 const SSH_DIR = join(HOME, ".ssh");
 /** Files whose *contents* are credentials, wherever the guild home lives. */
-const SECRET_GUILD_FILES = new Set(["oauth.json", "models.json", "mcp.json"]);
+const SECRET_GUILD_FILES = new Set([
+  "oauth.json",
+  "models.json",
+  "mcp.json",
+  "freebuff.json",
+]);
 /** Credential dotfiles that live directly in `$HOME`. */
 const SECRET_HOME_FILES = new Set([
   ".claude.json",
@@ -71,6 +76,7 @@ const SECRET_HOME_DIRS = [
   ".azure",
   join(".config", "gcloud"),
   join(".config", "gh"),
+  join(".config", "manicode"),
   join("Library", "Keychains"),
 ].map((relative) => join(HOME, relative));
 const SSH_KEY_NAME = /^(id_rsa|id_dsa|id_ecdsa|id_ed25519|id_xmss)$/i;
@@ -112,6 +118,8 @@ function isSecretPath(abs: string): boolean {
   const publicKey = lower.endsWith(".pub");
   for (const home of guildHomes()) {
     if (under(abs, join(home, "browser-profile"))) return true;
+    if (under(abs, join(home, "freebuff-profile"))) return true;
+    if (under(abs, join(home, "freebuff-scratch"))) return true;
     if (under(abs, home) && SECRET_GUILD_FILES.has(lower)) return true;
   }
   if (dirname(abs) === HOME && SECRET_HOME_FILES.has(lower)) return true;
@@ -131,7 +139,8 @@ function isSecretPath(abs: string): boolean {
 /**
  * The attach picker browses `$HOME` on purpose, so /host/* is not confined to a
  * workspace. Secrets still have to stay shut: OAuth tokens, model keys, the MCP
- * store, the cloned browser profile, private keys, and the usual credential
+ * store, the cloned browser profile, Freebuff Chat profile / `freebuff.json`,
+ * private keys, and the usual credential
  * dotfiles / folders (`.aws`, `.claude`, `.codex`, `.npmrc`, `.netrc`, …).
  * This is a denylist over the picker, not a chroot: non-secret `$HOME` and
  * system files such as `/etc/passwd` stay readable.

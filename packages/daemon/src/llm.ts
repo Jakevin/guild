@@ -62,6 +62,22 @@ import {
   usesZenResponses,
   type OpenCodeFreeProbe,
 } from "./opencode-free.ts";
+import {
+  FREEBUFF_CHAT_DEFAULT_MODEL,
+  FREEBUFF_CHAT_HINT,
+  FREEBUFF_CHAT_LOGIN_HINT,
+  FREEBUFF_CHAT_PICKER_ID,
+  WEB_BRIDGE_PICKER_IDS,
+  completeFreebuffChat,
+  formatFreebuffError,
+  isWebBridgeTarget,
+  liveOrFloorModels,
+  readFreebuffState,
+  sessionUsable,
+  type FreebuffLeaseParts,
+} from "./freebuff-chat.ts";
+
+export { isWebBridgeTarget };
 
 export const AUX_ROLES: { id: AuxRole; name: string; hint: string }[] = [
   { id: "vision", name: "Vision", hint: "Image analysis" },
@@ -310,6 +326,27 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
   );
   const target = resolveLlm(dataDir, env);
   const subscriptions = listSubscriptions(dataDir);
+  const freebuffReady = sessionUsable(dataDir);
+  const freebuffState = readFreebuffState(dataDir);
+  const freebuffModels = attachReasoning(
+    FREEBUFF_CHAT_PICKER_ID,
+    liveOrFloorModels(dataDir),
+  );
+  const webBridges = [
+    {
+      id: FREEBUFF_CHAT_PICKER_ID,
+      pickerId: FREEBUFF_CHAT_PICKER_ID,
+      name: "Freebuff Chat",
+      hint: FREEBUFF_CHAT_HINT,
+      loginHint: FREEBUFF_CHAT_LOGIN_HINT,
+      kind: "web-bridge" as const,
+      connected: freebuffReady,
+      pending: Boolean(freebuffState.pending) && !freebuffReady,
+      ready: freebuffReady,
+      accessTier: freebuffState.accessTier,
+      models: freebuffModels,
+    },
+  ];
   const picker = [
     ...providers.map((p) => ({
       id: p.id,
@@ -327,6 +364,13 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ready: s.ready,
       models: attachReasoning(s.pickerId, s.models ?? []),
     })),
+    {
+      id: FREEBUFF_CHAT_PICKER_ID,
+      name: "Freebuff Chat",
+      kind: "web-bridge" as const,
+      ready: freebuffReady,
+      models: freebuffModels,
+    },
   ];
   return {
     default: file.default ?? null,
@@ -337,12 +381,15 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     recent: file.recent ?? [],
     providers,
     subscriptions,
+    webBridges,
     picker,
     active: target
       ? {
           provider: target.providerId,
           model: target.model,
-          ready: true,
+          ready: isWebBridgeTarget(target)
+            ? Boolean(target.sessionReady)
+            : true,
         }
       : null,
   };
@@ -356,6 +403,8 @@ export type LlmTarget = {
   api: LlmApi;
   headers?: Record<string, string>;
   accountId?: string;
+  transport?: "http" | "oauth" | "web-bridge";
+  sessionReady?: boolean;
 };
 
 export function resolveApiKey(
@@ -391,6 +440,10 @@ function oauthTarget(
   };
 }
 
+function isChatRole(role?: AuxRole | "chat"): boolean {
+  return role == null || role === "chat";
+}
+
 export function resolveLlm(
   dataDir: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -398,15 +451,33 @@ export function resolveLlm(
   prefer?: ModelRef | null,
 ): LlmTarget | null {
   const file = readModelsFile(dataDir);
-  const ref: ModelRef | null | undefined =
+  const selected: ModelRef | null | undefined =
     prefer ??
     (role && CONFIGURABLE_AUX.has(role as AuxRole)
       ? file.aux?.[role as AuxRole]
-      : file.default);
-  const tryProvider = (id: string, modelId?: string): LlmTarget | null => {
+      : undefined) ??
+    file.default;
+  const tryProvider = (
+    id: string,
+    modelId: string | undefined,
+    callSite: "selected" | "fallback",
+  ): LlmTarget | null => {
+    const providerId = isKeylessProvider(id) ? OPENCODE_FREE_PROVIDER_ID : id;
+    if (WEB_BRIDGE_PICKER_IDS.has(id) || WEB_BRIDGE_PICKER_IDS.has(providerId)) {
+      if (!isChatRole(role)) return null;
+      if (callSite !== "selected") return null;
+      return {
+        providerId: FREEBUFF_CHAT_PICKER_ID,
+        model: modelId || FREEBUFF_CHAT_DEFAULT_MODEL,
+        baseUrl: "freebuff-chat",
+        apiKey: "session",
+        api: "openai-completions",
+        transport: "web-bridge",
+        sessionReady: sessionUsable(dataDir),
+      };
+    }
     const oauth = oauthTarget(dataDir, id, modelId);
     if (oauth) return oauth;
-    const providerId = isKeylessProvider(id) ? OPENCODE_FREE_PROVIDER_ID : id;
     const provider = file.providers[providerId];
     if (!provider) return null;
     const apiKey = resolveApiKey(provider.apiKey, env);
@@ -421,16 +492,16 @@ export function resolveLlm(
       api: provider.api,
     };
   };
-  if (ref?.provider) {
-    const hit = tryProvider(ref.provider, ref.model);
+  if (selected?.provider) {
+    const hit = tryProvider(selected.provider, selected.model, "selected");
     if (hit) return hit;
   }
   if (file.default?.provider) {
-    const hit = tryProvider(file.default.provider, file.default.model);
+    const hit = tryProvider(file.default.provider, file.default.model, "fallback");
     if (hit) return hit;
   }
   for (const id of Object.keys(file.providers)) {
-    const hit = tryProvider(id);
+    const hit = tryProvider(id, undefined, "fallback");
     if (hit) return hit;
   }
   return envFallback(env);
@@ -475,6 +546,7 @@ export async function llmComplete(input: {
   tools?: boolean;
   skills?: SkillRef[];
   toolCtx?: ToolContext;
+  lease?: FreebuffLeaseParts;
 }): Promise<{
   text: string;
   provider: string;
@@ -500,6 +572,29 @@ export async function llmComplete(input: {
     reasoningFor(target.providerId, target.model),
     Boolean(file.fast),
   );
+  if (isWebBridgeTarget(target)) {
+    try {
+      return await completeFreebuffChat({
+        dataDir: input.dataDir,
+        target,
+        system: input.system,
+        messages: input.messages,
+        toolCtx,
+        signal: toolCtx.signal,
+        lease: input.lease,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      return {
+        text: formatFreebuffError(error),
+        provider: target.providerId,
+        model: target.model,
+        traces: [],
+        thinking: "",
+        usage: { provider: target.providerId, model: target.model },
+      };
+    }
+  }
   if (OAUTH_PICKER_IDS.has(target.providerId)) {
     try {
       return await completeOAuth({
@@ -564,7 +659,7 @@ type DispatchResult = {
   usage?: ChatUsage;
 };
 
-async function dispatchComplete(
+export async function dispatchComplete(
   target: LlmTarget,
   system: string,
   messages: { role: "user" | "assistant"; content: string }[],
@@ -573,6 +668,13 @@ async function dispatchComplete(
   ctx: ToolContext,
   effort?: string,
 ): Promise<DispatchResult | null> {
+  if (isWebBridgeTarget(target)) {
+    return {
+      text: formatFreebuffError("freebuff_unreachable_dispatch"),
+      traces: [],
+      thinking: "",
+    };
+  }
   if (isKeylessProvider(target.providerId) && usesZenResponses(target.model)) {
     return tools
       ? completeZenResponsesTools(target, system, messages, ctx, effort)
@@ -1323,6 +1425,9 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
   const validRef = (ref: ModelRef | null | undefined): ModelRef | null => {
     if (!ref?.provider || !ref.model) return null;
     if (OAUTH_PICKER_IDS.has(ref.provider) && oauthModels(ref.provider, ref.model)) {
+      return { provider: ref.provider, model: ref.model };
+    }
+    if (WEB_BRIDGE_PICKER_IDS.has(ref.provider) && Boolean(ref.model)) {
       return { provider: ref.provider, model: ref.model };
     }
     if (providers[ref.provider]?.models.some((m) => m.id === ref.model)) {

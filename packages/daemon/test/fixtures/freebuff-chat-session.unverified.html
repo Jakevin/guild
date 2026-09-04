@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Freebuff Chat</title>
+  </head>
+  <body>
+    <!--
+      unverified: semantic stand-in for a logged-in https://freebuff.com/chat session.
+      Live Chat DOM could not be fetched (login wall). Floor ids are not browser-verified.
+    -->
+    <aside>
+      <button type="button" aria-label="New chat">New chat</button>
+    </aside>
+    <main>
+      <p>The free coding agent</p>
+      <button type="button" aria-haspopup="listbox" aria-label="Model">DeepSeek V4 Flash 07/31</button>
+      <div role="listbox" aria-label="Model">
+        <div role="option" data-model-id="deepseek-v4-flash-0731" aria-selected="true">DeepSeek V4 Flash 07/31</div>
+        <div role="option" data-model-id="glm-5.3-flash">GLM 5.3 Flash</div>
+        <div role="option" data-model-id="gpt-5.6-luna">GPT-5.6 Luna</div>
+        <div role="option" data-model-id="mimo-2.5">MiMo 2.5</div>
+        <div role="option" data-model-id="solar-pro-4">Solar Pro 4</div>
+      </div>
+      <article data-role="assistant">Ready when you are.</article>
+      <form>
+        <textarea role="textbox" placeholder="Ask anything"></textarea>
+        <button type="submit" aria-label="Send">Send</button>
+      </form>
+    </main>
+  </body>
+</html>

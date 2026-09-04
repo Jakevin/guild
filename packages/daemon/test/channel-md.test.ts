@@ -129,7 +129,10 @@ test("channel @ turn includes that Channel.md; the same bot's DM does not", asyn
     const dm = store.openDm(rd.id);
     const dmTurn = chatTurnForBot(store, dm.id, rd.id, [], "請依 Channel.md 回");
     assert.equal(dmTurn.channelMd, "");
+    assert.equal(dmTurn.whisper, true);
     assert.doesNotMatch(chatTurnSystem(store, dm.id, rd.id), new RegExp(MARKER));
+    assert.match(chatTurnSystem(store, dm.id, rd.id), /# Whisper/);
+    assert.doesNotMatch(chatTurnSystem(store, dm.id, rd.id), /# Hall/);
   } finally {
     await closeServer(server);
   }

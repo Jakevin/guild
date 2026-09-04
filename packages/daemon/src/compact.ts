@@ -316,6 +316,9 @@ export async function packHistory(input: {
   prefer?: ModelRef | null;
   checkpoint?: CompactCheckpoint | null;
   tokenLimit?: number;
+  /** Local summary skips the compression LLM. Omit onCompact to skip persisting a checkpoint. */
+  summarize?: "llm" | "local";
+  onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
   signal?: AbortSignal;
 }): Promise<PackedHistory> {
@@ -353,15 +356,18 @@ export async function packHistory(input: {
         },
       ],
     });
-    summary = await summarizeOld({
-      old: plan.old,
-      previous: input.checkpoint?.summary,
-      dataDir: input.dataDir,
-      env: input.env,
-      prefer: input.prefer,
-      onProgress: input.onProgress,
-      signal: input.signal,
-    });
+    summary =
+      input.summarize === "local"
+        ? localCompactSummary(plan.old)
+        : await summarizeOld({
+            old: plan.old,
+            previous: input.checkpoint?.summary,
+            dataDir: input.dataDir,
+            env: input.env,
+            prefer: input.prefer,
+            onProgress: input.onProgress,
+            signal: input.signal,
+          });
     checkpoint = {
       throughId: lastId(plan.old),
       summary,
@@ -370,6 +376,7 @@ export async function packHistory(input: {
     };
   }
 
+  input.onCompact?.(checkpoint);
   return {
     messages: [
       ...compactPrefix(summary),

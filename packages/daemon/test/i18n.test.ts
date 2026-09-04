@@ -63,6 +63,14 @@ test("t interpolates and switches locale in memory", () => {
   assert.equal(t("branch.close"), "結案");
   assert.equal(t("settings.keyless"), "無需金鑰");
   assert.equal(t("settings.sync"), "Sync");
+  assert.equal(t("settings.freebuffChat"), "Freebuff Chat");
+  assert.equal(t("live.freebuffWait"), "Freebuff：等待官方 session…");
+  assert.equal(t("live.freebuffQueue"), "Freebuff：排隊中…");
+  assert.equal(t("live.freebuffPaste"), "Freebuff：準備提示詞…");
+  assert.equal(t("live.freebuffSend"), "Freebuff：呼叫 SDK…");
+  assert.equal(t("error.freebuff_login_required"), "尚未登入官方 Freebuff session，或工作階段已過期。請到模型頁連接。");
+  assert.equal(t("error.freebuff_busy"), "另一個回合正在使用 Freebuff。");
+  assert.equal(t("error.freebuff_window_closed"), "瀏覽器視窗已關閉。");
   assert.equal(t("settings.probeOk"), "可用");
   assert.equal(t("settings.deletedProvider", { name: "Anthropic" }), "已刪除 Anthropic");
   assert.match(t("mobile.hint"), /Tailscale/);
@@ -70,6 +78,11 @@ test("t interpolates and switches locale in memory", () => {
   setGuildLocale("en");
   assert.equal(guildLocale(), "en");
   assert.equal(t("nav.chat"), "Hall");
+  assert.equal(t("live.freebuffWait"), "Freebuff: waiting for official session…");
+  assert.equal(t("live.freebuffQueue"), "Freebuff: in queue…");
+  assert.equal(t("live.freebuffPaste"), "Freebuff: preparing prompt…");
+  assert.equal(t("live.freebuffSend"), "Freebuff: calling SDK…");
+  assert.equal(t("error.freebuff_busy"), "Another turn is using Freebuff.");
   assert.equal(t("channels"), "Channels");
   assert.equal(t("dms"), "Whispers");
   assert.equal(t("bot.settings"), "Status");

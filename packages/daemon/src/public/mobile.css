@@ -9,7 +9,10 @@
   --lift: #161C24;
   --card: #161C24;
   --bubble: #1A222C;
-  --you: #242C36;
+  --you: #B6D4C4;
+  --you-text: #1A2420;
+  --assistant: #ececec;
+  --code: #00ccff;
   --text: #E8E4DC;
   --muted: #8B8F96;
   --line: #1C222C;
@@ -307,11 +310,12 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.msg.you .bubble { background: var(--you); }
-.msg.bot .bubble { background: var(--bubble); }
+.msg.you .bubble { background: var(--you); color: var(--you-text); }
+.msg.you .bubble code { color: #2563EB; }
+.msg.bot .bubble { background: var(--bubble); color: var(--assistant); }
 .assistant-text {
   margin: 0;
-  color: var(--text);
+  color: var(--assistant);
   font-size: 0.95rem;
   line-height: 1.65;
   white-space: normal;
@@ -319,14 +323,15 @@ textarea:focus-visible {
 }
 .assistant-text p { margin: 0 0 0.7rem; }
 .assistant-text p:last-child { margin-bottom: 0; }
-.assistant-text a { color: var(--steel); }
+.assistant-text a { color: #d8dce0; }
 .assistant-text code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.86em;
   padding: 0.1em 0.35em;
   border-radius: 6px;
-  background: var(--fill);
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--code);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .assistant-text .md-fence {
   margin: 0.35rem 0 0.7rem;
@@ -404,6 +409,17 @@ textarea:focus-visible {
   font-size: 0.82rem;
   white-space: pre;
   overflow-wrap: normal;
+  word-break: normal;
+}
+.assistant-text .md-pre code {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  white-space: inherit;
   word-break: normal;
 }
 .html-zoom {

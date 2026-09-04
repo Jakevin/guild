@@ -1,6 +1,6 @@
 {
   "name": "@kevin5251984/guild",
-  "version": "0.2.23",
+  "version": "0.2.24",
   "type": "module",
   "license": "MIT",
   "description": "A local guild of adventurers. npx @kevin5251984/guild web",
@@ -37,6 +37,7 @@
     "postpack": "node ./scripts/vendor-protocol.mjs postpack"
   },
   "dependencies": {
+    "@codebuff/sdk": "^0.10.7",
     "@cordisjs/plugin-include": "1.0.4",
     "@cordisjs/plugin-loader": "1.0.0-rc.5",
     "@cordisjs/plugin-logger-console": "1.0.0",
