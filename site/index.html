@@ -722,8 +722,8 @@ pre.code .k { color: var(--brand); }
 .faq code {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--dark-warm);
-  background: var(--inline-code-bg);
+  color: var(--brand-bright);
+  background: var(--parchment);
   padding: 0 3px;
   border-radius: 2px;
 }
@@ -963,10 +963,12 @@ footer.foot {
 .note code,
 .faq code,
 .plaque p code,
-.term pre {
+.banner code {
+  /* Backticks on parchment: same bright as the version chip. */
   font-family: var(--mono);
   font-size: 0.92em;
-  background: var(--inline-code-bg);
+  color: var(--brand-bright);
+  background: var(--parchment);
   padding: 0 3px;
   border-radius: 2px;
   font-variant-numeric: lining-nums tabular-nums;
