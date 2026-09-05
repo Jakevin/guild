@@ -1473,7 +1473,7 @@ pnpm dev</pre>
         <tr><td>MCP</td><td data-i18n="td.mcp">Host Claude / Cursor / Codex stdio is live with no import step.</td></tr>
         <tr><td>Browser</td><td data-i18n-html="td.browser">Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
         <tr><td>Origin</td><td data-i18n-html="td.origin">Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.</td></tr>
-        <tr><td>Host files</td><td data-i18n-html="td.host">Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, credential files. Home is still browsable.</td></tr>
+        <tr><td>Host files</td><td data-i18n-html="td.host">Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, <code>commandcode.json</code>, credential files. Home is still browsable.</td></tr>
         <tr><td>MCP env</td><td data-i18n-html="td.env">HTTP shows keys; values are <code>***</code>. The child still gets the real env.</td></tr>
         <tr><td>Schedule</td><td data-i18n-html="td.cron">Host ticker (60s). <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code> — pause, resume, test run.</td></tr>
       </tbody>
@@ -1489,7 +1489,7 @@ pnpm dev</pre>
     <div class="faq">
       <details class="faq-pair">
         <summary data-i18n="faq.q1">Do I need an API key tonight?</summary>
-        <p data-i18n-html="faq.a1">No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.</p>
+        <p data-i18n-html="faq.a1">No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Command Code is an optional subscription picker. Switch provider in <code>/settings</code>.</p>
       </details>
       <details class="faq-pair">
         <summary data-i18n="faq.q2">Does this tab talk to the hall?</summary>
@@ -1597,7 +1597,7 @@ pnpm dev</pre>
         "td.mcp": "Host Claude / Cursor / Codex stdio is live with no import step.",
         "td.browser": "Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.",
         "td.origin": "Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.",
-        "td.host": "Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, credential files. Home is still browsable.",
+        "td.host": "Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, <code>commandcode.json</code>, credential files. Home is still browsable.",
         "td.env": "HTTP shows keys; values are <code>***</code>. The child still gets the real env.",
         "td.cron": "Host ticker (60s). <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code> — pause, resume, test run.",
         "note.security": "Read <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> before you point this at a machine you care about.",
@@ -1621,7 +1621,7 @@ pnpm dev</pre>
         "h2.gallery": "The hall on disk",
         "faq.title": "Before you npx",
         "faq.q1": "Do I need an API key tonight?",
-        "faq.a1": "No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Switch provider in <code>/settings</code>.",
+        "faq.a1": "No. OpenCode Free is the default path. Those prompts go to <code>opencode.ai</code>. Command Code is an optional subscription picker. Switch provider in <code>/settings</code>.",
         "faq.q2": "Does this tab talk to the hall?",
         "faq.a2": "No. Interactive preview — no model calls. Fixed replies. This tab does not talk to <code>127.0.0.1:7420</code>.",
         "faq.q3": "Do I need to clone the repo?",
@@ -1695,7 +1695,7 @@ pnpm dev</pre>
         "td.mcp": "本機 Claude / Cursor / Codex 的 stdio 免匯入、直接可用。",
         "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。設 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
         "td.origin": "外站 <code>Origin</code> 拒絕。沒有 Origin 仍放行。不是登入。",
-        "td.host": "黑名單：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、憑證檔。家目錄仍可瀏覽。",
+        "td.host": "黑名單：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、<code>commandcode.json</code>、憑證檔。家目錄仍可瀏覽。",
         "td.env": "HTTP 看得到鍵，值是 <code>***</code>。子行程仍拿到真 env。",
         "td.cron": "本機 ticker（60 秒一跳）。<code>cronjob</code> 工具。每筆排程有自己的頁 <code>#s/&lt;id&gt;</code>——暫停、恢復、測試執行。",
         "note.security": "對你在意的機器動手之前，先讀 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
@@ -1719,7 +1719,7 @@ pnpm dev</pre>
         "h2.gallery": "磁碟上的大廳",
         "faq.title": "npx 之前",
         "faq.q1": "今晚需要 API key 嗎？",
-        "faq.a1": "不用。OpenCode Free 是預設路徑。這條路上的 prompt 會到 <code>opencode.ai</code>。到 <code>/settings</code> 換 provider。",
+        "faq.a1": "不用。OpenCode Free 是預設路徑。這條路上的 prompt 會到 <code>opencode.ai</code>。Command Code 是可選的訂閱選項。到 <code>/settings</code> 換 provider。",
         "faq.q2": "這個分頁會連大廳嗎？",
         "faq.a2": "不會。Interactive preview — no model calls. 固定回覆。這個分頁不會連到 <code>127.0.0.1:7420</code>。",
         "faq.q3": "一定要 clone 嗎？",
@@ -1793,7 +1793,7 @@ pnpm dev</pre>
         "td.mcp": "本机 Claude / Cursor / Codex 的 stdio 免导入、直接可用。",
         "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。设 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
         "td.origin": "外站 <code>Origin</code> 拒绝。没有 Origin 仍放行。不是登录。",
-        "td.host": "黑名单：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、凭证档。家目录仍可浏览。",
+        "td.host": "黑名单：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、<code>commandcode.json</code>、凭证档。家目录仍可浏览。",
         "td.env": "HTTP 看得到键，值是 <code>***</code>。子进程仍拿到真 env。",
         "td.cron": "本机 ticker（60 秒一跳）。<code>cronjob</code> 工具。每笔排程有自己的页 <code>#s/&lt;id&gt;</code>——暂停、恢复、测试执行。",
         "note.security": "对你在意的机器动手之前，先读 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
@@ -1817,7 +1817,7 @@ pnpm dev</pre>
         "h2.gallery": "磁盘上的大厅",
         "faq.title": "npx 之前",
         "faq.q1": "今晚需要 API key 吗？",
-        "faq.a1": "不用。OpenCode Free 是默认路径。这条路上的 prompt 会到 <code>opencode.ai</code>。到 <code>/settings</code> 换 provider。",
+        "faq.a1": "不用。OpenCode Free 是默认路径。这条路上的 prompt 会到 <code>opencode.ai</code>。Command Code 是可选的订阅选项。到 <code>/settings</code> 换 provider。",
         "faq.q2": "这个分页会连大厅吗？",
         "faq.a2": "不会。Interactive preview — no model calls. 固定回复。这个分页不会连到 <code>127.0.0.1:7420</code>。",
         "faq.q3": "一定要 clone 吗？",
@@ -1891,7 +1891,7 @@ pnpm dev</pre>
         "td.mcp": "ホスト側 Claude / Cursor / Codex の stdio は import なしで使える。",
         "td.browser": "<code>last_used</code> の Chrome を <code>~/.guild/browser-profile/chrome</code> にスナップショット。空にするなら <code>GUILD_BROWSER_REAL_PROFILE=0</code>。",
         "td.origin": "外部 <code>Origin</code> は拒否。Origin なしは通す。ログインではない。",
-        "td.host": "拒否リスト：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、資格情報。ホームはまだ閲覧できる。",
+        "td.host": "拒否リスト：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、<code>commandcode.json</code>、資格情報。ホームはまだ閲覧できる。",
         "td.env": "HTTP はキーを出し、値は <code>***</code>。子プロセスは本物の env を受け取る。",
         "td.cron": "ホストの ticker（60秒）。<code>cronjob</code> ツール。ジョブごとにシート <code>#s/&lt;id&gt;</code> —— 一時停止・再開・テスト実行。",
         "note.security": "大事なマシンに向ける前に <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> を読む。",
@@ -1915,7 +1915,7 @@ pnpm dev</pre>
         "h2.gallery": "ディスク上の拠点",
         "faq.title": "npx の前に",
         "faq.q1": "今夜 API key は要る？",
-        "faq.a1": "不要。OpenCode Free が既定経路。この経路の prompt は <code>opencode.ai</code> へ。<code>/settings</code> で provider を切る。",
+        "faq.a1": "不要。OpenCode Free が既定経路。この経路の prompt は <code>opencode.ai</code> へ。Command Code は任意のサブスクリプション。<code>/settings</code> で provider を切る。",
         "faq.q2": "このタブは拠点に繋がる？",
         "faq.a2": "繋がらない。Interactive preview — no model calls. 固定の返信。このタブは <code>127.0.0.1:7420</code> に繋がらない。",
         "faq.q3": "clone は必要？",

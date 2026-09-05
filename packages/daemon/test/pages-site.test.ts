@@ -352,6 +352,8 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /<tr><td>Schedule<\/td><td data-i18n-html="td\.cron">/);
   assert.match(html, /pause, resume, test run/);
   assert.match(html, /pause, resume, and a test run that returns to that hall/);
+  assert.match(html, /Command Code is an optional subscription picker/);
+  assert.match(html, /<code>commandcode\.json<\/code>/);
   assert.doesNotMatch(html, /property="og:image"/);
   assert.doesNotMatch(html, /name="twitter:site"/);
   assert.doesNotMatch(html, /twitter:creator/);
@@ -504,25 +506,33 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
     assert.equal(I18N[loc]["banner.title"], "Interactive preview — no model calls.");
   }
 
-  const faqNeed: Record<string, { a5: string[]; row: string[]; forbid: string[] }> = {
+  const faqNeed: Record<string, { a5: string[]; a1: string[]; row: string[]; host: string[]; forbid: string[] }> = {
     en: {
       a5: ["every 2h", "in 30m", "0 9 * * *", "pause, resume, and a test run that returns to that hall", "A run cannot schedule another job"],
+      a1: ["Command Code is an optional subscription picker"],
       row: ["60s", "pause, resume, test run"],
+      host: ["commandcode.json"],
       forbid: ["每天", "每日", "毎日"],
     },
     "zh-TW": {
       a5: ["每10分鐘", "10分鐘後", "每天9點", "in 30m", "暫停、恢復，測試執行會回到那個大廳", "排程執行不能再排新的"],
+      a1: ["Command Code 是可選的訂閱選項"],
       row: ["60 秒", "暫停、恢復、測試執行"],
+      host: ["commandcode.json"],
       forbid: [],
     },
     "zh-CN": {
       a5: ["每10分钟", "10分钟后", "每天9点", "in 30m", "暂停、恢复，测试执行会回到那个大厅", "排程执行不能再排新的"],
+      a1: ["Command Code 是可选的订阅选项"],
       row: ["60 秒", "暂停、恢复、测试执行"],
+      host: ["commandcode.json"],
       forbid: [],
     },
     ja: {
       a5: ["in 30m", "every 2h", "0 9 * * *", "一時停止・再開、テスト実行", "cron 実行から cron は作れない"],
+      a1: ["Command Code は任意のサブスクリプション"],
       row: ["60秒", "一時停止・再開・テスト実行"],
+      host: ["commandcode.json"],
       forbid: ["每天", "每日", "毎日"],
     },
   };
@@ -530,8 +540,10 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
     const dict = I18N[loc] as Record<string, string>;
     const need = faqNeed[loc];
     for (const needle of need.a5) assert.ok(dict["faq.a5"].includes(needle), `${loc} faq.a5 has ${needle}`);
+    for (const needle of need.a1) assert.ok(dict["faq.a1"].includes(needle), `${loc} faq.a1 has ${needle}`);
     for (const bad of need.forbid) assert.ok(!dict["faq.a5"].includes(bad), `${loc} faq.a5 lacks ${bad}`);
     for (const needle of need.row) assert.ok(dict["td.cron"].includes(needle), `${loc} td.cron has ${needle}`);
+    for (const needle of need.host) assert.ok(dict["td.host"].includes(needle), `${loc} td.host has ${needle}`);
     for (const bad of need.forbid) assert.ok(!dict["td.cron"].includes(bad), `${loc} td.cron lacks ${bad}`);
   }
 });
