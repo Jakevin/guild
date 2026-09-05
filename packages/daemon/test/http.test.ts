@@ -1138,9 +1138,10 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     );
     assert.equal(retried.status, 200);
     const afterRetry = (await getJson(origin, `/dms/${rd.id}/messages`))
-      .body as { id: string }[];
+      .body as { id: string; author: string }[];
     assert.equal(afterRetry.length, 2);
-    assert.equal(afterRetry[1].id, afterEdit[1].id);
+    assert.notEqual(afterRetry[1].id, afterEdit[1].id);
+    assert.equal(afterRetry[1].author, rd.id);
   } finally {
     await closeServer(server);
   }

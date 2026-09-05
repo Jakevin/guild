@@ -532,6 +532,11 @@ test("retry keeps optimistic live while POST is in flight", () => {
     html,
     /current && current\.author !== "you" && botById\(current\.author\)/,
   );
+  assert.match(
+    html,
+    /cut = current && current\.author === "you" \? idx \+ 1 : idx/,
+  );
+  assert.match(html, /state\.retryDrop/);
 });
 
 test("chat composer / picker lists guild and host skills and subagents", () => {
@@ -1364,6 +1369,60 @@ test("bot report-back resumes the seat that handed off (pm → infra → pm)", a
   assert.match(posted.replies[2].body, /先不切版/);
 });
 
+test("bot @handle hop runs on a branched 子委託 even with assigneeId", async () => {
+  const store = new GuildStore(tempHome());
+  const parent = store.createChannel("team-quest");
+  const design = store.listBots().find((bot) => bot.handle === "design");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(design && pm && infra);
+  store.addMember(parent.id, design.id);
+  store.addMember(parent.id, pm.id);
+  store.addMember(parent.id, infra.id);
+  const source = store.appendMessage(parent.id, "you", "開子委託做 landing");
+  const branch = store.createBranch(parent.id, source.id, "git-io-page");
+  assert.equal(branch.parentId, parent.id);
+  assert.ok(branch.memberIds.includes(pm.id));
+  const posted = await postUserMessage(
+    store,
+    branch.id,
+    "@design 請處理",
+    process.env,
+    undefined,
+    undefined,
+    design.id,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        if (input.handle === "design") {
+          return [
+            "這頁要讓人 10 秒決定。",
+            "通過後交 `@infra` 只收 site/。",
+            "@pm",
+            "- Goal：閘文案",
+            "- Done when：你核對無舊版號",
+          ].join("\n");
+        }
+        return "PM 收到 " + input.handle;
+      }),
+    },
+  );
+  assert.equal(posted.replies[0]?.author, design.id);
+  assert.ok(
+    posted.replies.some((row) => row.author === pm.id),
+    "子委託裡 @pm 交棒要立刻叫 PM，不必人再送一則",
+  );
+  const pmReply = posted.replies.find((row) => row.author === pm.id);
+  assert.equal(pmReply?.replyTo, posted.replies[0]?.id);
+  assert.match(String(pmReply?.body), /PM 收到/);
+  assert.ok(
+    store.assignList(branch.id).some((wave) => wave.includes(infra.id)),
+    "通過後 @infra stays on the 子委託 派工 list",
+  );
+  store.close();
+});
+
 test("bot handoff files a 1:1 交辦 and hops without the quest log", async () => {
   const store = new GuildStore(tempHome());
   const room = store.createChannel("peer-hop");
@@ -1769,6 +1828,149 @@ test("retry of a follow-up without @mention plants live before MCP", async () =>
   const redone = await pending;
   assert.equal(redone.replies.length, 1);
   assert.equal(redone.replies[0].author, design.id);
+});
+
+test("retry of a bot message deletes it before the new turn lands", async () => {
+  const store = new GuildStore(tempHome());
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(infra);
+  const room = store.createChannel("retry-drop");
+  store.addMember(room.id, infra.id);
+  const first = await postUserMessage(
+    store,
+    room.id,
+    "@infra 繼續",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => ({
+        body: "沒有可用模型，請到設定頁登入或填 API key。",
+        parts: [],
+        source: "local",
+        system: "",
+      }),
+    },
+  );
+  assert.equal(first.replies.length, 1);
+  const failed = first.replies[0];
+  let releaseTurn!: () => void;
+  const turnGate = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
+  const pending = retryMessage(
+    store,
+    room.id,
+    failed.id,
+    undefined,
+    process.env,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => {
+        await turnGate;
+        return {
+          body: "重問後的新回覆",
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 40; i++) {
+    if (store.getLiveBotTurn(room.id, infra.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  assert.ok(store.getLiveBotTurn(room.id, infra.id));
+  const during = store.listMessages(room.id);
+  assert.equal(
+    during.some((item) => item.id === failed.id),
+    false,
+    "retried bubble must be gone while Deep diving is showing",
+  );
+  assert.equal(during[during.length - 1]?.author, "you");
+  releaseTurn();
+  const redone = await pending;
+  assert.equal(redone.replies.length, 1);
+  assert.notEqual(redone.replies[0].id, failed.id);
+  assert.equal(redone.replies[0].body, "重問後的新回覆");
+  const after = store.listMessages(room.id);
+  assert.equal(
+    after.some((item) => item.id === failed.id),
+    false,
+  );
+  assert.equal(after.length, 2);
+});
+
+test("retry of a hop reply that names @pm starts PM", async () => {
+  const store = new GuildStore(tempHome());
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(pm && infra);
+  const room = store.createChannel("retry-hop");
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, infra.id);
+  const asked: string[] = [];
+  const first = await postUserMessage(
+    store,
+    room.id,
+    "@pm 來安排上版",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        if (input.handle === "pm") {
+          return "@infra\nGoal: 收檔";
+        }
+        return "沒有可用模型，請到設定頁登入或填 API key。";
+      }),
+    },
+  );
+  assert.deepEqual(asked, ["pm", "infra"]);
+  const failed = first.replies.find((row) => row.author === infra.id);
+  assert.ok(failed);
+  asked.length = 0;
+  const redone = await retryMessage(
+    store,
+    room.id,
+    failed.id,
+    undefined,
+    process.env,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        asked.push(input.handle);
+        if (input.handle === "infra") {
+          return [
+            "未收檔，未發佈。這是 PM 閘門，我這席不簽。",
+            "",
+            "@pm",
+            "- Goal：閘定是否可收",
+            "- Done when：通過後交 @infra 只收兩檔。",
+          ].join("\n");
+        }
+        if (input.handle === "pm") return "收到，通過。";
+        return "不該輪到我";
+      }),
+    },
+  );
+  assert.deepEqual(asked, ["infra", "pm"]);
+  assert.equal(redone.replies.length, 2);
+  assert.equal(redone.replies[0].author, infra.id);
+  assert.equal(redone.replies[1].author, pm.id);
+  assert.match(redone.replies[1].body, /通過/);
 });
 
 test("pause keeps the live row; continue resumes on a new signal", async () => {

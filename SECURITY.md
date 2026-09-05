@@ -8,7 +8,7 @@ Guild bots can call local tools. The process is `guildd` running as **you**.
 
 | Tool | What it actually does |
 |---|---|
-| `run` | `execFile($SHELL, ["-lc", command])`. Default cwd is `$HOME`. Timeout 45s. |
+| `run` | `execFile($SHELL, ["-lc", command])`. Default cwd is `$HOME`. No default wall-clock (Pi bash: optional `timeout` in seconds). User Stop aborts. |
 | `write` | Writes any path the process can write. Creates parent folders. |
 | `read` / `list` | Read any path the process can read. |
 | `skill` / `spawn` / `image_gen` | In-process. `spawn` cannot nest. Read-only subagents cannot `write`. |

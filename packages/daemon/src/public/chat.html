@@ -8,8 +8,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=handoff" />
-    <script src="/i18n.js?v=handoff"></script>
+    <link rel="stylesheet" href="/chat.css?v=retrydel" />
+    <script src="/i18n.js?v=retrydel"></script>
     <script src="/md.js?v=tts"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
@@ -3129,7 +3129,9 @@
           (state.messages || []).forEach((msg) => {
             have[msg.id] = true;
           });
-          const extras = incoming.filter((msg) => !have[msg.id]);
+          const extras = incoming.filter(
+            (msg) => !have[msg.id] && !(state.retryDrop && state.retryDrop[msg.id]),
+          );
           const pending = (state.messages || []).filter(
             (msg) => String(msg.id).indexOf("pending-") === 0,
           );
@@ -3140,6 +3142,7 @@
           if (!extras.length && !dropPending.length) return;
           state.messages = (state.messages || [])
             .filter((msg) => {
+              if (state.retryDrop && state.retryDrop[msg.id]) return false;
               if (String(msg.id).indexOf("pending-") === 0) {
                 return !serverYou.some((row) => row.body === msg.body);
               }
@@ -3148,6 +3151,7 @@
             .concat(extras);
         } else {
           state.messages = incoming;
+          state.retryDrop = {};
         }
         const last = state.messages[state.messages.length - 1];
         if (last && last.createdAt) {
@@ -3342,9 +3346,17 @@
         if (currentRoomBusy()) return;
         state.editingId = null;
         const current = state.messages.find((item) => item.id === id);
-        if (current && current.author === "you") {
-          const idx = state.messages.findIndex((item) => item.id === id);
-          if (idx >= 0) state.messages = state.messages.slice(0, idx + 1);
+        const idx = state.messages.findIndex((item) => item.id === id);
+        if (idx >= 0) {
+          const cut = current && current.author === "you" ? idx + 1 : idx;
+          const dropped = state.messages.slice(cut);
+          state.retryDrop = state.retryDrop || {};
+          dropped.forEach((msg) => {
+            if (msg && msg.id) state.retryDrop[msg.id] = true;
+          });
+          state.messages = state.messages.slice(0, cut);
+          if (state.replyTo && state.retryDrop[state.replyTo.id]) clearReply();
+          if (state.statsId && state.retryDrop[state.statsId]) state.statsId = null;
           renderThread();
         }
         const text =

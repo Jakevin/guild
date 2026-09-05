@@ -17,7 +17,6 @@ import {
 const execFileAsync = promisify(execFile);
 const HOME = homedir();
 const OUTPUT_CAP = 16_000;
-const RUN_TIMEOUT_MS = 45_000;
 const TRACE_CAP = 1_200;
 
 export type SkillRef = {
@@ -105,7 +104,7 @@ const BASE_TOOLS: Tool[] = [
   {
     name: "run",
     description:
-      "Run a shell command on the user's local computer. Prefer workdir over cd. Check the [exit code: N] marker after every call; nonzero is a command failure, not a tool crash. Do not tell the user to run the command themselves.",
+      "Run a shell command on the user's local computer. Prefer workdir over cd. Check the [exit code: N] marker after every call; nonzero is a command failure, not a tool crash. Optionally provide a timeout in seconds (Pi bash: no default timeout). User Stop aborts. Do not tell the user to run the command themselves.",
     parameters: Type.Object({
       command: Type.String({ description: "Shell command" }),
       description: Type.Optional(
@@ -116,6 +115,11 @@ const BASE_TOOLS: Tool[] = [
       workdir: Type.Optional(
         Type.String({
           description: "Working directory. Absolute, or ~. Defaults to the user's home.",
+        }),
+      ),
+      timeout: Type.Optional(
+        Type.Number({
+          description: "Timeout in seconds (optional, no default timeout)",
         }),
       ),
     }),
@@ -374,6 +378,10 @@ function openaiParameters(name: string): {
           description: "One-line summary of the command, UI only",
         },
         workdir: { type: "string", description: "Working directory" },
+        timeout: {
+          type: "number",
+          description: "Timeout in seconds (optional, no default timeout)",
+        },
       },
       required: ["command"],
     };
@@ -574,6 +582,10 @@ export async function builtinExecute(
         asString(args.command),
         typeof args.workdir === "string" ? args.workdir : "",
         pathBase,
+        {
+          timeoutSec: optionalTimeoutSec(args.timeout),
+          signal: ctx.signal,
+        },
       );
     }
     if (name === "read") return readFile(asString(args.path), pathBase);
@@ -733,30 +745,49 @@ function formatRunOutput(input: {
   return clip([body, ...extra].join("\n"));
 }
 
+function optionalTimeoutSec(raw: unknown): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return n;
+}
+
 async function runCommand(
   command: string,
   workdir = "",
   defaultCwd = HOME,
+  opts: { timeoutSec?: number; signal?: AbortSignal } = {},
 ): Promise<ToolOutcome> {
   const cmd = command.trim();
   if (!cmd) return { text: "empty command", isError: true };
   if (/rm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+\/(\s|$)/.test(cmd) || /^mkfs\b/.test(cmd)) {
     return { text: "refused destructive command", isError: true };
   }
+  if (opts.signal?.aborted) {
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  }
   const cwd = workdir.trim() ? resolveUserPath(workdir, defaultCwd) : defaultCwd;
   const shell = process.env.SHELL || "/bin/zsh";
+  const timeoutMs =
+    opts.timeoutSec !== undefined
+      ? Math.max(1, Math.round(opts.timeoutSec * 1000))
+      : undefined;
   try {
     const { stdout, stderr } = await execFileAsync(shell, ["-lc", cmd], {
       cwd,
-      timeout: RUN_TIMEOUT_MS,
+      ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
       maxBuffer: OUTPUT_CAP * 2,
       env: process.env,
+      signal: opts.signal,
     });
     return {
       text: formatRunOutput({ stdout, stderr, extra: ["[exit code: 0]"] }),
       isError: false,
     };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     const err = error as {
       stdout?: string;
       stderr?: string;
@@ -769,7 +800,7 @@ async function runCommand(
         text: formatRunOutput({
           stdout: err.stdout,
           stderr: err.stderr,
-          extra: [`[timed out after ${RUN_TIMEOUT_MS}ms]`],
+          extra: [`[timed out after ${timeoutMs}ms]`],
         }),
         isError: true,
       };

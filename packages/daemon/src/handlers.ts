@@ -82,6 +82,8 @@ export type HandlerExtras = {
   cronRun?: boolean;
   /** Isolated cron still reads this quest's Channel.md / MEMORY.md. */
   questRoomId?: string;
+  /** Keep hop quote / 1:1 peer when retrying a bot bubble. */
+  retryHop?: { replyTo?: string; peerId?: string };
 };
 
 export function healthPayload(): HealthResponse {
@@ -1518,7 +1520,7 @@ async function generateReplies(
         body: generated.body,
       });
       if (extras.harvest !== false) {
-        await harvestBotMemory({
+        void harvestBotMemory({
           store,
           botId,
           userMessage: turnAsked,
@@ -1539,7 +1541,12 @@ async function generateReplies(
           body,
           attachments: userMessage.attachments,
         });
-        return speak(botId, turnAsked, history);
+        return speak(
+          botId,
+          turnAsked,
+          history,
+          onlyBotId === botId ? extras.retryHop : undefined,
+        );
       }),
     );
     let seen = 0;
@@ -1915,91 +1922,40 @@ export async function retryMessage(
   if (userIndex < 0) throw new StoreError(400, "no user message to retry");
   const userMessage = messages[userIndex];
   const history = messages.slice(0, userIndex).map(toHistoryItem);
-  const startedAt = new Date().toISOString();
-  const signal = store.beginTurn(roomId, [current.author]);
-  store.setLiveTurn(roomId, {
-    botId: current.author,
-    thinking: "",
-    steps: [],
-    startedAt,
-    messageId: userMessage.id,
-  });
-  const mcpTools = await resolveMcpTools(store, extras);
-  let generated;
-  try {
-    generated = await (extras.turn ?? chatReply)({
-      ...chatTurnForBot(
-        store,
-        roomId,
-        current.author,
-        history,
-        userMessage.body,
-        userMessage.body,
-      ),
-      env,
-      signal,
-      mcpTools,
-      onProgress: (update) => {
-        const prev = store.getLiveBotTurn(roomId, current.author);
-        store.setLiveTurn(roomId, {
-          ...toLiveTurn(current.author, update),
-          startedAt: prev?.startedAt || startedAt,
-          messageId: prev?.messageId || userMessage.id,
-        });
-      },
-      pullSteers: () => store.drainSteers(roomId, current.author),
-    });
-  } catch (err) {
-    if (isAbortError(err) || signal.aborted) {
-      return { message: userMessage, replies: [] };
-    }
-    throw err;
-  } finally {
-    store.endTurn(roomId, signal);
-  }
-  const usage = { ...(generated.usage || {}), startedAt };
-  const reply = store.replaceMessage(
-    roomId,
-    messageId,
-    generated.body,
-    generated.parts,
-    usage,
+  const author = current.author;
+  const replyTo = current.replyTo;
+  store.truncateAfter(roomId, messages[index - 1].id);
+  const parent = parentMessage(
+    messages.slice(0, userIndex),
+    userMessage.replyTo,
   );
-  recordTurn(store, roomId, current.author, generated, reply);
-  extras.onTurnComplete?.({
-    roomId,
-    botId: current.author,
-    userText: userMessage.body,
-    reply: generated.body,
-  });
-  if (generated.source === "llm" && extras.harvest !== false) {
-    await harvestBotMemory({
-      store,
-      botId: current.author,
-      userMessage: userMessage.body,
-      reply: generated.body,
-      env,
-      prefer: store.getBot(current.author)?.model ?? null,
-    }).catch(() => {});
-    const roomAfter = store.getRoom(roomId);
-    if (roomAfter?.kind === "channel") {
-      await harvestChannelMemory({
-        store,
-        roomId,
-        userMessage: userMessage.body,
-        replies: [
-          {
-            handle: store.getBot(current.author)?.handle,
-            author: current.author,
-            body: generated.body,
-          },
-        ],
-        env,
-        prefer: store.getBot(current.author)?.model ?? null,
-      }).catch(() => {});
+  let peerId: string | undefined;
+  if (replyTo) {
+    const from = messages.find((item) => item.id === replyTo);
+    if (from && from.author !== "you" && store.getBot(from.author)) {
+      const id = GuildStore.peerRoomId(author, from.author);
+      if (store.getRoom(id)) peerId = id;
     }
   }
-  return { message: userMessage, replies: [reply] };
+  const replies = await generateReplies(
+    store,
+    roomId,
+    inviteAssignee(store, roomId, author),
+    userMessage,
+    history,
+    author,
+    env,
+    parent,
+    {
+      ...extras,
+      retryHop: replyTo || peerId ? { replyTo, peerId } : undefined,
+    },
+  );
+  return {
+    message: userMessage,
+    replies,
+    ...(room.kind === "channel" ? { assign: store.assignList(roomId) } : {}),
+  };
 }
 
 export { StoreError, localGenerate };

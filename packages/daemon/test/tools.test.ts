@@ -50,6 +50,29 @@ test("run honors workdir", async () => {
   assert.match(result.text, new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("run has no default wall-clock; timeout is optional seconds (Pi bash)", async () => {
+  const tools = openaiTools();
+  const run = tools.find((tool) => tool.function.name === "run");
+  assert.ok(run);
+  const props = (run.function.parameters as { properties?: Record<string, unknown> })
+    .properties;
+  assert.ok(props?.timeout);
+  assert.match(JSON.stringify(props.timeout), /no default timeout/);
+  const timed = await executeTool("run", { command: "sleep 2", timeout: 0.2 });
+  assert.equal(timed.isError, true);
+  assert.match(timed.text, /timed out after 200ms/);
+  const ac = new AbortController();
+  const pending = executeTool(
+    "run",
+    { command: "sleep 5" },
+    { signal: ac.signal },
+  );
+  ac.abort();
+  await assert.rejects(pending, (err: unknown) => {
+    return Boolean(err && typeof err === "object" && "name" in err && err.name === "AbortError");
+  });
+});
+
 test("read write list round-trip a temp file", async () => {
   const dir = mkdtempSync(join(tmpdir(), "guild-tools-"));
   const path = join(dir, "note.txt");
