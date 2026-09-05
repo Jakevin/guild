@@ -16,6 +16,7 @@ import {
   setAntigravityHooksForTest,
 } from "../src/antigravity.ts";
 import {
+  agyModeForSandbox,
   buildAgyChatPrompt,
   completeAntigravity,
   parseAgyLine,
@@ -131,6 +132,24 @@ test("completeAntigravity maps stream-json and honors Stop", async () => {
   } finally {
     setAntigravityGenerateHooksForTest();
   }
+});
+
+test("agy mode follows Guild sandbox: plan only for read_only", () => {
+  assert.deepEqual(agyModeForSandbox("read_only"), {
+    mode: "plan",
+    skipPermissions: false,
+    terminalSandbox: false,
+  });
+  assert.deepEqual(agyModeForSandbox("workspace_write"), {
+    mode: "accept-edits",
+    skipPermissions: true,
+    terminalSandbox: true,
+  });
+  assert.deepEqual(agyModeForSandbox("full_access"), {
+    mode: "accept-edits",
+    skipPermissions: true,
+    terminalSandbox: false,
+  });
 });
 
 test("buildAgyChatPrompt keeps system then turns", () => {

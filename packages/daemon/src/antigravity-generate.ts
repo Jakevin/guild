@@ -34,6 +34,8 @@ export type AgySpawnTurnInput = {
   prompt: string;
   mode: "accept-edits" | "plan";
   skipPermissions: boolean;
+  /** agy `--sandbox`: terminal restrictions. Used for Guild workspace_write. */
+  terminalSandbox: boolean;
   effort: "low" | "medium" | "high";
   signal?: AbortSignal;
   onEvent?: (event: AgyEvent) => void;
@@ -107,11 +109,18 @@ export function buildAgyChatPrompt(
 export function agyModeForSandbox(sandbox: unknown): {
   mode: "accept-edits" | "plan";
   skipPermissions: boolean;
+  terminalSandbox: boolean;
 } {
-  if (parseSandbox(sandbox) === "full_access") {
-    return { mode: "accept-edits", skipPermissions: true };
+  const parsed = parseSandbox(sandbox);
+  if (parsed === "read_only") {
+    return { mode: "plan", skipPermissions: false, terminalSandbox: false };
   }
-  return { mode: "plan", skipPermissions: false };
+  // Print mode cannot prompt. Skip confirmations for seats Guild already
+  // allowed to run tools. workspace_write also sets agy --sandbox.
+  if (parsed === "workspace_write") {
+    return { mode: "accept-edits", skipPermissions: true, terminalSandbox: true };
+  }
+  return { mode: "accept-edits", skipPermissions: true, terminalSandbox: false };
 }
 
 function resultText(result: Record<string, unknown> | undefined): string {
@@ -145,6 +154,7 @@ function spawnAgyTurn(input: AgySpawnTurnInput): Promise<AgyTurnResult> {
       input.mode,
     ];
     if (input.skipPermissions) args.push("--dangerously-skip-permissions");
+    if (input.terminalSandbox) args.push("--sandbox");
     if (input.mode !== "plan") args.push("--disable-slash-commands");
     args.push("--effort", input.effort);
     if (input.cwd.trim()) args.push("--add-dir", input.cwd);
@@ -277,7 +287,7 @@ export async function completeAntigravity(input: {
   const ctx = input.ctx ?? {};
   throwIfAborted(ctx);
   const prompt = buildAgyChatPrompt(input.system, input.messages);
-  const { mode, skipPermissions } = agyModeForSandbox(ctx.sandbox);
+  const { mode, skipPermissions, terminalSandbox } = agyModeForSandbox(ctx.sandbox);
   const traces: ToolTrace[] = [];
   let thinking = "";
   let streamedText = "";
@@ -289,6 +299,7 @@ export async function completeAntigravity(input: {
     prompt,
     mode,
     skipPermissions,
+    terminalSandbox,
     effort: effortFromAgyId(input.model),
     signal: ctx.signal,
     onEvent: (event) => {
