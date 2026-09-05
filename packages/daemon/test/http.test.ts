@@ -631,6 +631,8 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /function applyNavFold/);
   assert.match(home, /function loadNavCron/);
   assert.match(home, /id="cron-sheet"/);
+  assert.match(home, /id="cron-sheet-log"/);
+  assert.match(home, /function cronBotHtml/);
   assert.match(home, /#s\//);
   assert.match(home, /function showCronSheet/);
   assert.match(home, /cron-sheet-run[\s\S]*applyCronRoom\(job\);\s*closeCronSheet\(\)/);
@@ -669,6 +671,14 @@ test("home is chat and studio is the roster", () => {
   assert.doesNotMatch(chatCss, /folded \.sec-chev \{ transform: rotate/);
   assert.match(chatCss, /#cron-nav/);
   assert.match(chatCss, /\.cron-sheet/);
+  assert.match(
+    chatCss,
+    /\.cron-sheet-body \{[\s\S]*?max\(var\(--thread-gutter\), calc\(\(100% - var\(--thread-max\)\) \/ 2\)\)/,
+  );
+  assert.doesNotMatch(
+    chatCss.slice(chatCss.indexOf(".cron-sheet-body {"), chatCss.indexOf(".cron-sheet-tools {")),
+    /max-width:\s*42rem/,
+  );
   assert.match(chatCss, /body\.nav-open \.sidebar/);
   assert.match(chatCss, /max-width: 760px/);
   assert.match(chatCss, /--bg:\s*#0B0E12/);

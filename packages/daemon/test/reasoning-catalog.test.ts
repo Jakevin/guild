@@ -26,6 +26,9 @@ const CHAT_CSS = fileURLToPath(
 const SETTINGS_HTML = fileURLToPath(
   new URL("../src/public/settings.html", import.meta.url),
 );
+const SETTINGS_CSS = fileURLToPath(
+  new URL("../src/public/style.css", import.meta.url),
+);
 
 test("OpenRouter reasoning object becomes the picker list", () => {
   const spec = fromOpenRouterModel({
@@ -487,5 +490,11 @@ test("chat and settings pickers fill efforts from the model, not four hardcoded 
   assert.match(settings, /data-f="efforts"/);
   assert.match(settings, /settings.effortsPlaceholder/);
   assert.match(settings, /settings.effortsHint/);
+  assert.match(settings, /style\.css\?v=model-gold/);
   assert.doesNotMatch(settings, /<option value="minimal">Minimal<\/option>/);
+  const settingsCss = readFileSync(SETTINGS_CSS, "utf8");
+  assert.match(
+    settingsCss,
+    /\.model-row \{[\s\S]*?border:\s*1px solid var\(--signal\)/,
+  );
 });

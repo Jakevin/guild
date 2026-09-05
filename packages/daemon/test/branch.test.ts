@@ -48,7 +48,7 @@ test("message actions put 分支 after 重問", () => {
   assert.match(i18n, /\["branch", "分支"/);
   assert.match(css, /li\.nav-quest/);
   assert.match(css, /\.nav-branch/);
-  assert.match(html, /chat\.css\?v=retrydel/);
+  assert.match(html, /chat\.css\?v=cron-bot/);
   assert.match(html, /↳ /);
 });
 

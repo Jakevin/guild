@@ -493,6 +493,25 @@ test("live poll merges finished replies while hops are still running", () => {
   assert.match(html, /opts && opts.merge/);
   assert.match(html, /name === "handoff"/);
   assert.match(html, /t\("handoff"\)/);
+  const poll = html.slice(
+    html.indexOf("async function pollLive"),
+    html.indexOf("function threadNearBottom"),
+  );
+  assert.match(poll, /applyAssignFromLive/);
+  assert.match(html, /function tickLiveClocks/);
+  assert.match(html, /visibilitychange/);
+  assert.match(html, /if \(!state\.clockTimer\)/);
+});
+
+test("cron sheet this-run log shows bot replies only", () => {
+  const html = readFileSync(CHAT_HTML, "utf8");
+  assert.match(html, /function cronBotHtml/);
+  assert.match(html, /msg\.author !== "you"/);
+  assert.match(html, /replies\.map\(cronBotHtml\)/);
+  assert.doesNotMatch(
+    html.slice(html.indexOf("function cronBotHtml"), html.indexOf("function fillCronSheet")),
+    /t\("you"\)/,
+  );
 });
 
 test("queue chip names the bot who will receive it", () => {

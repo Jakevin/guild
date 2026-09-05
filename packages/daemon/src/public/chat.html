@@ -8,8 +8,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=retrydel" />
-    <script src="/i18n.js?v=retrydel"></script>
+    <link rel="stylesheet" href="/chat.css?v=cron-bot" />
+    <script src="/i18n.js?v=cron-bot"></script>
     <script src="/md.js?v=tts"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
@@ -290,7 +290,7 @@
           </div>
           <p class="cron-sheet-next" id="cron-sheet-next"></p>
           <h3 data-i18n="cron.log">這一輪</h3>
-          <ul class="cron-log" id="cron-sheet-log"></ul>
+          <div class="cron-log" id="cron-sheet-log"></div>
           <h3 data-i18n="cron.history">執行歷史紀錄</h3>
           <ul class="cron-runs" id="cron-sheet-runs"></ul>
         </div>
@@ -426,6 +426,7 @@
         live: { botId: "", thinking: "", steps: [] },
         lives: [],
         liveTimer: null,
+        clockTimer: null,
         liveGen: 0,
         mention: null,
         mentionIndex: 0,
@@ -2070,6 +2071,10 @@
         );
         renderAssignBar();
       }
+      function applyAssignFromLive(body, room) {
+        if (!room || room.kind !== "channel" || !Array.isArray(body && body.assign)) return;
+        applyAssign(room.id, body.assign);
+      }
       function renderAssignBar() {
         const bar = document.getElementById("assign-bar");
         const wavesEl = document.getElementById("assign-waves");
@@ -2295,15 +2300,39 @@
           "</button>"
         );
       }
-      function turnStatusInnerHtml(live) {
+      function liveStartedMs(live) {
         const started = live && live.startedAt ? Date.parse(live.startedAt) : NaN;
-        const elapsed = Number.isFinite(started)
-          ? Date.now() - started
-          : Date.now() - (state.busySince || Date.now());
-        const clock =
-          elapsed >= 15000
-            ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
-            : "";
+        if (Number.isFinite(started)) return started;
+        return state.busySince || Date.now();
+      }
+      function clockHtml(startedMs) {
+        const elapsed = Date.now() - startedMs;
+        if (elapsed < 15000) return "";
+        return '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>";
+      }
+      function tickLiveClocks() {
+        document.querySelectorAll("article.msg.live").forEach((article) => {
+          const status = article.querySelector(".turn-status");
+          if (!status) return;
+          const botId = article.getAttribute("data-bot-id");
+          const live = liveTurns().find((row) => row.botId === botId);
+          const elapsed = Date.now() - liveStartedMs(live);
+          let clock = status.querySelector(".clock");
+          if (elapsed < 15000) {
+            if (clock) clock.remove();
+            return;
+          }
+          const text = Math.floor(elapsed / 1000) + "s";
+          if (!clock) {
+            clock = document.createElement("span");
+            clock.className = "clock";
+            status.appendChild(clock);
+          }
+          if (clock.textContent !== text) clock.textContent = text;
+        });
+      }
+      function turnStatusInnerHtml(live) {
+        const clock = clockHtml(liveStartedMs(live));
         const botId = live && live.botId ? live.botId : "";
         const paused = Boolean(live && live.paused);
         const actions = botId
@@ -2409,18 +2438,10 @@
             renderThread();
             return;
           }
-          const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
-          const elapsed = Number.isFinite(started)
-            ? Date.now() - started
-            : Date.now() - (state.busySince || Date.now());
-          const clock =
-            elapsed >= 15000
-              ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
-              : "";
           head.innerHTML =
             '<div class="turn-status">' +
             liveStatusLabel(live) +
-            clock +
+            clockHtml(liveStartedMs(live)) +
             "</div>" +
             liveMessageIdHtml(live);
           const html = liveStepsHtml(live.steps);
@@ -2450,6 +2471,7 @@
           const body = await res.json().catch(() => ({}));
           if (!res.ok || state.liveGen !== gen) return;
           const lives = liveTurnsFrom(body);
+          applyAssignFromLive(body, room);
           if (!lives.length) {
             if (state.posting) return;
             mergeLiveTraj(body);
@@ -2474,6 +2496,7 @@
             await loadMessages({ resume: false, merge: true }).catch(() => {});
           }
           paintLiveSteps();
+          tickLiveClocks();
           mergeLiveTraj(body);
         } catch {
           /* poll is best-effort while the POST is in flight */
@@ -3170,9 +3193,7 @@
         const body = await res.json().catch(() => ({}));
         const lives = liveTurnsFrom(body);
         const here = currentRoomRef();
-        if (here && here.kind === "channel" && Array.isArray(body.assign)) {
-          applyAssign(here.id, body.assign);
-        }
+        applyAssignFromLive(body, here);
         if (!res.ok || !lives.length) {
           if (currentRoomBusy() && !state.posting) {
             setBusy(false, [], { room: here });
@@ -5195,6 +5216,24 @@
           state.id = roomId;
         }
       }
+      function cronBotHtml(msg) {
+        const bot = botById(msg.author);
+        const actor = liveActorHtml(
+          bot || {
+            id: msg.author,
+            name: msg.author,
+            handle: "",
+          },
+        );
+        return (
+          '<article class="msg bot cron-reply">' +
+          actor.av +
+          '<div class="msg-main">' +
+          actor.head +
+          renderAssistant(msg) +
+          "</div></article>"
+        );
+      }
       function fillCronSheet(job, opts) {
         const historyOnly = opts && opts.historyOnly;
         if (!historyOnly) {
@@ -5231,26 +5270,15 @@
         }
         const log = document.getElementById("cron-sheet-log");
         if (log) {
-          const rows = Array.isArray(job.messages) ? job.messages : [];
-          log.innerHTML = rows.length
-            ? rows
-                .map((msg) => {
-                  const who =
-                    msg.author === "you"
-                      ? t("you")
-                      : (botById(msg.author) || {}).handle || msg.author;
-                  return (
-                    "<li><b>" +
-                    escapeHtml(who) +
-                    "</b> " +
-                    escapeHtml(String(msg.body || "").slice(0, 400)) +
-                    "</li>"
-                  );
-                })
-                .join("")
-            : '<li class="cron-runs-empty">' +
+          const replies = (Array.isArray(job.messages) ? job.messages : []).filter(
+            (msg) => msg && msg.author && msg.author !== "you",
+          );
+          log.innerHTML = replies.length
+            ? replies.map(cronBotHtml).join("")
+            : '<p class="cron-runs-empty">' +
               escapeHtml(t("cron.logEmpty")) +
-              "</li>";
+              "</p>";
+          if (replies.length) hydrateHtmlPreviews(log);
         }
         const box = document.getElementById("cron-sheet-runs");
         if (!box) return;
@@ -5482,23 +5510,14 @@
       }
       function startLiveTimers() {
         const gen = state.liveGen;
-        if (state.liveTimer) return;
-        pollLive(gen);
-        state.liveTimer = setInterval(() => pollLive(gen), 400);
-        state.clockTimer = setInterval(() => {
-          if (!currentRoomBusy()) return;
-          const el = document.querySelector(".turn-status");
-          if (!el) return;
-          const elapsed = Date.now() - state.busySince;
-          if (elapsed < 15000) return;
-          let clock = el.querySelector(".clock");
-          if (!clock) {
-            clock = document.createElement("span");
-            clock.className = "clock";
-            el.appendChild(clock);
-          }
-          clock.textContent = Math.floor(elapsed / 1000) + "s";
-        }, 1000);
+        if (!state.liveTimer) {
+          pollLive(gen);
+          state.liveTimer = setInterval(() => pollLive(gen), 400);
+        }
+        if (!state.clockTimer) {
+          tickLiveClocks();
+          state.clockTimer = setInterval(tickLiveClocks, 1000);
+        }
       }
       function stopLiveTimers() {
         if (state.clockTimer) {
@@ -5553,8 +5572,8 @@
           if (!wasBusy) {
             state.liveGen += 1;
             stopLiveTimers();
-            startLiveTimers();
           }
+          startLiveTimers();
           return;
         }
         if (ids.length) {
@@ -5642,6 +5661,11 @@
           if (err.name === "AbortError") {
             if (state.kind === sent.kind && state.id === sent.id) {
               await loadMessages({ resume: false }).catch(() => {});
+              const url = liveUrl(sent);
+              if (url) {
+                const live = await fetch(url).then((r) => r.json()).catch(() => ({}));
+                applyAssignFromLive(live, sent);
+              }
             }
             return;
           }
@@ -7204,6 +7228,10 @@
         setNavOpen(false);
         openFromHash().catch((err) => alert(err.message));
       });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) tickLiveClocks();
+      });
+      window.addEventListener("focus", tickLiveClocks);
       applyNavFold();
       setInterval(() => {
         if (document.hidden) return;
