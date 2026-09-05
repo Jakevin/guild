@@ -83,6 +83,10 @@ import {
   pollCommandCodeLogin,
   startCommandCodeLogin,
 } from "./commandcode-login.ts";
+import {
+  antigravityStatus,
+  refreshAntigravityCatalog,
+} from "./antigravity.ts";
 import { hostGit, hostList, hostRead, hostTree } from "./host-browse.ts";
 import { listHostSkills } from "./host-skills.ts";
 import { listHostAgents } from "./host-agents.ts";
@@ -1387,6 +1391,18 @@ export async function handleRequest(
     }
     if (method === "POST" && path === "/settings/commandcode/sync") {
       const models = await refreshCommandCodeCatalog(store.dataDir, env, true);
+      json(res, 200, {
+        ...modelsPayload(store.dataDir, extras, env),
+        synced: models.length,
+      });
+      return;
+    }
+    if (method === "GET" && path === "/settings/antigravity") {
+      json(res, 200, antigravityStatus(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/antigravity/sync") {
+      const models = await refreshAntigravityCatalog(store.dataDir);
       json(res, 200, {
         ...modelsPayload(store.dataDir, extras, env),
         synced: models.length,

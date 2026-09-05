@@ -331,6 +331,7 @@ function catalogIdsFor(provider: string, baseUrl?: string): string[] {
     const key = String(id || "").trim().toLowerCase();
     if (!key || ids.includes(key)) return;
     if (key === "commandcode" || key === "command-code" || key === "command_code") return;
+    if (key === "antigravity" || key === "agy" || key === "gemini-web") return;
     ids.push(key);
   };
   add(DEV_PROVIDER[provider]);
@@ -359,7 +360,10 @@ export function reasoningFor(
   if (
     provider === "commandcode" ||
     provider === "command-code" ||
-    provider === "command_code"
+    provider === "command_code" ||
+    provider === "antigravity" ||
+    provider === "agy" ||
+    provider === "gemini-web"
   ) {
     return undefined;
   }
@@ -424,7 +428,10 @@ export function resolveReasoning(
   if (
     provider === "commandcode" ||
     provider === "command-code" ||
-    provider === "command_code"
+    provider === "command_code" ||
+    provider === "antigravity" ||
+    provider === "agy" ||
+    provider === "gemini-web"
   ) {
     return undefined;
   }

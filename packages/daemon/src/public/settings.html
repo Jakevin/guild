@@ -9,7 +9,7 @@
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 模型</title>
     <link rel="stylesheet" href="/style.css?v=model-gold" />
-    <script src="/i18n.js?v=effort-mid"></script>
+    <script src="/i18n.js?v=agy"></script>
   </head>
   <body class="app settings-page" data-i18n-page="settings" data-section="main">
     <script>
@@ -263,6 +263,7 @@
           return t("settings.freebuffChat");
         }
         if (p && p.kind === "commandcode") return t("settings.commandCode");
+        if (p && p.kind === "antigravity") return t("settings.antigravity");
         return (p && p.name) || (p && p.id) || "";
       }
       function fillSelect(sel, groups, preferred) {
@@ -311,6 +312,9 @@
         } else if (group && group.kind === "commandcode") {
           hint.hidden = false;
           hint.textContent = t("settings.commandCodeHint");
+        } else if (group && group.kind === "antigravity") {
+          hint.hidden = false;
+          hint.textContent = t("settings.antigravityHint");
         } else {
           hint.hidden = true;
           hint.textContent = "";
@@ -335,7 +339,7 @@
           (m) => m.id === (ref && ref.model),
         );
         const spec =
-          group && group.kind === "commandcode"
+          group && (group.kind === "commandcode" || group.kind === "antigravity")
             ? null
             : (model && model.reasoning) || null;
         const raw = spec && spec.supportedEfforts;
@@ -433,6 +437,11 @@
           actions = (s.connected || s.ready
             ? '<button type="button" class="secondary" data-cc-logout="' + id + '">' + t("settings.logout") + "</button>"
             : '<button type="button" data-cc-login="' + id + '">' + t("settings.connect") + "</button>") + paste + sync;
+        } else if (kind === "antigravity") {
+          actions =
+            '<button type="button" class="secondary" data-agy-sync>' +
+            t("settings.sync") +
+            "</button>";
         } else if (kind === "web-bridge") {
           const doctor =
             '<button type="button" class="secondary" data-web-doctor="' +
@@ -458,9 +467,9 @@
             ? '<button type="button" class="secondary" data-logout="' + s.id + '">' + t("settings.logout") + "</button>"
             : '<button type="button" data-login="' + s.id + '">' + t("settings.connect") + "</button>";
         }
-        const title = kind === "web-bridge" ? t("settings.freebuffChat") : kind === "commandcode" ? t("settings.commandCode") : s.name;
-        const hint = kind === "web-bridge" ? t("settings.freebuffChatHint") : kind === "commandcode" ? t("settings.commandCodeHint") : (s.hint || "");
-        const loginHint = kind === "web-bridge" ? t("settings.freebuffLoginHint") : kind === "commandcode" ? t("settings.commandCodeLoginHint") : (s.loginHint || "");
+        const title = kind === "web-bridge" ? t("settings.freebuffChat") : kind === "commandcode" ? t("settings.commandCode") : kind === "antigravity" ? t("settings.antigravity") : s.name;
+        const hint = kind === "web-bridge" ? t("settings.freebuffChatHint") : kind === "commandcode" ? t("settings.commandCodeHint") : kind === "antigravity" ? t("settings.antigravityHint") : (s.hint || "");
+        const loginHint = kind === "web-bridge" ? t("settings.freebuffLoginHint") : kind === "commandcode" ? t("settings.commandCodeLoginHint") : kind === "antigravity" ? t("settings.antigravityLoginHint") : (s.loginHint || "");
         const row =
           '<div class="account"><div class="account-copy"><strong>' +
           escapeHtml(title) +
@@ -479,16 +488,19 @@
         return (data.subscriptions || [])
           .map((s) => ({ s: s, kind: "oauth" }))
           .concat(data.commandCode ? [{ s: data.commandCode, kind: "commandcode" }] : [])
+          .concat(data.antigravity ? [{ s: data.antigravity, kind: "antigravity" }] : [])
           .concat((data.webBridges || []).map((s) => ({ s: s, kind: "web-bridge" })));
       }
       function accountTabId(item) {
         if (!item) return "";
         if (item.kind === "commandcode") return "commandcode";
+        if (item.kind === "antigravity") return "antigravity";
         return item.s.pickerId || item.s.id || "";
       }
       function accountTabTitle(item) {
         if (item.kind === "web-bridge") return t("settings.freebuffChat");
         if (item.kind === "commandcode") return t("settings.commandCode");
+        if (item.kind === "antigravity") return t("settings.antigravity");
         return item.s.name || item.s.id || "";
       }
       function accountTabBadge(item) {
@@ -503,7 +515,7 @@
       function accountModelsHtml(s, kind) {
         const catalog = s.catalog || s.models || [];
         if (!(s.connected || s.ready) || !catalog.length) return "";
-        const provider = kind === "commandcode" ? "commandcode" : s.pickerId || s.id;
+        const provider = kind === "commandcode" ? "commandcode" : kind === "antigravity" ? "antigravity" : s.pickerId || s.id;
         const shown = s.shownIds;
         const modelOn = (m) => !shown || shown.indexOf(m.id) >= 0;
         const allOn = !shown || catalog.every(modelOn);
@@ -1129,6 +1141,22 @@
         const ccLogout = event.target.closest("[data-cc-logout]");
         const ccSave = event.target.closest("[data-cc-save]");
         const ccSync = event.target.closest("[data-cc-sync]");
+        const agySync = event.target.closest("[data-agy-sync]");
+        if (agySync) {
+          agySync.disabled = true;
+          flash("", t("settings.syncing"));
+          try {
+            const res = await fetch("/settings/antigravity/sync", { method: "POST" });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) { flash("error", body.error || t("settings.syncFailed")); return; }
+            data = body;
+            render();
+            flash("health", t("settings.synced", { n: body.synced || 0 }));
+          } finally {
+            agySync.disabled = false;
+          }
+          return;
+        }
         if (ccSync) {
           ccSync.disabled = true;
           flash("", t("settings.syncing"));

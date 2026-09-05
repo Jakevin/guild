@@ -1523,7 +1523,7 @@
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
           );
-          if (!hit || hit.kind === "commandcode") return null;
+          if (!hit || hit.kind === "commandcode" || hit.kind === "antigravity") return null;
           return hit.reasoning || null;
         })();
         const reasonVal = clampEffort(
@@ -6618,6 +6618,7 @@
         const hay = String(name || "");
         if (kind === "web-bridge") return { mark: "◌", tone: "" };
         if (kind === "commandcode") return { mark: "⌘", tone: "" };
+        if (kind === "antigravity") return { mark: "✧", tone: "gemini" };
         if (/claude|anthropic/i.test(hay)) return { mark: "✶", tone: "claude" };
         if (/grok|xai/i.test(hay)) return { mark: "✦", tone: "grok" };
         if (/gpt|openai|codex/i.test(hay)) return { mark: "◎", tone: "openai" };
@@ -6665,7 +6666,7 @@
         const hit = allModels().find(
           (row) => row.provider === ref.provider && row.model === ref.model,
         );
-        if (!hit || hit.kind === "commandcode") return null;
+        if (!hit || hit.kind === "commandcode" || hit.kind === "antigravity") return null;
         return hit.reasoning || null;
       }
       function effortChoices(spec) {
@@ -6872,7 +6873,7 @@
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
           );
-          if (!hit || hit.kind === "commandcode") return null;
+          if (!hit || hit.kind === "commandcode" || hit.kind === "antigravity") return null;
           return hit.reasoning || null;
         })();
         const reason = clampEffort(

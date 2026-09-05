@@ -93,6 +93,15 @@ import {
   resolveCommandCodeAuth,
 } from "./commandcode.ts";
 import { completeCommandCodeGenerate } from "./commandcode-generate.ts";
+import {
+  ANTIGRAVITY_PICKER_ID,
+  ANTIGRAVITY_DEFAULT_MODEL,
+  antigravityStatus,
+  isAntigravityProvider,
+  isAgyReady,
+  routeId,
+} from "./antigravity.ts";
+import { completeAntigravity } from "./antigravity-generate.ts";
 
 export { isWebBridgeTarget };
 
@@ -388,6 +397,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     liveOrFloorModels(dataDir),
   );
   const commandCode = commandCodeStatus(dataDir, env);
+  const antigravity = antigravityStatus(dataDir);
   const freebuffShown = shownIdsOf(file, FREEBUFF_CHAT_PICKER_ID);
   const webBridges = [
     {
@@ -434,6 +444,16 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ),
     },
     {
+      id: ANTIGRAVITY_PICKER_ID,
+      name: "Antigravity",
+      kind: "antigravity" as const,
+      ready: antigravity.ready,
+      models: filterShownModels(
+        antigravity.catalog,
+        shownIdsOf(file, ANTIGRAVITY_PICKER_ID),
+      ),
+    },
+    {
       id: FREEBUFF_CHAT_PICKER_ID,
       name: "Freebuff Chat",
       kind: "web-bridge" as const,
@@ -454,6 +474,11 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ...commandCode,
       shownIds: shownIdsOf(file, COMMANDCODE_PICKER_ID),
       models: filterShownModels(commandCode.catalog, shownIdsOf(file, COMMANDCODE_PICKER_ID)),
+    },
+    antigravity: {
+      ...antigravity,
+      shownIds: shownIdsOf(file, ANTIGRAVITY_PICKER_ID),
+      models: filterShownModels(antigravity.catalog, shownIdsOf(file, ANTIGRAVITY_PICKER_ID)),
     },
     webBridges,
     picker,
@@ -477,7 +502,7 @@ export type LlmTarget = {
   api: LlmApi;
   headers?: Record<string, string>;
   accountId?: string;
-  transport?: "http" | "oauth" | "web-bridge" | "commandcode";
+  transport?: "http" | "oauth" | "web-bridge" | "commandcode" | "antigravity";
   sessionReady?: boolean;
   fetch?: typeof fetch;
 };
@@ -551,6 +576,22 @@ export function resolveLlm(
         sessionReady: sessionUsable(dataDir),
       };
     }
+    if (isAntigravityProvider(id) || isAntigravityProvider(providerId)) {
+      if (!isChatRole(role)) return null;
+      if (!isAgyReady()) return null;
+      const model =
+        modelId ||
+        antigravityStatus(dataDir).models[0]?.id ||
+        ANTIGRAVITY_DEFAULT_MODEL;
+      return {
+        providerId: ANTIGRAVITY_PICKER_ID,
+        model: routeId(model),
+        baseUrl: "agy",
+        apiKey: "agy",
+        api: "openai-completions",
+        transport: "antigravity",
+      };
+    }
     if (isCommandCodeProvider(id) || isCommandCodeProvider(providerId)) {
       const auth = resolveCommandCodeAuth(dataDir, env);
       if (!auth.token) return null;
@@ -583,6 +624,7 @@ export function resolveLlm(
     };
   };
   if (selected?.provider) {
+    if (isAntigravityProvider(selected.provider) && !isAgyReady()) return null;
     const hit = tryProvider(selected.provider, selected.model, "selected");
     if (hit) return hit;
   }
@@ -743,10 +785,11 @@ export async function llmComplete(input: {
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
-    if (target.transport === "commandcode") {
+    if (target.transport === "commandcode" || target.transport === "antigravity") {
       const message = error instanceof Error ? error.message : String(error);
+      const label = target.transport === "commandcode" ? "Command Code" : "Antigravity";
       return {
-        text: `模型請求失敗：Command Code: ${message}`,
+        text: `模型請求失敗：${label}: ${message}`,
         provider: target.providerId,
         model: target.model,
         traces: [],
@@ -844,6 +887,14 @@ export async function dispatchComplete(
   ctx: ToolContext,
   effort?: string,
 ): Promise<DispatchResult | null> {
+  if (target.transport === "antigravity") {
+    return completeAntigravity({
+      model: target.model,
+      system,
+      messages,
+      ctx,
+    });
+  }
   if (target.transport === "commandcode") {
     return completeCommandCode(target, system, messages, temperature, tools, ctx, effort);
   }
