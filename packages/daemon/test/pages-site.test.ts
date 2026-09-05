@@ -350,6 +350,8 @@ test("GitHub Pages demo is a fixture, not a live daemon", () => {
   assert.match(html, /name="description" content="[^"]*, schedule/);
   assert.match(html, /"faq\.q5"/);
   assert.match(html, /<tr><td>Schedule<\/td><td data-i18n-html="td\.cron">/);
+  assert.match(html, /pause, resume, test run/);
+  assert.match(html, /pause, resume, and a test run that returns to that hall/);
   assert.doesNotMatch(html, /property="og:image"/);
   assert.doesNotMatch(html, /name="twitter:site"/);
   assert.doesNotMatch(html, /twitter:creator/);
@@ -500,6 +502,37 @@ test("Pages fixture switches zh-CN / zh-TW / en / ja in the DOM", () => {
   for (const loc of locales) {
     assert.deepEqual(Object.keys(I18N[loc]).sort(), keys, loc);
     assert.equal(I18N[loc]["banner.title"], "Interactive preview — no model calls.");
+  }
+
+  const faqNeed: Record<string, { a5: string[]; row: string[]; forbid: string[] }> = {
+    en: {
+      a5: ["every 2h", "in 30m", "0 9 * * *", "pause, resume, and a test run that returns to that hall", "A run cannot schedule another job"],
+      row: ["60s", "pause, resume, test run"],
+      forbid: ["每天", "每日", "毎日"],
+    },
+    "zh-TW": {
+      a5: ["每10分鐘", "10分鐘後", "每天9點", "in 30m", "暫停、恢復，測試執行會回到那個大廳", "排程執行不能再排新的"],
+      row: ["60 秒", "暫停、恢復、測試執行"],
+      forbid: [],
+    },
+    "zh-CN": {
+      a5: ["每10分钟", "10分钟后", "每天9点", "in 30m", "暂停、恢复，测试执行会回到那个大厅", "排程执行不能再排新的"],
+      row: ["60 秒", "暂停、恢复、测试执行"],
+      forbid: [],
+    },
+    ja: {
+      a5: ["in 30m", "every 2h", "0 9 * * *", "一時停止・再開、テスト実行", "cron 実行から cron は作れない"],
+      row: ["60秒", "一時停止・再開・テスト実行"],
+      forbid: ["每天", "每日", "毎日"],
+    },
+  };
+  for (const loc of ["en", "zh-TW", "zh-CN", "ja"] as const) {
+    const dict = I18N[loc] as Record<string, string>;
+    const need = faqNeed[loc];
+    for (const needle of need.a5) assert.ok(dict["faq.a5"].includes(needle), `${loc} faq.a5 has ${needle}`);
+    for (const bad of need.forbid) assert.ok(!dict["faq.a5"].includes(bad), `${loc} faq.a5 lacks ${bad}`);
+    for (const needle of need.row) assert.ok(dict["td.cron"].includes(needle), `${loc} td.cron has ${needle}`);
+    for (const bad of need.forbid) assert.ok(!dict["td.cron"].includes(bad), `${loc} td.cron lacks ${bad}`);
   }
 });
 

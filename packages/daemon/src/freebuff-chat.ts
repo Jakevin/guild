@@ -47,6 +47,7 @@ const DEFAULT_FREEBUFF_TOOL_NAMES = [
   "browser",
   "cronjob",
   "image_gen",
+  "tts",
 ] as const;
 
 export type FreebuffToolCall = {

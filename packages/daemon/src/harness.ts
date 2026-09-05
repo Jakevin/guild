@@ -156,6 +156,7 @@ export function mutatingTool(name: string): boolean {
     name === "write" ||
     name === "spawn" ||
     name === "image_gen" ||
+    name === "tts" ||
     name === "browser" ||
     name.startsWith("mcp__")
   );
@@ -252,6 +253,13 @@ export function gateTool(
   if (name === "image_gen") {
     return {
       text: "sandbox=workspace_write refused image_gen (writes under GUILD_HOME); use full_access",
+      isError: true,
+    };
+  }
+
+  if (name === "tts") {
+    return {
+      text: "sandbox=workspace_write refused tts (writes under GUILD_HOME); use full_access",
       isError: true,
     };
   }

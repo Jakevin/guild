@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -70,6 +70,17 @@ test("ChatGPT Codex and Copilot reasoning omit temperature", () => {
     false,
   );
   assert.equal(oauthOmitsTemperature({ provider: "xai" }), false);
+});
+
+test("OAuth llmComplete rethrows AbortError instead of formatting a timeout", () => {
+  const src = readFileSync(new URL("../src/llm.ts", import.meta.url), "utf8");
+  const oauthArm = src.slice(src.indexOf("OAUTH_PICKER_IDS.has(target.providerId)"));
+  const catchArm = oauthArm.slice(oauthArm.indexOf("} catch (error) {"));
+  assert.match(
+    catchArm.slice(0, 280),
+    /if \(error instanceof Error && error.name === "AbortError"\) throw error/,
+  );
+  assert.match(formatOAuthError("xai", "aborted"), /逾時/);
 });
 
 test("formatOAuthError does not call a timeout a dead subscription", () => {

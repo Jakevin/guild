@@ -159,6 +159,22 @@ const BASE_TOOLS: Tool[] = [
     }),
   },
   {
+    name: "tts",
+    description:
+      "Speak text aloud (Microsoft Edge Read Aloud). Returns a local mp3 and markdown the user can play in chat. Use this for example sentences, reading practice, or any short spoken line. voice aliases: ja/nanami, keita, zh/zh-tw, zh-cn, en. Japanese kana picks Nanami; Hanzi picks zh-TW.",
+    parameters: Type.Object({
+      text: Type.String({
+        description: "Text to speak. Max 2000 characters.",
+      }),
+      voice: Type.Optional(
+        Type.String({
+          description:
+            "Voice id (ja-JP-NanamiNeural) or alias: ja, nanami, keita, zh, zh-cn, en. Default from the text.",
+        }),
+      ),
+    }),
+  },
+  {
     name: "browser",
     description:
       "Drive a local Chromium-family browser via CDP. Default snapshots the user's active Chrome profile (Local State last_used; cookies/logins via sqlite backup) into ~/.guild/browser-profile/chrome and drives that copy — never the live profile. Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway profile (logged into nothing); off deletes the snapshot. Actions: open, snapshot, click, type, press, screenshot, close.",
@@ -194,14 +210,17 @@ export function guildTools(
     );
   } else if (sandbox === "workspace_write") {
     tools = tools.filter(
-      (tool) => tool.name !== "image_gen" && tool.name !== "browser",
+      (tool) =>
+        tool.name !== "image_gen" &&
+        tool.name !== "tts" &&
+        tool.name !== "browser",
     );
   }
   if (!ctx.cronRun) {
     tools.push({
       name: "cronjob",
       description:
-        "Schedule a later hall turn (Hermes cronjob). Fresh @handle turn with a self-contained prompt. Actions: create, list, pause, resume, run, remove, update. schedule may be natural language (每10分鐘, 10分鐘後, 每天9點, in 30 minutes, every 2h, 0 9 * * *, ISO). Split when vs task: schedule is the time phrase, prompt is the work. bot_id defaults to this seat. Do not create cron jobs from a cron run.",
+        "Schedule a later turn. scope=channel is a 委託 job (bot must be on that hall); scope=bot is independent and never posts to chat. delivery=hall mixes into the hall; delivery=sheet keeps replies on the schedule page. Actions: create, list, pause, resume, run, remove, update. schedule is the time phrase; prompt is the work. bot_id defaults to this seat. Do not create cron jobs from a cron run.",
       parameters: Type.Object({
         action: Type.String({
           description: "create | list | pause | resume | run | remove | update",
@@ -219,7 +238,15 @@ export function guildTools(
         job_id: Type.Optional(Type.String({ description: "Job id or name" })),
         bot_id: Type.Optional(Type.String({ description: "Seat to run" })),
         room_id: Type.Optional(
-          Type.String({ description: "Room id. Defaults to this hall." }),
+          Type.String({ description: "Hall id for a 委託 job. Defaults to this hall." }),
+        ),
+        scope: Type.Optional(
+          Type.String({ description: "channel (委託) or bot (independent)" }),
+        ),
+        delivery: Type.Optional(
+          Type.String({
+            description: "hall (mix into chat) or sheet (only the schedule page)",
+          }),
         ),
       }),
     });
@@ -420,6 +447,19 @@ function openaiParameters(name: string): {
       required: ["prompt"],
     };
   }
+  if (name === "tts") {
+    return {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Text to speak" },
+        voice: {
+          type: "string",
+          description: "Voice id or alias: ja, nanami, keita, zh, zh-cn, en",
+        },
+      },
+      required: ["text"],
+    };
+  }
   if (name === "cronjob") {
     return {
       type: "object",
@@ -431,6 +471,11 @@ function openaiParameters(name: string): {
         job_id: { type: "string" },
         bot_id: { type: "string" },
         room_id: { type: "string" },
+        scope: { type: "string", description: "channel (委託) or bot (independent)" },
+        delivery: {
+          type: "string",
+          description: "hall (mix into chat) or sheet (only the schedule page)",
+        },
       },
       required: ["action"],
     };
@@ -484,6 +529,7 @@ export const BUILTIN_TOOL_NAMES = [
   "spawn",
   "read_spawn",
   "image_gen",
+  "tts",
   "browser",
   "cronjob",
 ] as const;
@@ -559,6 +605,15 @@ export async function builtinExecute(
           typeof args.aspect_ratio === "string" ? args.aspect_ratio : "",
         dataDir: ctx.dataDir,
         env: ctx.env,
+      });
+    }
+    if (name === "tts") {
+      const { generateSpeech } = await import("./tts.ts");
+      return generateSpeech({
+        text: asString(args.text),
+        voice: typeof args.voice === "string" ? args.voice : "",
+        dataDir: ctx.dataDir,
+        signal: ctx.signal,
       });
     }
     if (name === "cronjob") {
@@ -872,11 +927,12 @@ export function nextToolRound(round: number): ToolRoundPhase {
 }
 
 export const TOOL_SYSTEM = `You ARE already running on the user's local computer (Guild, same design as Pi / DeepSeek Harness).
-Tools: run, read, write, list, skill, spawn, image_gen, browser, cronjob, plus any connected MCP tools (names start with mcp__).
+Tools: run, read, write, list, skill, spawn, image_gen, tts, browser, cronjob, plus any connected MCP tools (names start with mcp__).
 You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
+To speak text aloud (example sentences, 聽力, a short line), call tts with text and an optional voice (ja/nanami, keita, zh, zh-cn, en). After it returns, include the markdown audio link in your reply.
 To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default is a Hermes-shaped snapshot of the user's last_used Chrome profile (never the live profile). Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway empty profile.
 You stay coordinator. Spawn is the specialist, not a last resort (Devin run_subagent / Pi subagent / Codex spawn_agent). Call spawn for a survey (explorer / luna-explore), a critique (reviewer), or a bounded patch (worker / luna-general) instead of stuffing that work into this turn with list/read/run. Do not spawn for one known file or a one-line change. Independent surveys: spawn with background=true, keep working, then read_spawn {agent_id, block:true} before the final reply. Or several spawn calls / tasks: [{title, task, profile}] this round. Task must be self-contained (child has a fresh context). Do not let a child commit, push, or decide architecture. A read_only seat can still spawn; the child stays read_only. Subagents cannot spawn children.
 Independent tool calls in one round also run in parallel — fire several reads/searches together.

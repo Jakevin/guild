@@ -349,3 +349,104 @@ test("POST /cron round-trips and DELETE removes", async () => {
     store.close();
   }
 });
+
+test("channel jobs default to hall; sheet fire stays off the quest", async () => {
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const store = new GuildStore(dataDir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    assert.ok(infra);
+    const room = store.createChannel("ops");
+    store.addMember(room.id, infra.id);
+    const hall = createCronJob(store, {
+      roomId: room.id,
+      botId: infra.id,
+      prompt: "Ping hall",
+      schedule: "in 30m",
+    });
+    assert.equal(hall.scope, "channel");
+    assert.equal(hall.delivery, "hall");
+    const sheet = createCronJob(store, {
+      roomId: room.id,
+      botId: infra.id,
+      prompt: "Ping sheet",
+      schedule: "in 30m",
+      delivery: "sheet",
+      name: "quiet",
+    });
+    assert.equal(sheet.delivery, "sheet");
+    assert.ok(sheet.sessionRoomId);
+    assert.equal(store.listChannels().some((item) => item.kind === "cron"), false);
+    store.setLiveTurn(room.id, {
+      botId: infra.id,
+      thinking: "busy",
+      steps: [],
+      startedAt: new Date().toISOString(),
+    });
+    const skippedHall = await fireCronJob(store, hall.id, {});
+    assert.equal(skippedHall.skipped, "seat busy");
+    const reply = {
+      body: "sheet ok",
+      parts: [],
+      source: "llm" as const,
+      system: "",
+    };
+    const fired = await fireCronJob(
+      store,
+      sheet.id,
+      {},
+      { turn: async () => reply },
+      { force: true },
+    );
+    assert.equal(fired.ok, true);
+    assert.equal(store.listMessages(room.id).length, 0);
+    const done = store.getCronJob(sheet.id);
+    assert.equal(done.paused, true);
+    assert.equal(done.lastStatus, "ok");
+    const session = store.getRoom(store.cronSessionRoomId(sheet.id));
+    assert.equal(session?.kind, "cron");
+    assert.ok(store.listMessages(session.id).length >= 2);
+  } finally {
+    store.close();
+  }
+});
+
+test("independent bot jobs have no hall room and never list as a channel", async () => {
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const store = new GuildStore(dataDir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    assert.ok(infra);
+    const job = createCronJob(store, {
+      botId: infra.id,
+      prompt: "Check https://example.com",
+      schedule: "every 1h",
+      name: "uptime",
+      scope: "bot",
+    });
+    assert.equal(job.scope, "bot");
+    assert.equal(job.delivery, "sheet");
+    assert.equal(publicCronJob(job).roomId, null);
+    assert.equal(store.listChannels().some((ch) => ch.id === job.roomId), false);
+    const session = store.getRoom(job.roomId);
+    assert.equal(session?.kind, "cron");
+    const reply = {
+      body: "up",
+      parts: [],
+      source: "llm" as const,
+      system: "",
+    };
+    const fired = await fireCronJob(
+      store,
+      job.id,
+      {},
+      { turn: async () => reply },
+    );
+    assert.equal(fired.ok, true);
+    assert.ok(store.listMessages(job.roomId).some((msg) => msg.body.includes("up")));
+  } finally {
+    store.close();
+  }
+});

@@ -31,6 +31,7 @@ import {
   importSkills,
   mergeModelsFile,
   publicModels,
+  setShownModels,
   refreshOpenCodeFreeCatalog,
   refreshReasoningCatalog,
   listBench,
@@ -43,7 +44,7 @@ import {
   deleteRoomMessage,
   listRoomMessages,
   listRoomTrajectory,
-  openDm,
+  resolveDm,
   parseAttachments,
   postUserMessage,
   removeChannelMember,
@@ -71,6 +72,17 @@ import {
   pollFreebuffLogin,
   startFreebuffLogin,
 } from "./freebuff-bridge.ts";
+import {
+  clearCommandCodeState,
+  commandCodeStatus,
+  refreshCommandCodeCatalog,
+  saveCommandCodeApiKey,
+} from "./commandcode.ts";
+import {
+  cancelCommandCodeLogin,
+  pollCommandCodeLogin,
+  startCommandCodeLogin,
+} from "./commandcode-login.ts";
 import { hostGit, hostList, hostRead, hostTree } from "./host-browse.ts";
 import { listHostSkills } from "./host-skills.ts";
 import { listHostAgents } from "./host-agents.ts";
@@ -492,7 +504,9 @@ export async function handleRequest(
           ? "image/webp"
           : name.endsWith(".gif")
             ? "image/gif"
-            : "image/jpeg";
+            : name.endsWith(".mp3")
+              ? "audio/mpeg"
+              : "image/jpeg";
       const bytes = readFileSync(file);
       res.writeHead(200, {
         "content-type": type,
@@ -543,6 +557,8 @@ export async function handleRequest(
         prompt: str(body, "prompt"),
         schedule: str(body, "schedule"),
         name: str(body, "name"),
+        scope: str(body, "scope") === "bot" ? "bot" : "channel",
+        delivery: str(body, "delivery") === "sheet" ? "sheet" : "hall",
       });
       json(res, 201, publicCronJob(job));
       return;
@@ -565,9 +581,15 @@ export async function handleRequest(
     if (cronOne && method === "GET") {
       const id = decodeURIComponent(cronOne[1]);
       const job = store.getCronJob(id);
+      const pub = publicCronJob(job);
+      const sessionId =
+        pub.delivery === "sheet"
+          ? job.sessionRoomId || store.cronSessionRoomId(job.id)
+          : "";
       json(res, 200, {
-        ...publicCronJob(job),
+        ...pub,
         runs: store.listCronRuns(id).map(publicCronRun),
+        messages: sessionId ? store.listMessages(sessionId) : [],
       });
       return;
     }
@@ -578,10 +600,22 @@ export async function handleRequest(
         name: str(body, "name") || undefined,
         prompt: str(body, "prompt") || undefined,
         schedule: str(body, "schedule") || undefined,
+        delivery:
+          str(body, "delivery") === "sheet"
+            ? "sheet"
+            : str(body, "delivery") === "hall"
+              ? "hall"
+              : undefined,
       });
+      const pub = publicCronJob(job);
+      const sessionId =
+        pub.delivery === "sheet"
+          ? job.sessionRoomId || store.cronSessionRoomId(job.id)
+          : "";
       json(res, 200, {
-        ...publicCronJob(job),
+        ...pub,
         runs: store.listCronRuns(id).map(publicCronRun),
+        messages: sessionId ? store.listMessages(sessionId) : [],
       });
       return;
     }
@@ -790,7 +824,7 @@ export async function handleRequest(
       /^\/dms\/([^/]+)\/messages\/([^/]+)\/retry$/,
     );
     if (retryDm && method === "POST") {
-      const room = openDm(store, retryDm[1]);
+      const room = resolveDm(store, retryDm[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -815,7 +849,7 @@ export async function handleRequest(
     }
     const dmTraj = path.match(/^\/dms\/([^/]+)\/trajectory$/);
     if (dmTraj && method === "GET") {
-      const room = openDm(store, dmTraj[1]);
+      const room = resolveDm(store, dmTraj[1]);
       json(res, 200, listRoomTrajectory(store, room.id));
       return;
     }
@@ -827,7 +861,7 @@ export async function handleRequest(
     }
     const dmLive = path.match(/^\/dms\/([^/]+)\/live$/);
     if (dmLive && method === "GET") {
-      const room = openDm(store, decodeURIComponent(dmLive[1]));
+      const room = resolveDm(store, decodeURIComponent(dmLive[1]));
       json(res, 200, getLiveTurn(store, room.id));
       return;
     }
@@ -848,7 +882,7 @@ export async function handleRequest(
     }
     const dmAbort = path.match(/^\/dms\/([^/]+)\/abort$/);
     if (dmAbort && method === "POST") {
-      const room = openDm(store, decodeURIComponent(dmAbort[1]));
+      const room = resolveDm(store, decodeURIComponent(dmAbort[1]));
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -874,7 +908,7 @@ export async function handleRequest(
     }
     const dmPause = path.match(/^\/dms\/([^/]+)\/pause$/);
     if (dmPause && method === "POST") {
-      const room = openDm(store, decodeURIComponent(dmPause[1]));
+      const room = resolveDm(store, decodeURIComponent(dmPause[1]));
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -902,7 +936,7 @@ export async function handleRequest(
     }
     const dmContinue = path.match(/^\/dms\/([^/]+)\/continue$/);
     if (dmContinue && method === "POST") {
-      const room = openDm(store, decodeURIComponent(dmContinue[1]));
+      const room = resolveDm(store, decodeURIComponent(dmContinue[1]));
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -937,7 +971,7 @@ export async function handleRequest(
     }
     const dmSteer = path.match(/^\/dms\/([^/]+)\/steer$/);
     if (dmSteer && method === "POST") {
-      const room = openDm(store, decodeURIComponent(dmSteer[1]));
+      const room = resolveDm(store, decodeURIComponent(dmSteer[1]));
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -972,7 +1006,7 @@ export async function handleRequest(
 
     const dmMessageOne = path.match(/^\/dms\/([^/]+)\/messages\/([^/]+)$/);
     if (dmMessageOne && method === "DELETE") {
-      const room = openDm(store, decodeURIComponent(dmMessageOne[1]));
+      const room = resolveDm(store, decodeURIComponent(dmMessageOne[1]));
       json(
         res,
         200,
@@ -1007,12 +1041,12 @@ export async function handleRequest(
 
     const dmMessages = path.match(/^\/dms\/([^/]+)\/messages$/);
     if (dmMessages && method === "GET") {
-      const room = openDm(store, dmMessages[1]);
+      const room = resolveDm(store, dmMessages[1]);
       json(res, 200, listRoomMessages(store, room.id));
       return;
     }
     if (dmMessages && method === "POST") {
-      const room = openDm(store, dmMessages[1]);
+      const room = resolveDm(store, dmMessages[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1167,6 +1201,7 @@ export async function handleRequest(
     if (method === "GET" && path === "/settings/models") {
       await refreshCopilotCatalog(store.dataDir);
       await refreshOpenCodeFreeCatalog(store.dataDir);
+      await refreshCommandCodeCatalog(store.dataDir, env).catch(() => {});
       await refreshReasoningCatalog().catch(() => {});
       json(res, 200, modelsPayload(store.dataDir, extras, env));
       return;
@@ -1299,6 +1334,63 @@ export async function handleRequest(
         return;
       }
       json(res, 200, await doctorFreebuff(store.dataDir));
+      return;
+    }
+
+    if (method === "GET" && path === "/settings/commandcode") {
+      json(res, 200, pollCommandCodeLogin(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/commandcode/login") {
+      json(res, 200, await startCommandCodeLogin(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/commandcode/poll") {
+      json(res, 200, pollCommandCodeLogin(store.dataDir));
+      return;
+    }
+    if (method === "POST" && path === "/settings/commandcode/logout") {
+      cancelCommandCodeLogin(store.dataDir);
+      clearCommandCodeState(store.dataDir);
+      json(res, 200, commandCodeStatus(store.dataDir, env));
+      return;
+    }
+    if (method === "POST" && path === "/settings/commandcode/key") {
+      const body = asRecord(await readJson(req));
+      const status = await saveCommandCodeApiKey(store.dataDir, str(body, "apiKey"));
+      await refreshCommandCodeCatalog(store.dataDir, env, true).catch(() => {});
+      json(res, 200, { ...status, models: commandCodeStatus(store.dataDir, env).models });
+      return;
+    }
+    if (method === "PATCH" && path === "/settings/shown") {
+      const body = asRecord(await readJson(req));
+      const id = str(body, "id");
+      if (!id) {
+        json(res, 400, { error: "id required" });
+        return;
+      }
+      const raw = body.shownIds;
+      const shownIds = raw == null
+        ? null
+        : Array.isArray(raw)
+          ? raw
+              .filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+              .map((item) => item.trim())
+          : undefined;
+      if (shownIds === undefined) {
+        json(res, 400, { error: "shownIds required" });
+        return;
+      }
+      setShownModels(store.dataDir, id, shownIds);
+      json(res, 200, modelsPayload(store.dataDir, extras, env));
+      return;
+    }
+    if (method === "POST" && path === "/settings/commandcode/sync") {
+      const models = await refreshCommandCodeCatalog(store.dataDir, env, true);
+      json(res, 200, {
+        ...modelsPayload(store.dataDir, extras, env),
+        synced: models.length,
+      });
       return;
     }
 

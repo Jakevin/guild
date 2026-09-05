@@ -46,6 +46,19 @@ test("renderMarkdown shows generated images", () => {
   assert.doesNotMatch(html, /src="javascript:/);
 });
 
+test("renderMarkdown turns generated mp3 links into audio players", () => {
+  const html = renderMarkdown(
+    "語音\n\n[こんにちは](/generated/abc.mp3)\n\n![例](/generated/def.mp3)",
+  );
+  assert.match(html, /class="md-audio"/);
+  assert.match(html, /src="\/generated\/abc.mp3"/);
+  assert.match(html, /src="\/generated\/def.mp3"/);
+  assert.match(html, /こんにちは/);
+  assert.doesNotMatch(html, /<img[^>]+src="\/generated\/def.mp3"/);
+  const blocked = renderMarkdown("[x](/generated/../oauth.mp3)");
+  assert.doesNotMatch(blocked, /<audio/);
+});
+
 test("renderMarkdown rewrites local /tmp screenshots through /local", () => {
   const html = renderMarkdown(
     "![紙面 hero](/tmp/kami-paper/shots/en-1280-hero.png)\n\n![file](file:///tmp/kami-paper/shots/zh-TW-1280-hero.png)",
@@ -198,7 +211,7 @@ test("a pipe line is not a table without a separator", () => {
 test("chat page loads the shipped markdown renderer", async () => {
   const { readFileSync } = await import("node:fs");
   const home = readFileSync(CHAT_HTML, "utf8");
-  assert.match(home, /src="\/md\.js"/);
+  assert.match(home, /src="\/md\.js(\?v=[^"]+)?"/);
   assert.match(home, /assistant-text md/);
   assert.match(home, /data-fence-copy/);
   assert.match(home, /insertDraft/);
@@ -206,7 +219,7 @@ test("chat page loads the shipped markdown renderer", async () => {
   assert.match(home, /putHtmlFrames/);
   assert.match(home, /dropPending/);
   assert.match(home, /htmlPreviewSrcdoc/);
-  assert.match(home, /chat\.css\?v=cron-sheet/);
+  assert.match(home, /chat\.css\?v=handoff/);
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
   const { server, origin } = await listenApp(dataDir, {});
   try {

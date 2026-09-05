@@ -957,7 +957,8 @@ footer.foot {
 .page { padding-top: 48px; }
 
 .hero-tokens i { font-style: normal; color: var(--stone); }
-.hero h1 { font-size: 56px; line-height: 1.12; max-width: 18ch; }
+.hero h1 { font-size: 56px; line-height: 1.2; }
+:lang(zh) .hero h1, :lang(ja) .hero h1 { line-height: 1.4; }
 .hero .tagline code,
 .lead code,
 .note code,
@@ -1474,7 +1475,7 @@ pnpm dev</pre>
         <tr><td>Origin</td><td data-i18n-html="td.origin">Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.</td></tr>
         <tr><td>Host files</td><td data-i18n-html="td.host">Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, credential files. Home is still browsable.</td></tr>
         <tr><td>MCP env</td><td data-i18n-html="td.env">HTTP shows keys; values are <code>***</code>. The child still gets the real env.</td></tr>
-        <tr><td>Schedule</td><td data-i18n-html="td.cron">Host ticker. <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code>.</td></tr>
+        <tr><td>Schedule</td><td data-i18n-html="td.cron">Host ticker (60s). <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code> — pause, resume, test run.</td></tr>
       </tbody>
     </table>
     <p class="note" data-i18n-html="note.security">Read <a href="https://github.com/Jakevin/guild/blob/main/SECURITY.md">SECURITY.md</a> before you point this at a machine you care about.</p>
@@ -1504,7 +1505,7 @@ pnpm dev</pre>
       </details>
       <details class="faq-pair">
         <summary data-i18n="faq.q5">Can I schedule a later hall turn?</summary>
-        <p data-i18n-html="faq.a5">Yes. <code>cronjob</code> from a seat, or the sidebar. Each job has a sheet. Test run goes back to that hall.</p>
+        <p data-i18n-html="faq.a5">Yes. Ask a seat, or open the sidebar sheet. Times read like speech — every 2h, in 30m, <code>0 9 * * *</code> — and each job gets a sheet with pause, resume, and a test run that returns to that hall. A run cannot schedule another job.</p>
       </details>
       <p class="faq-tail" data-i18n="faq.tail">Free. Open source under the MIT license.</p>
     </div>
@@ -1598,7 +1599,7 @@ pnpm dev</pre>
         "td.origin": "Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.",
         "td.host": "Denylist: <code>oauth.json</code>, <code>models.json</code>, <code>mcp.json</code>, credential files. Home is still browsable.",
         "td.env": "HTTP shows keys; values are <code>***</code>. The child still gets the real env.",
-        "td.cron": "Host ticker. <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code>.",
+        "td.cron": "Host ticker (60s). <code>cronjob</code> tool. Per-job sheet at <code>#s/&lt;id&gt;</code> — pause, resume, test run.",
         "note.security": "Read <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> before you point this at a machine you care about.",
         "footer": "Guild is not a task board, not a tavern, not a party sortie. A channel is an open contract. MIT.",
         "seat.infra": "Infra",
@@ -1628,7 +1629,7 @@ pnpm dev</pre>
         "faq.q4": "What can <code>run</code> and <code>write</code> do?",
         "faq.a4": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.",
         "faq.q5": "Can I schedule a later hall turn?",
-        "faq.a5": "Yes. <code>cronjob</code> from a seat, or the sidebar. Each job has a sheet. Test run goes back to that hall.",
+        "faq.a5": "Yes. Ask a seat, or open the sidebar sheet. Times read like speech — every 2h, in 30m, <code>0 9 * * *</code> — and each job gets a sheet with pause, resume, and a test run that returns to that hall. A run cannot schedule another job.",
         "faq.tail": "Free. Open source under the MIT license."
       },
       "zh-TW": {
@@ -1696,7 +1697,7 @@ pnpm dev</pre>
         "td.origin": "外站 <code>Origin</code> 拒絕。沒有 Origin 仍放行。不是登入。",
         "td.host": "黑名單：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、憑證檔。家目錄仍可瀏覽。",
         "td.env": "HTTP 看得到鍵，值是 <code>***</code>。子行程仍拿到真 env。",
-        "td.cron": "本機 ticker。<code>cronjob</code> 工具。每筆排程有自己的頁 <code>#s/&lt;id&gt;</code>。",
+        "td.cron": "本機 ticker（60 秒一跳）。<code>cronjob</code> 工具。每筆排程有自己的頁 <code>#s/&lt;id&gt;</code>——暫停、恢復、測試執行。",
         "note.security": "對你在意的機器動手之前，先讀 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
         "footer": "Guild 不是任務板，不是酒館，不是小隊出征。頻道是一張沒結案的委託。MIT.",
         "seat.infra": "基建",
@@ -1726,7 +1727,7 @@ pnpm dev</pre>
         "faq.q4": "<code>run</code> 與 <code>write</code> 會做什麼？",
         "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
         "faq.q5": "之後的大廳回合要怎麼排？",
-        "faq.a5": "用 <code>cronjob</code>，或從側欄打開一筆。每筆有自己的頁。測試執行會回到那個大廳。",
+        "faq.a5": "可以。點名一席用 <code>cronjob</code>，或從側欄開一筆。時間照說話寫：每10分鐘、10分鐘後、每天9點、in 30m。每筆有自己的頁——暫停、恢復，測試執行會回到那個大廳。排程執行不能再排新的。",
         "faq.tail": "免費。MIT 開源。"
       },
       "zh-CN": {
@@ -1794,7 +1795,7 @@ pnpm dev</pre>
         "td.origin": "外站 <code>Origin</code> 拒绝。没有 Origin 仍放行。不是登录。",
         "td.host": "黑名单：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、凭证档。家目录仍可浏览。",
         "td.env": "HTTP 看得到键，值是 <code>***</code>。子进程仍拿到真 env。",
-        "td.cron": "本机 ticker。<code>cronjob</code> 工具。每笔排程有自己的页 <code>#s/&lt;id&gt;</code>。",
+        "td.cron": "本机 ticker（60 秒一跳）。<code>cronjob</code> 工具。每笔排程有自己的页 <code>#s/&lt;id&gt;</code>——暂停、恢复、测试执行。",
         "note.security": "对你在意的机器动手之前，先读 <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a>。",
         "footer": "Guild 不是任务板，不是酒馆，不是小队出征。频道是一张没结案的委托。MIT.",
         "seat.infra": "基建",
@@ -1824,7 +1825,7 @@ pnpm dev</pre>
         "faq.q4": "<code>run</code> 与 <code>write</code> 会做什么？",
         "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。对你在意的机器动手之前，先读 SECURITY.md。",
         "faq.q5": "之后的大厅回合要怎么排？",
-        "faq.a5": "用 <code>cronjob</code>，或从侧栏打开一笔。每笔有自己的页。测试执行会回到那个大厅。",
+        "faq.a5": "可以。点名一席用 <code>cronjob</code>，或从侧栏开一笔。时间照说话写：每10分钟、10分钟后、每天9点、in 30m。每笔有自己的页——暂停、恢复，测试执行会回到那个大厅。排程执行不能再排新的。",
         "faq.tail": "免费。MIT 开源。"
       },
       "ja": {
@@ -1892,7 +1893,7 @@ pnpm dev</pre>
         "td.origin": "外部 <code>Origin</code> は拒否。Origin なしは通す。ログインではない。",
         "td.host": "拒否リスト：<code>oauth.json</code>、<code>models.json</code>、<code>mcp.json</code>、資格情報。ホームはまだ閲覧できる。",
         "td.env": "HTTP はキーを出し、値は <code>***</code>。子プロセスは本物の env を受け取る。",
-        "td.cron": "ホスト ticker。<code>cronjob</code> ツール。ジョブごとにシート <code>#s/&lt;id&gt;</code>。",
+        "td.cron": "ホストの ticker（60秒）。<code>cronjob</code> ツール。ジョブごとにシート <code>#s/&lt;id&gt;</code> —— 一時停止・再開・テスト実行。",
         "note.security": "大事なマシンに向ける前に <a href=\"https://github.com/Jakevin/guild/blob/main/SECURITY.md\">SECURITY.md</a> を読む。",
         "footer": "Guild はタスクボードではない。酒場ではない。パーティー出撃ではない。チャンネルは結案していない依頼書だ。MIT.",
         "seat.infra": "インフラ",
@@ -1922,7 +1923,7 @@ pnpm dev</pre>
         "faq.q4": "<code>run</code> と <code>write</code> は何をする？",
         "faq.a4": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。大事なマシンに向ける前に SECURITY.md を読む。",
         "faq.q5": "あとから拠点のターンを予約できる？",
-        "faq.a5": "できる。<code>cronjob</code> かサイドバー。ジョブごとにシート。テスト実行はその拠点に戻る。",
+        "faq.a5": "できる。席に <code>cronjob</code> を頼むか、サイドバーから。時間は in 30m、every 2h、0 9 * * * のように書ける。ジョブごとにシート——一時停止・再開、テスト実行はその拠点に戻る。cron 実行から cron は作れない。",
         "faq.tail": "無料。MIT のオープンソース。"
       }
     };

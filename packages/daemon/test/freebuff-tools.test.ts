@@ -57,6 +57,7 @@ afterEach(async () => {
 
 test("image_gen is in the advertised guild_tools fence list", () => {
   assert.match(FREEBUFF_TOOL_SYSTEM, /image_gen/);
+  assert.match(FREEBUFF_TOOL_SYSTEM, /\btts\b/);
   assert.match(FREEBUFF_TOOL_SYSTEM, /```guild_tools/);
   const swapped = withFreebuffToolSystem(TOOL_SYSTEM);
   assert.match(swapped, /image_gen/);

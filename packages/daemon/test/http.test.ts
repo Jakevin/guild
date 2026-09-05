@@ -644,10 +644,16 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /id="prompt-rail"/);
   assert.match(home, /function showToast/);
   assert.match(home, /function liveTurnsFrom/);
+  assert.match(home, /function liveMessageIdHtml/);
+  assert.match(home, /live.messageId/);
+  assert.match(home, /turn-head/);
   assert.match(home, /body.bots/);
   assert.match(home, /showToast\(t\("copied"\)\)/);
   assert.match(home, /data-msg-del/);
+  assert.match(home, /id="confirm-dialog"/);
+  assert.match(home, /function askConfirm/);
   assert.match(home, /function deleteChatMessage/);
+  assert.doesNotMatch(home, /confirm\(t\("msg.deleteConfirm"\)\)/);
   const chatCss = readFileSync(
     fileURLToPath(new URL("../src/public/chat.css", import.meta.url)),
     "utf8",
@@ -667,6 +673,19 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /max-width: 760px/);
   assert.match(chatCss, /--bg:\s*#0B0E12/);
   assert.match(chatCss, /--you-text:\s*#1A2420/);
+  assert.match(
+    chatCss,
+    /\.msg\.you\.steer \.bubble \{[\s\S]*?color:\s*var\(--text\)/,
+  );
+  assert.match(
+    chatCss,
+    /\.msg\.you\.queued \.bubble \{[\s\S]*?color:\s*var\(--text\)/,
+  );
+  assert.match(chatCss, /\.stats-grid \{[\s\S]*?auto-fit/);
+  assert.match(chatCss, /\.stats-id/);
+  assert.match(chatCss, /\.assign-bar/);
+  assert.match(chatCss, /\.stats-kicker-id/);
+  assert.match(chatCss, /\.turn-head/);
   assert.match(chatCss, /--assistant:\s*#ececec/);
   assert.match(chatCss, /--signal:\s*#C9A227/);
   assert.match(chatCss, /:focus-visible/);
@@ -722,6 +741,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /Trajectory/);
   assert.match(home, /image_gen/);
   assert.match(home, /imageGen/);
+  assert.match(home, /part.name === "tts"/);
   assert.match(home, /href="\/library"/);
   assert.doesNotMatch(home, /href="\/subagents"/);
   assert.doesNotMatch(home, /href="\/mcp"/);
@@ -730,6 +750,13 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /stats-panel/);
   assert.match(home, /iconStats/);
   assert.match(home, /id="assign"/);
+  assert.match(home, /id="assign-bar"/);
+  assert.match(home, /function renderAssignBar/);
+  assert.match(home, /id="peers"/);
+  assert.match(home, /function isPeerDm/);
+  assert.doesNotMatch(home, /data-dispatch/);
+  assert.doesNotMatch(home, /function dispatchBotIds/);
+  assert.match(home, /data-copy-stat/);
   assert.match(home, /function mentionAt/);
   assert.match(home, /function mentionChoices/);
   assert.match(home, /function slashAt/);
@@ -1021,6 +1048,8 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /members-btn/);
     assert.match(html, /members-pop/);
     assert.match(html, /密談/);
+    assert.match(html, /交辦/);
+    assert.match(html, /id="peers"/);
     assert.match(html, /function formatUpdated/);
     assert.match(html, /function formatMsgClock/);
     assert.match(html, /function formatMsgWhen/);
@@ -1198,12 +1227,18 @@ test("GET /local serves /tmp images and 404s secrets", async () => {
 });
 
 test("generated images 404 unknown and reject path traversal", async () => {
-  const { server, origin } = await listen(tempHome());
+  const home = tempHome();
+  const { server, origin } = await listen(home);
   try {
     const missing = await fetch(`${origin}/generated/nope.jpg`);
     assert.equal(missing.status, 404);
     const traversal = await fetch(`${origin}/generated/../oauth.json`);
     assert.equal(traversal.status, 404);
+    mkdirSync(join(home, "generated"), { recursive: true });
+    writeFileSync(join(home, "generated", "say.mp3"), Buffer.from("ID3"));
+    const audio = await fetch(`${origin}/generated/say.mp3`);
+    assert.equal(audio.status, 200);
+    assert.equal(audio.headers.get("content-type"), "audio/mpeg");
   } finally {
     await closeServer(server);
   }
@@ -1737,6 +1772,7 @@ test("GET live returns in-memory think/tool steps", async () => {
       steps: [],
       bots: [],
       traj: [],
+      assign: [],
     });
     const missing = await getJson(origin, "/channels/nope/live");
     assert.equal(missing.status, 404);
@@ -1744,6 +1780,7 @@ test("GET live returns in-memory think/tool steps", async () => {
       botId: "bot-x",
       thinking: "hmm",
       startedAt: "2026-08-27T00:00:00.000Z",
+      messageId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
       steps: [
         { name: "think", detail: "hmm" },
         { name: "read", detail: "a.ts", running: true },
@@ -1754,16 +1791,19 @@ test("GET live returns in-memory think/tool steps", async () => {
     const body = live.body as {
       botId: string;
       thinking: string;
+      messageId?: string;
       steps: { name: string; detail: string; running?: boolean }[];
     };
     assert.equal(body.botId, "bot-x");
     assert.equal(body.thinking, "hmm");
+    assert.equal(body.messageId, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     assert.equal(body.steps.length, 2);
     assert.equal(body.steps[1].running, true);
     assert.equal((live.body as { startedAt?: string }).startedAt, "2026-08-27T00:00:00.000Z");
-    const liveBots = (live.body as { bots: { botId: string }[] }).bots;
+    const liveBots = (live.body as { bots: { botId: string; messageId?: string }[] }).bots;
     assert.equal(liveBots.length, 1);
     assert.equal(liveBots[0].botId, "bot-x");
+    assert.equal(liveBots[0].messageId, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     const liveTraj = (live.body as { traj: { kind: string; live?: boolean }[] }).traj;
     assert.ok(liveTraj.some((event) => event.kind === "thinking" && event.live));
     const space = (await getJson(origin, "/workspace")).body as {

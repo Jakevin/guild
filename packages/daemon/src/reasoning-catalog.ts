@@ -6,6 +6,7 @@ const OPENROUTER_MODELS = "https://openrouter.ai/api/v1/models";
 const TTL_MS = 6 * 60 * 60 * 1000;
 const FETCH_MS = 4_000;
 
+/** Hermes-style: Guild / Pi picker id → models.dev provider id. */
 const DEV_PROVIDER: Record<string, string> = {
   xai: "xai",
   "xai-oauth": "xai",
@@ -15,8 +16,22 @@ const DEV_PROVIDER: Record<string, string> = {
   "anthropic-oauth": "anthropic",
   "github-copilot": "github-copilot",
   "opencode-free": "opencode",
+  opencode: "opencode",
   openrouter: "openrouter",
   "openrouter-oauth": "openrouter",
+  google: "google",
+  gemini: "google",
+  groq: "groq",
+  deepseek: "deepseek",
+  qwen: "alibaba-token-plan",
+  alibaba: "alibaba",
+  zai: "zai",
+  moonshot: "moonshotai",
+  moonshotai: "moonshotai",
+  kimi: "moonshotai",
+  bai: "xiaomi",
+  xiaomi: "xiaomi",
+  minimax: "minimax",
 };
 
 const OPENROUTER_PREFIX: Record<string, string> = {
@@ -24,8 +39,30 @@ const OPENROUTER_PREFIX: Record<string, string> = {
   openai: "openai",
   anthropic: "anthropic",
   "opencode-free": "opencode",
+  opencode: "opencode",
   "github-copilot": "github-copilot",
+  google: "google",
+  gemini: "google",
 };
+
+/** Pi: host of baseUrl → models.dev provider (token-plan, Zen, labs). */
+const HOST_TO_DEV: Array<[string, string]> = [
+  ["openrouter.ai", "openrouter"],
+  ["api.x.ai", "xai"],
+  ["api.openai.com", "openai"],
+  ["api.anthropic.com", "anthropic"],
+  ["opencode.ai", "opencode"],
+  ["api.groq.com", "groq"],
+  ["api.deepseek.com", "deepseek"],
+  ["generativelanguage.googleapis.com", "google"],
+  ["token-plan.ap-southeast-1.maas.aliyuncs.com", "alibaba-token-plan"],
+  ["dashscope.aliyuncs.com", "alibaba"],
+  ["api.z.ai", "zai"],
+  ["open.bigmodel.cn", "zai"],
+  ["api.moonshot.ai", "moonshotai"],
+  ["api.moonshot.cn", "moonshotai"],
+  ["api.b.ai", "xiaomi"],
+];
 
 /** Sort key only — never used as the displayed list. */
 const EFFORT_RANK = [
@@ -37,6 +74,17 @@ const EFFORT_RANK = [
   "xhigh",
   "max",
 ];
+
+/** Default ladder when the catalog has no list. */
+export const DEFAULT_EFFORTS = ["low", "medium", "high"];
+
+export function pickDefaultEffort(efforts: string[]): string | undefined {
+  if (!efforts.length) return undefined;
+  if (efforts.includes("medium")) return "medium";
+  if (efforts.includes("high")) return "high";
+  if (efforts.includes("low")) return "low";
+  return efforts[0];
+}
 
 type CatalogMaps = {
   at: number;
@@ -89,9 +137,8 @@ export function fromModelsDevModel(raw: unknown): ModelReasoning | undefined {
   if (supportsMaxTokens) spec.supportsMaxTokens = true;
   spec.defaultEnabled = true;
   if (efforts.length) spec.mandatory = !efforts.includes("none");
-  if (efforts.includes("high")) spec.defaultEffort = "high";
-  else if (efforts.includes("medium")) spec.defaultEffort = "medium";
-  else if (efforts.length) spec.defaultEffort = efforts[0];
+  const def = pickDefaultEffort(efforts);
+  if (def) spec.defaultEffort = def;
   return spec;
 }
 
@@ -139,9 +186,11 @@ function indexDev(data: unknown): Map<string, ModelReasoning> {
     for (const [mid, model] of Object.entries(models)) {
       const spec = fromModelsDevModel(model);
       if (!spec) continue;
-      out.set(`${pid}/${mid}`, spec);
-      const bare = mid.split("/").pop() || mid;
-      if (bare !== mid) out.set(`${pid}/${bare}`, spec);
+      const provider = pid.toLowerCase();
+      const modelKey = mid.toLowerCase();
+      out.set(`${provider}/${modelKey}`, spec);
+      const bare = (modelKey.split("/").pop() || modelKey).toLowerCase();
+      out.set(`${provider}/${bare}`, spec);
     }
   }
   return out;
@@ -166,9 +215,10 @@ function indexOpenRouter(data: unknown): {
         ? (row as { id: string }).id
         : "";
     if (!id) continue;
-    map.set(id, spec);
-    const bare = id.split("/").pop() || id;
-    if (bare !== id && !map.has(bare)) map.set(bare, spec);
+    const slug = id.toLowerCase();
+    map.set(slug, spec);
+    const bare = slug.split("/").pop() || slug;
+    if (bare !== slug && !map.has(bare)) map.set(bare, spec);
     for (const effort of spec.supportedEfforts ?? []) seen.add(effort);
   }
   const gateway = EFFORT_RANK.filter((key) => seen.has(key));
@@ -258,48 +308,163 @@ function fillNullEfforts(spec: ModelReasoning): ModelReasoning {
   return { ...spec, supportedEfforts: [...maps.gatewayEfforts] };
 }
 
+function catalogGet(
+  table: Map<string, ModelReasoning>,
+  key: string,
+): ModelReasoning | undefined {
+  return table.get(key) ?? table.get(key.toLowerCase());
+}
+
+function hostOf(baseUrl?: string): string {
+  const raw = String(baseUrl || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function catalogIdsFor(provider: string, baseUrl?: string): string[] {
+  const ids: string[] = [];
+  const add = (id?: string) => {
+    const key = String(id || "").trim().toLowerCase();
+    if (!key || ids.includes(key)) return;
+    if (key === "commandcode" || key === "command-code" || key === "command_code") return;
+    ids.push(key);
+  };
+  add(DEV_PROVIDER[provider]);
+  add(provider.replace(/-oauth$/, ""));
+  const host = hostOf(baseUrl);
+  if (host) {
+    for (const [suffix, id] of HOST_TO_DEV) {
+      if (host === suffix || host.endsWith(`.${suffix}`)) add(id);
+    }
+  }
+  if (ids.includes("alibaba-token-plan")) add("alibaba");
+  return ids;
+}
+
 export function reasoningFor(
   providerId: string,
   modelId: string,
+  baseUrl?: string,
 ): ModelReasoning | undefined {
   if (!maps) return undefined;
   const provider = String(providerId || "").trim().toLowerCase();
   const model = String(modelId || "").trim();
   if (!provider || !model) return undefined;
-  const bare = model.split("/").pop() || model;
-  const devId = DEV_PROVIDER[provider] || provider.replace(/-oauth$/, "");
+  // Command Code picks thinking depth itself. Do not borrow models.dev
+  // efforts — the picker would offer levels the endpoint does not take.
+  if (
+    provider === "commandcode" ||
+    provider === "command-code" ||
+    provider === "command_code"
+  ) {
+    return undefined;
+  }
+  const bare = (model.split("/").pop() || model).toLowerCase();
+  const catalogs = catalogIdsFor(provider, baseUrl);
 
-  if (devId === "openrouter") {
+  if (catalogs.includes("openrouter")) {
     const hit =
-      maps.openrouter.get(model) ||
-      maps.openrouter.get(bare) ||
-      maps.openrouter.get(model.toLowerCase());
-    return hit ? fillNullEfforts(hit) : undefined;
+      catalogGet(maps.openrouter, model) ||
+      catalogGet(maps.openrouter, bare);
+    if (hit) return fillNullEfforts(hit);
   }
 
-  const devHit =
-    maps.dev.get(`${devId}/${model}`) ||
-    maps.dev.get(`${devId}/${bare}`) ||
-    maps.dev.get(`${devId}/${bare.toLowerCase()}`);
-  if (devHit) return devHit;
+  for (const devId of catalogs) {
+    const devHit =
+      catalogGet(maps.dev, `${devId}/${model}`) ||
+      catalogGet(maps.dev, `${devId}/${bare}`);
+    if (devHit) return devHit;
+  }
 
-  const prefix = OPENROUTER_PREFIX[devId] || OPENROUTER_PREFIX[provider];
-  if (prefix) {
-    const slug = `${prefix}/${bare}`;
-    const orHit = maps.openrouter.get(slug) || maps.openrouter.get(model);
+  for (const devId of catalogs) {
+    const prefix = OPENROUTER_PREFIX[devId] || OPENROUTER_PREFIX[provider];
+    if (!prefix) continue;
+    const orHit =
+      catalogGet(maps.openrouter, `${prefix}/${bare}`) ||
+      catalogGet(maps.openrouter, model);
     if (orHit) return fillNullEfforts(orHit);
   }
   return undefined;
 }
 
+export function sanitizeModelReasoning(raw: unknown): ModelReasoning | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const rec = raw as Record<string, unknown>;
+  const efforts = parseEffortList(rec.supportedEfforts);
+  const defaultEffort = sanitizeEffort(rec.defaultEffort);
+  if (!efforts.length && !defaultEffort) return undefined;
+  const spec: ModelReasoning = { defaultEnabled: true };
+  if (efforts.length) {
+    spec.supportedEfforts = efforts;
+    spec.mandatory = !efforts.includes("none");
+  }
+  if (defaultEffort && (!efforts.length || efforts.includes(defaultEffort))) {
+    spec.defaultEffort = defaultEffort;
+  } else {
+    const def = pickDefaultEffort(efforts);
+    if (def) spec.defaultEffort = def;
+  }
+  return spec;
+}
+
+/** Catalog efforts win. Manual models.json efforts fill a catalog miss. */
+export function resolveReasoning(
+  providerId: string,
+  modelId: string,
+  baseUrl?: string,
+  stored?: ModelReasoning,
+): ModelReasoning | undefined {
+  const catalog = reasoningFor(providerId, modelId, baseUrl);
+  if (catalog?.supportedEfforts?.length) return catalog;
+  const provider = String(providerId || "").trim().toLowerCase();
+  if (
+    provider === "commandcode" ||
+    provider === "command-code" ||
+    provider === "command_code"
+  ) {
+    return undefined;
+  }
+  if (stored?.supportedEfforts?.length) return stored;
+  return catalog;
+}
+
 export function attachReasoning(
   providerId: string,
   models: { id: string; name?: string; reasoning?: ModelReasoning }[],
+  baseUrl?: string,
 ): { id: string; name?: string; reasoning?: ModelReasoning }[] {
   return models.map((model) => {
-    const spec = reasoningFor(providerId, model.id);
+    const spec = resolveReasoning(providerId, model.id, baseUrl, model.reasoning);
     if (!spec) return model;
     return { ...model, reasoning: spec };
+  });
+}
+
+export function annotateKeyModels(
+  providerId: string,
+  models: { id: string; name?: string; reasoning?: ModelReasoning }[],
+  baseUrl?: string,
+): {
+  id: string;
+  name?: string;
+  reasoning?: ModelReasoning;
+  catalogEfforts?: string[];
+  manualEfforts?: string[];
+}[] {
+  return models.map((model) => {
+    const catalog = reasoningFor(providerId, model.id, baseUrl)?.supportedEfforts ?? [];
+    const manual = model.reasoning?.supportedEfforts ?? [];
+    return {
+      id: model.id,
+      name: model.name,
+      ...(model.reasoning ? { reasoning: model.reasoning } : {}),
+      ...(catalog.length ? { catalogEfforts: catalog } : {}),
+      ...(manual.length ? { manualEfforts: manual } : {}),
+    };
   });
 }
 
@@ -325,11 +490,7 @@ export function clampEffort(
   if (spec?.defaultEffort && usable.includes(spec.defaultEffort)) {
     return spec.defaultEffort;
   }
-  return usable.includes("high")
-    ? "high"
-    : usable.includes("medium")
-      ? "medium"
-      : usable[0];
+  return pickDefaultEffort(usable) || usable[0];
 }
 
 export function reasoningPayload(

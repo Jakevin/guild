@@ -277,6 +277,111 @@ export function messageMentionIds(
   );
 }
 
+function idsForHandles(names: string[], bots: MentionBot[]): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    const bot = bots.find(
+      (row) => row.handle.toLowerCase() === name.toLowerCase(),
+    );
+    if (!bot || out.includes(bot.id)) continue;
+    out.push(bot.id);
+  }
+  return out;
+}
+
+/**
+ * Dispatch plan for a message: inner arrays are parallel, outer order is sequential.
+ * Numbered/bullet assignees share the first wave; 完成後 / 最後 / 再交 become later waves.
+ */
+export function parseAssignmentWaves(
+  text: string,
+  bots: MentionBot[],
+  kind: "user" | "bot" = "user",
+): string[][] {
+  if (isBroadcastMention(text)) {
+    return [bots.map((bot) => bot.id)];
+  }
+  const handles = bots.map((bot) => bot.handle);
+  const now = idsForHandles(
+    kind === "bot" ? handoffHandles(text, handles) : summonedHandles(text, handles),
+    bots,
+  );
+  const later = idsForHandles(deferredHandles(text, handles), bots).filter(
+    (id) => !now.includes(id),
+  );
+  const waves: string[][] = [];
+  if (now.length) waves.push(now);
+  for (const id of later) waves.push([id]);
+  return waves;
+}
+
+export function sanitizeWaves(
+  raw: unknown,
+  bots: MentionBot[],
+): string[][] {
+  if (!Array.isArray(raw)) return [];
+  const known = new Set(bots.map((bot) => bot.id));
+  const seen = new Set<string>();
+  const waves: string[][] = [];
+  for (const row of raw) {
+    const items = Array.isArray(row) ? row : [row];
+    const ids: string[] = [];
+    for (const item of items) {
+      if (typeof item !== "string") continue;
+      const id = item.trim();
+      if (!id || !known.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+    if (ids.length) waves.push(ids);
+  }
+  return waves;
+}
+
+/** Append incoming waves. First incoming wave joins the current first wave. */
+export function mergeAssign(
+  current: string[][],
+  incoming: string[][],
+): string[][] {
+  if (!incoming.length) return current.map((wave) => wave.slice());
+  if (!current.length) return incoming.map((wave) => wave.slice());
+  const seated = new Set(current.flat());
+  const next = current.map((wave) => wave.slice());
+  incoming.forEach((wave, index) => {
+    const fresh = wave.filter((id) => !seated.has(id));
+    if (!fresh.length) return;
+    for (const id of fresh) seated.add(id);
+    if (index === 0) next[0] = next[0].concat(fresh);
+    else next.push(fresh);
+  });
+  return next;
+}
+
+export function dismissAssign(waves: string[][], botId: string): string[][] {
+  return waves
+    .map((wave) => wave.filter((id) => id !== botId))
+    .filter((wave) => wave.length > 0);
+}
+
+/** Pull later-wave seats into the front so an explicit @ starts them this turn. */
+export function promoteAssign(waves: string[][], ids: string[]): string[][] {
+  if (!waves.length || !ids.length) return waves.map((wave) => wave.slice());
+  const seated = new Set(waves.flat());
+  const front = new Set(waves[0]);
+  const pull: string[] = [];
+  for (const id of ids) {
+    if (!seated.has(id) || front.has(id) || pull.includes(id)) continue;
+    pull.push(id);
+  }
+  if (!pull.length) return waves.map((wave) => wave.slice());
+  const drop = new Set(pull);
+  const next = waves.map((wave, index) =>
+    index === 0 ? wave.slice() : wave.filter((id) => !drop.has(id)),
+  );
+  next[0] = next[0].concat(pull);
+  return next.filter((wave) => wave.length > 0);
+}
+
 /**
  * Spec for one seat: shared preamble plus that @handle's line-start block.
  * Full text when the handle was only summoned in prose.

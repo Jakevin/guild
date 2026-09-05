@@ -21,6 +21,7 @@ import {
   hostContext,
   MAX_TOOL_ROUNDS,
   nextToolRound,
+  openaiTools,
   roundSignal,
   takeSteers,
   TOOL_LOOP_EXHAUSTED,
@@ -95,6 +96,7 @@ test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /Never say you cannot access/);
   assert.match(TOOL_SYSTEM, /exit code/);
   assert.match(TOOL_SYSTEM, /image_gen/);
+  assert.match(TOOL_SYSTEM, /\btts\b/);
   assert.match(TOOL_SYSTEM, /spawn/);
   assert.match(TOOL_SYSTEM, /read_only seat can still spawn/);
   assert.match(TOOL_SYSTEM, /run in parallel/i);
@@ -102,6 +104,12 @@ test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /cronjob/);
   assert.match(TOOL_SYSTEM, /每10分鐘/);
   assert.match(hostContext(), /home=/);
+  const cron = openaiTools().find((tool) => tool.function.name === "cronjob");
+  assert.ok(cron);
+  const props = (cron.function.parameters as { properties?: Record<string, unknown> })
+    .properties;
+  assert.ok(props?.scope);
+  assert.ok(props?.delivery);
 });
 
 test("SubAgent aux role is on the models page and resolveLlm uses it", () => {
@@ -262,6 +270,9 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(HALL_RULES, /Spawn first when/);
   assert.match(HALL_RULES, /Do not skip spawn/);
   assert.match(HALL_RULES, /do not start this turn/);
+  assert.match(HALL_RULES, /派工 list/);
+  assert.match(HALL_RULES, /1:1 交辦/);
+  assert.match(HALL_RULES, /Do not wait for the human to press a button/);
 });
 
 test("whisper system does not hand off to other seats", () => {

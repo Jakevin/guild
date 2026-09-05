@@ -180,6 +180,7 @@ test("listRoomTrajectory appends live traces and GET live omits them", () => {
       botId: "bot-pm",
       thinking: "plan the work",
       startedAt: "2026-08-28T00:00:00.000Z",
+      messageId: "11111111-2222-3333-4444-555555555555",
       steps: [
         { name: "think", detail: "plan the work" },
         { name: "read", detail: "README.md", running: true },
@@ -204,11 +205,14 @@ test("listRoomTrajectory appends live traces and GET live omits them", () => {
     );
     const live = getLiveTurn(store, "channel-general") as {
       thinking: string;
+      messageId?: string;
       traces?: unknown;
-      bots: { traces?: unknown }[];
+      bots: { traces?: unknown; messageId?: string }[];
       traj: { kind: string; live?: boolean; summary: string }[];
     };
     assert.equal(live.thinking, "plan the work");
+    assert.equal(live.messageId, "11111111-2222-3333-4444-555555555555");
+    assert.equal(live.bots[0]?.messageId, "11111111-2222-3333-4444-555555555555");
     assert.equal(live.traces, undefined);
     assert.equal(live.bots[0]?.traces, undefined);
     assert.ok(live.traj.some((event) => event.kind === "tool" && event.live));

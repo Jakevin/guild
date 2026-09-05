@@ -40,12 +40,14 @@ import {
   withDuration,
 } from "./usage.ts";
 import {
+  annotateKeyModels,
   attachReasoning,
   clampEffort,
-  reasoningFor,
+  resolveReasoning,
   reasoningPayload,
   refreshReasoningCatalog,
   sanitizeEffort,
+  sanitizeModelReasoning,
 } from "./reasoning-catalog.ts";
 
 export { refreshReasoningCatalog };
@@ -76,6 +78,21 @@ import {
   sessionUsable,
   type FreebuffLeaseParts,
 } from "./freebuff-chat.ts";
+
+import {
+  COMMANDCODE_PICKER_ID,
+  COMMANDCODE_PROVIDER_API_BASE,
+  CommandCodeUpgradeRequired,
+  apiForModelId,
+  commandCodeRequestHeaders,
+  commandCodeStatus,
+  commandCodeUsesGenerate,
+  isCommandCodeProvider,
+  isCommandCodeUpgradeRequired,
+  markCommandCodeGenerate,
+  resolveCommandCodeAuth,
+} from "./commandcode.ts";
+import { completeCommandCodeGenerate } from "./commandcode-generate.ts";
 
 export { isWebBridgeTarget };
 
@@ -209,6 +226,34 @@ export function writeModelsFile(dataDir: string, file: ModelsFile): ModelsFile {
   return cleaned;
 }
 
+export function shownIdsOf(file: ModelsFile, pickerId: string): string[] | null {
+  const ids = file.shown?.[pickerId];
+  return Array.isArray(ids) ? ids : null;
+}
+
+export function filterShownModels<T extends { id: string }>(
+  models: T[],
+  shownIds: string[] | null,
+): T[] {
+  if (!shownIds) return models;
+  const allow = new Set(shownIds);
+  return models.filter((row) => allow.has(row.id));
+}
+
+export function setShownModels(
+  dataDir: string,
+  pickerId: string,
+  shownIds: string[] | null,
+): ModelsFile {
+  const existing = readModelsFile(dataDir);
+  const shown = { ...(existing.shown ?? {}) };
+  const id = String(pickerId || "").trim();
+  if (!id) return existing;
+  if (shownIds == null) delete shown[id];
+  else shown[id] = shownIds;
+  return writeModelsFile(dataDir, { ...existing, shown });
+}
+
 export function mergeModelsFile(
   dataDir: string,
   incoming: Partial<ModelsFile>,
@@ -221,6 +266,7 @@ export function mergeModelsFile(
     aux: incoming.aux !== undefined ? incoming.aux : existing.aux,
     recent: incoming.recent !== undefined ? incoming.recent : existing.recent,
     providers: incoming.providers ? {} : existing.providers,
+    shown: incoming.shown !== undefined ? incoming.shown : existing.shown,
   };
   if (incoming.default) {
     next.recent = pushRecent(existing.recent, incoming.default);
@@ -317,7 +363,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       return {
         id,
         ...provider,
-        models: attachReasoning(id, provider.models),
+        models: annotateKeyModels(id, provider.models, provider.baseUrl),
         apiKey: stored === "literal" ? "" : key,
         apiKeyPreview: key ? maskApiKey(key) : "",
         stored,
@@ -325,13 +371,24 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     },
   );
   const target = resolveLlm(dataDir, env);
-  const subscriptions = listSubscriptions(dataDir);
+  const subscriptions = listSubscriptions(dataDir).map((s) => {
+    const shownIds = shownIdsOf(file, s.pickerId);
+    const catalog = s.models ?? [];
+    return {
+      ...s,
+      catalog,
+      shownIds,
+      models: filterShownModels(catalog, shownIds),
+    };
+  });
   const freebuffReady = sessionUsable(dataDir);
   const freebuffState = readFreebuffState(dataDir);
   const freebuffModels = attachReasoning(
     FREEBUFF_CHAT_PICKER_ID,
     liveOrFloorModels(dataDir),
   );
+  const commandCode = commandCodeStatus(dataDir, env);
+  const freebuffShown = shownIdsOf(file, FREEBUFF_CHAT_PICKER_ID);
   const webBridges = [
     {
       id: FREEBUFF_CHAT_PICKER_ID,
@@ -344,7 +401,9 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       pending: Boolean(freebuffState.pending) && !freebuffReady,
       ready: freebuffReady,
       accessTier: freebuffState.accessTier,
-      models: freebuffModels,
+      catalog: freebuffModels,
+      shownIds: freebuffShown,
+      models: filterShownModels(freebuffModels, freebuffShown),
     },
   ];
   const picker = [
@@ -355,7 +414,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ready:
         isKeylessProvider(p.id) ||
         Boolean(resolveApiKey(p.apiKey, env) || p.stored === "literal"),
-      models: attachReasoning(p.id, p.models),
+      models: attachReasoning(p.id, p.models, p.baseUrl),
     })),
     ...subscriptions.map((s) => ({
       id: s.pickerId,
@@ -365,11 +424,21 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       models: attachReasoning(s.pickerId, s.models ?? []),
     })),
     {
+      id: COMMANDCODE_PICKER_ID,
+      name: "Command Code",
+      kind: "commandcode" as const,
+      ready: commandCode.ready,
+      models: filterShownModels(
+        commandCode.catalog,
+        shownIdsOf(file, COMMANDCODE_PICKER_ID),
+      ),
+    },
+    {
       id: FREEBUFF_CHAT_PICKER_ID,
       name: "Freebuff Chat",
       kind: "web-bridge" as const,
       ready: freebuffReady,
-      models: freebuffModels,
+      models: filterShownModels(freebuffModels, freebuffShown),
     },
   ];
   return {
@@ -381,6 +450,11 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     recent: file.recent ?? [],
     providers,
     subscriptions,
+    commandCode: {
+      ...commandCode,
+      shownIds: shownIdsOf(file, COMMANDCODE_PICKER_ID),
+      models: filterShownModels(commandCode.catalog, shownIdsOf(file, COMMANDCODE_PICKER_ID)),
+    },
     webBridges,
     picker,
     active: target
@@ -403,8 +477,9 @@ export type LlmTarget = {
   api: LlmApi;
   headers?: Record<string, string>;
   accountId?: string;
-  transport?: "http" | "oauth" | "web-bridge";
+  transport?: "http" | "oauth" | "web-bridge" | "commandcode";
   sessionReady?: boolean;
+  fetch?: typeof fetch;
 };
 
 export function resolveApiKey(
@@ -474,6 +549,21 @@ export function resolveLlm(
         api: "openai-completions",
         transport: "web-bridge",
         sessionReady: sessionUsable(dataDir),
+      };
+    }
+    if (isCommandCodeProvider(id) || isCommandCodeProvider(providerId)) {
+      const auth = resolveCommandCodeAuth(dataDir, env);
+      if (!auth.token) return null;
+      const model = modelId || commandCodeStatus(dataDir, env).models[0]?.id || "deepseek/deepseek-v4-flash";
+      const api = apiForModelId(model);
+      return {
+        providerId: COMMANDCODE_PICKER_ID,
+        model,
+        baseUrl: COMMANDCODE_PROVIDER_API_BASE,
+        apiKey: auth.token,
+        api,
+        transport: "commandcode",
+        headers: commandCodeRequestHeaders(auth.token),
       };
     }
     const oauth = oauthTarget(dataDir, id, modelId);
@@ -567,9 +657,12 @@ export async function llmComplete(input: {
     allowWrite: true,
   };
   const file = readModelsFile(input.dataDir);
+  const stored = file.providers[target.providerId]?.models.find(
+    (model) => model.id === target.model,
+  )?.reasoning;
   const effort = clampEffort(
     file.fast ? "low" : input.prefer ? input.prefer.reasoning : file.reasoning,
-    reasoningFor(target.providerId, target.model),
+    resolveReasoning(target.providerId, target.model, target.baseUrl, stored),
     Boolean(file.fast),
   );
   if (isWebBridgeTarget(target)) {
@@ -610,6 +703,7 @@ export async function llmComplete(input: {
         toolCtx,
       });
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
       const message = error instanceof Error ? error.message : String(error);
       return {
         text: formatOAuthError(
@@ -647,7 +741,19 @@ export async function llmComplete(input: {
         model: target.model,
       },
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    if (target.transport === "commandcode") {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        text: `模型請求失敗：Command Code: ${message}`,
+        provider: target.providerId,
+        model: target.model,
+        traces: [],
+        thinking: "",
+        usage: { provider: target.providerId, model: target.model },
+      };
+    }
     return null;
   }
 }
@@ -659,6 +765,76 @@ type DispatchResult = {
   usage?: ChatUsage;
 };
 
+function llmFetch(target: LlmTarget): typeof fetch {
+  return target.fetch ?? fetch;
+}
+
+async function commandCodeAwareFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 403) {
+    let body: unknown;
+    try {
+      body = await res.clone().json();
+    } catch {
+      body = undefined;
+    }
+    if (isCommandCodeUpgradeRequired({ status: 403, body })) {
+      throw new CommandCodeUpgradeRequired();
+    }
+  }
+  return res;
+}
+
+async function completeCommandCode(
+  target: LlmTarget,
+  system: string,
+  messages: { role: "user" | "assistant"; content: string }[],
+  temperature: number,
+  tools: boolean,
+  ctx: ToolContext,
+  effort?: string,
+): Promise<DispatchResult | null> {
+  if (commandCodeUsesGenerate(target.apiKey)) {
+    return completeCommandCodeGenerate({
+      apiKey: target.apiKey,
+      model: target.model,
+      system,
+      messages,
+      temperature,
+      tools,
+      ctx,
+      effort,
+    });
+  }
+  const viaProvider: LlmTarget = { ...target, fetch: commandCodeAwareFetch };
+  try {
+    if (target.api === "anthropic-messages") {
+      return tools
+        ? await completeAnthropicTools(viaProvider, system, messages, ctx)
+        : wrapText(await completeAnthropic(viaProvider, system, messages));
+    }
+    return tools
+      ? await completeOpenAiTools(viaProvider, system, messages, temperature, ctx, effort)
+      : wrapText(await completeOpenAi(viaProvider, system, messages, temperature, effort));
+  } catch (error) {
+    if (!(error instanceof CommandCodeUpgradeRequired)) throw error;
+    markCommandCodeGenerate(target.apiKey);
+    return completeCommandCodeGenerate({
+      apiKey: target.apiKey,
+      model: target.model,
+      system,
+      messages,
+      temperature,
+      tools,
+      ctx,
+      effort,
+    });
+  }
+}
+
 export async function dispatchComplete(
   target: LlmTarget,
   system: string,
@@ -668,6 +844,9 @@ export async function dispatchComplete(
   ctx: ToolContext,
   effort?: string,
 ): Promise<DispatchResult | null> {
+  if (target.transport === "commandcode") {
+    return completeCommandCode(target, system, messages, temperature, tools, ctx, effort);
+  }
   if (isWebBridgeTarget(target)) {
     return {
       text: formatFreebuffError("freebuff_unreachable_dispatch"),
@@ -747,7 +926,7 @@ async function completeOpenAiTools(
       const response = await withTransientRetries(
         async () => {
           throwIfAborted(ctx);
-          const res = await fetch(`${target.baseUrl}/chat/completions`, {
+          const res = await llmFetch(target)(`${target.baseUrl}/chat/completions`, {
             method: "POST",
             headers: llmRequestHeaders(target),
             body: JSON.stringify({
@@ -878,7 +1057,7 @@ async function completeAnthropicTools(
       const response = await withTransientRetries(
         async () => {
           throwIfAborted(ctx);
-          const res = await fetch(
+          const res = await llmFetch(target)(
             `${target.baseUrl.replace(/\/v1$/, "")}/v1/messages`,
             {
               method: "POST",
@@ -1199,7 +1378,7 @@ async function completeOpenAi(
   effort?: string,
 ): Promise<string | null> {
   const url = `${target.baseUrl}/chat/completions`;
-  const response = await fetch(url, {
+  const response = await llmFetch(target)(url, {
     method: "POST",
     headers: llmRequestHeaders(target),
     body: JSON.stringify({
@@ -1237,7 +1416,7 @@ async function completeAnthropic(
   } else if (!headers.authorization && !headers.Authorization) {
     headers["x-api-key"] = target.apiKey;
   }
-  const response = await fetch(`${base}/v1/messages`, {
+  const response = await llmFetch(target)(`${base}/v1/messages`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -1403,11 +1582,14 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
           : "openai-completions";
     const models: ModelEntry[] = (provider.models ?? [])
       .filter((model) => model && typeof model.id === "string" && model.id.trim())
-      .map((model) => ({
-        id: model.id.trim(),
-        name: model.name?.trim() || undefined,
-        ...(model.reasoning ? { reasoning: model.reasoning } : {}),
-      }));
+      .map((model) => {
+        const reasoning = sanitizeModelReasoning(model.reasoning);
+        return {
+          id: model.id.trim(),
+          name: model.name?.trim() || undefined,
+          ...(reasoning ? { reasoning } : {}),
+        };
+      });
     if (models.length === 0) {
       throw new StoreError(400, `provider ${id} needs at least one model`);
     }
@@ -1430,6 +1612,9 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
     if (WEB_BRIDGE_PICKER_IDS.has(ref.provider) && Boolean(ref.model)) {
       return { provider: ref.provider, model: ref.model };
     }
+    if (isCommandCodeProvider(ref.provider) && Boolean(ref.model)) {
+      return { provider: COMMANDCODE_PICKER_ID, model: ref.model };
+    }
     if (providers[ref.provider]?.models.some((m) => m.id === ref.model)) {
       return { provider: ref.provider, model: ref.model };
     }
@@ -1451,5 +1636,17 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
     aux,
     recent,
     providers,
+    shown: sanitizeShown(file.shown),
   };
+}
+
+function sanitizeShown(raw: ModelsFile["shown"]): ModelsFile["shown"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const shown: Record<string, string[]> = {};
+  for (const [id, ids] of Object.entries(raw)) {
+    const key = String(id || "").trim();
+    if (!key || !Array.isArray(ids)) continue;
+    shown[key] = ids.filter((item) => typeof item === "string" && item.trim());
+  }
+  return Object.keys(shown).length ? shown : undefined;
 }

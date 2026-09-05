@@ -8,8 +8,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 模型</title>
-    <link rel="stylesheet" href="/style.css?v=aux-align" />
-    <script src="/i18n.js"></script>
+    <link rel="stylesheet" href="/style.css?v=effort-input" />
+    <script src="/i18n.js?v=effort-mid"></script>
   </head>
   <body class="app settings-page" data-i18n-page="settings" data-section="main">
     <script>
@@ -80,8 +80,13 @@
       </section>
 
       <section class="panel" data-sec-panel="subs">
-        <h2 data-i18n="settings.accounts">連接帳號</h2>
-        <p class="sub" data-i18n="settings.accountsHint">用訂閱登入，不必複製金鑰。瀏覽器完成授權後會自動刷新 token。</p>
+        <div class="panel-head">
+          <div>
+            <h2 data-i18n="settings.accounts">連接帳號</h2>
+            <p class="sub" data-i18n="settings.accountsHint">點名稱切換訂閱。勾選的模型會出現在大廳；主模型仍在「主模型」頁套用。</p>
+          </div>
+        </div>
+        <div class="key-tabs" id="account-tabs"></div>
         <div id="accounts"></div>
         <div id="oauth-panel" hidden>
           <p id="oauth-copy" data-i18n="settings.oauthCode">在瀏覽器開啟授權頁，輸入代碼：</p>
@@ -144,6 +149,7 @@
       let pendingWeb = null;
       let auxRole = null;
       let keyTab = 0;
+      let subTab = "";
       const PRESETS = {
         "opencode-free": {
           id: "opencode-free",
@@ -256,6 +262,7 @@
         if (p && p.kind === "web-bridge" && p.id === "freebuff-chat") {
           return t("settings.freebuffChat");
         }
+        if (p && p.kind === "commandcode") return t("settings.commandCode");
         return (p && p.name) || (p && p.id) || "";
       }
       function fillSelect(sel, groups, preferred) {
@@ -301,6 +308,9 @@
         if (group && group.kind === "web-bridge") {
           hint.hidden = false;
           hint.textContent = t("settings.freebuffChatHint");
+        } else if (group && group.kind === "commandcode") {
+          hint.hidden = false;
+          hint.textContent = t("settings.commandCodeHint");
         } else {
           hint.hidden = true;
           hint.textContent = "";
@@ -324,7 +334,10 @@
         const model = ((group && group.models) || []).find(
           (m) => m.id === (ref && ref.model),
         );
-        const spec = (model && model.reasoning) || null;
+        const spec =
+          group && group.kind === "commandcode"
+            ? null
+            : (model && model.reasoning) || null;
         const raw = spec && spec.supportedEfforts;
         const choices = raw && raw.length
           ? spec.mandatory
@@ -345,9 +358,10 @@
         if (want && choices.indexOf(want) >= 0) sel.value = want;
         else if (spec && spec.defaultEffort && choices.indexOf(spec.defaultEffort) >= 0) {
           sel.value = spec.defaultEffort;
-        } else if (choices.length) {
-          sel.value = choices[0];
-        }
+        } else if (choices.indexOf("medium") >= 0) sel.value = "medium";
+        else if (choices.indexOf("high") >= 0) sel.value = "high";
+        else if (choices.indexOf("low") >= 0) sel.value = "low";
+        else if (choices.length) sel.value = choices[0];
         if (wrap) wrap.hidden = !choices.length;
       }
       function currentRef() {
@@ -409,7 +423,17 @@
             : "";
         const id = escapeHtml(s.id);
         let actions;
-        if (kind === "web-bridge") {
+        if (kind === "commandcode") {
+          const paste = s.connected || s.ready
+            ? ""
+            : '<input type="text" data-cc-key spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="user_… / $COMMAND_CODE_API_KEY" />' +
+              '<button type="button" class="secondary" data-cc-save>' + t("settings.saveKey") + "</button>";
+          const sync =
+            '<button type="button" class="secondary" data-cc-sync>' + t("settings.sync") + "</button>";
+          actions = (s.connected || s.ready
+            ? '<button type="button" class="secondary" data-cc-logout="' + id + '">' + t("settings.logout") + "</button>"
+            : '<button type="button" data-cc-login="' + id + '">' + t("settings.connect") + "</button>") + paste + sync;
+        } else if (kind === "web-bridge") {
           const doctor =
             '<button type="button" class="secondary" data-web-doctor="' +
             id +
@@ -434,10 +458,10 @@
             ? '<button type="button" class="secondary" data-logout="' + s.id + '">' + t("settings.logout") + "</button>"
             : '<button type="button" data-login="' + s.id + '">' + t("settings.connect") + "</button>";
         }
-        const title = kind === "web-bridge" ? t("settings.freebuffChat") : s.name;
-        const hint = kind === "web-bridge" ? t("settings.freebuffChatHint") : (s.hint || "");
-        const loginHint = kind === "web-bridge" ? t("settings.freebuffLoginHint") : (s.loginHint || "");
-        return (
+        const title = kind === "web-bridge" ? t("settings.freebuffChat") : kind === "commandcode" ? t("settings.commandCode") : s.name;
+        const hint = kind === "web-bridge" ? t("settings.freebuffChatHint") : kind === "commandcode" ? t("settings.commandCodeHint") : (s.hint || "");
+        const loginHint = kind === "web-bridge" ? t("settings.freebuffLoginHint") : kind === "commandcode" ? t("settings.commandCodeLoginHint") : (s.loginHint || "");
+        const row =
           '<div class="account"><div class="account-copy"><strong>' +
           escapeHtml(title) +
           badge +
@@ -448,13 +472,121 @@
           (loginHint ? '<p class="warn">' + escapeHtml(loginHint) + "</p>" : "") +
           "</div><div class='account-act'>" +
           actions +
-          "</div></div>"
+          "</div></div>";
+        return '<div class="account-block">' + row + accountModelsHtml(s, kind) + "</div>";
+      }
+      function accountList() {
+        return (data.subscriptions || [])
+          .map((s) => ({ s: s, kind: "oauth" }))
+          .concat(data.commandCode ? [{ s: data.commandCode, kind: "commandcode" }] : [])
+          .concat((data.webBridges || []).map((s) => ({ s: s, kind: "web-bridge" })));
+      }
+      function accountTabId(item) {
+        if (!item) return "";
+        if (item.kind === "commandcode") return "commandcode";
+        return item.s.pickerId || item.s.id || "";
+      }
+      function accountTabTitle(item) {
+        if (item.kind === "web-bridge") return t("settings.freebuffChat");
+        if (item.kind === "commandcode") return t("settings.commandCode");
+        return item.s.name || item.s.id || "";
+      }
+      function accountTabBadge(item) {
+        if (item.s.connected || item.s.ready) {
+          return '<span class="badge">' + t("settings.connected") + "</span>";
+        }
+        if (item.s.pending) {
+          return '<span class="badge wait">' + t("settings.pending") + "</span>";
+        }
+        return "";
+      }
+      function accountModelsHtml(s, kind) {
+        const catalog = s.catalog || s.models || [];
+        if (!(s.connected || s.ready) || !catalog.length) return "";
+        const provider = kind === "commandcode" ? "commandcode" : s.pickerId || s.id;
+        const shown = s.shownIds;
+        const modelOn = (m) => !shown || shown.indexOf(m.id) >= 0;
+        const allOn = !shown || catalog.every(modelOn);
+        const nOn = catalog.filter(modelOn).length;
+        const ordered = catalog.slice().sort((a, b) => (modelOn(a) ? 0 : 1) - (modelOn(b) ? 0 : 1));
+        const bar =
+          '<label class="account-models-bar"><input type="checkbox" data-shown-all="' +
+          escapeHtml(provider) +
+          '"' +
+          (allOn ? " checked" : "") +
+          " /><span>" +
+          t("settings.selectAll") +
+          " · " +
+          t("settings.accountModels") +
+          '</span><span class="account-models-count">' +
+          nOn +
+          " / " +
+          catalog.length +
+          "</span></label>";
+        const rows = ordered
+          .map((m) => {
+            const on = modelOn(m);
+            const idx = catalog.indexOf(m);
+            return (
+              '<label class="account-model' +
+              (on ? " is-on" : "") +
+              '"><input type="checkbox" data-shown-id="' +
+              escapeHtml(provider) +
+              '" data-shown="' +
+              escapeHtml(m.id) +
+              '" data-shown-i="' +
+              idx +
+              '"' +
+              (on ? " checked" : "") +
+              ' /><span class="name"><b>' +
+              escapeHtml(prettyModelName(m.id, m.name)) +
+              "</b><small>" +
+              escapeHtml(m.id) +
+              "</small></span></label>"
+            );
+          })
+          .join("");
+        return (
+          '<div class="account-models' +
+          (catalog.length > 8 ? " is-long" : "") +
+          '" data-shown-box="' +
+          escapeHtml(provider) +
+          '">' +
+          bar +
+          rows +
+          "</div>"
         );
       }
       function renderAccounts() {
-        const oauth = (data.subscriptions || []).map((s) => accountCard(s, "oauth"));
-        const web = (data.webBridges || []).map((s) => accountCard(s, "web-bridge"));
-        document.getElementById("accounts").innerHTML = oauth.concat(web).join("");
+        const list = accountList();
+        if (!list.some((item) => accountTabId(item) === subTab)) {
+          const preferred = data.default && data.default.provider;
+          const hit =
+            list.find((item) => accountTabId(item) === preferred) ||
+            list.find((item) => item.s.connected || item.s.ready) ||
+            list[0];
+          subTab = accountTabId(hit);
+        }
+        document.getElementById("account-tabs").innerHTML = list
+          .map((item) => {
+            const id = accountTabId(item);
+            return (
+              '<button type="button" class="key-tab' +
+              (id === subTab ? " on" : "") +
+              '" data-sub-tab="' +
+              escapeHtml(id) +
+              '">' +
+              escapeHtml(accountTabTitle(item)) +
+              accountTabBadge(item) +
+              "</button>"
+            );
+          })
+          .join("");
+        const current = list.find((item) => accountTabId(item) === subTab);
+        document.getElementById("accounts").innerHTML = current
+          ? accountCard(current.s, current.kind)
+          : "";
+        document.querySelectorAll("[data-shown-box]").forEach((box) => syncShownBar(box));
       }
       function renderPicker() {
         fillSelect(document.getElementById("provider"), pickerGroups(), data.default);
@@ -553,6 +685,43 @@
           "</p>"
         );
       }
+      function parseEffortInput(raw) {
+        return String(raw || "")
+          .split(/[,，\s]+/)
+          .map((item) => item.trim().toLowerCase())
+          .filter((item) => /^[a-z][a-z0-9_-]{0,31}$/.test(item))
+          .filter((item, i, all) => all.indexOf(item) === i);
+      }
+      function effortField(p, m, index, i) {
+        if (isKeylessProvider(p.id)) return "";
+        const catalog = m.catalogEfforts || [];
+        const lab =
+          '<span class="effort-lab">' + escapeHtml(t("settings.efforts")) + "</span>";
+        if (catalog.length) {
+          return (
+            '<p class="effort-catalog">' +
+            lab +
+            " · " +
+            escapeHtml(t("settings.effortsCatalog")) +
+            " · " +
+            escapeHtml(catalog.join(", ")) +
+            "</p>"
+          );
+        }
+        const manual = (m.manualEfforts || []).join(", ");
+        return (
+          lab +
+          '<input data-p="' +
+          index +
+          '" data-m="' +
+          i +
+          '" data-f="efforts" value="' +
+          escapeHtml(manual) +
+          '" placeholder="' +
+          escapeHtml(t("settings.effortsPlaceholder")) +
+          '" spellcheck="false" autocomplete="off" />'
+        );
+      }
       function cardHtml(p, index) {
         const lock = isKeylessProvider(p.id);
         const ro = lock ? " readonly" : "";
@@ -566,7 +735,9 @@
               '" placeholder="' + t("settings.displayName") + '" />' +
               probeBadge(m.id) +
               '<button type="button" class="secondary" data-del-model="' +
-              index + ":" + i + '">×</button></div>'
+              index + ":" + i + '">×</button>' +
+              effortField(p, m, index, i) +
+              "</div>"
             );
           })
           .join("");
@@ -600,6 +771,9 @@
             : "") +
           "</div>" +
           models +
+          (lock
+            ? ""
+            : '<p class="hint effort-hint">' + t("settings.effortsHint") + "</p>") +
           (lock ? probeHint() : "") +
           '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>" +
           '<div class="card-foot"><p class="hint">' +
@@ -638,10 +812,16 @@
         card.querySelectorAll(".model-row").forEach((row) => {
           const mid = row.querySelector('[data-f="id"]').value.trim();
           if (!mid) return;
-          models.push({
+          const effortsEl = row.querySelector('[data-f="efforts"]');
+          const efforts = effortsEl ? parseEffortInput(effortsEl.value) : [];
+          const next = {
             id: mid,
             name: row.querySelector('[data-f="name"]').value.trim(),
-          });
+          };
+          if (effortsEl && efforts.length) {
+            next.reasoning = { supportedEfforts: efforts };
+          }
+          models.push(next);
         });
         p.models = models;
       }
@@ -654,7 +834,18 @@
             baseUrl: p.baseUrl || "",
             api: p.api || "openai-completions",
             apiKey: p.apiKey || "",
-            models: p.models || [],
+            models: (p.models || []).map((m) => {
+              const reasoning = m.reasoning && m.reasoning.supportedEfforts
+                ? { supportedEfforts: m.reasoning.supportedEfforts }
+                : m.manualEfforts && m.manualEfforts.length
+                  ? { supportedEfforts: m.manualEfforts }
+                  : undefined;
+              return {
+                id: m.id,
+                name: m.name || "",
+                ...(reasoning ? { reasoning } : {}),
+              };
+            }),
           };
         });
         return providers;
@@ -767,7 +958,7 @@
         render();
       }
       async function applyPicker(extra) {
-        const ref = currentRef();
+        const ref = extra && extra.default ? extra.default : currentRef();
         if (ref && !groupReady(ref.provider)) {
           const group = pickerGroups().find((p) => p.id === ref.provider);
           flash(
@@ -847,7 +1038,145 @@
         document.getElementById("aux-dialog").close();
         await applyPicker({ aux });
       });
+      function orderShownRows(box) {
+        const rows = Array.from(box.querySelectorAll(".account-model"));
+        rows.sort((a, b) => {
+          const aBox = a.querySelector("[data-shown]");
+          const bBox = b.querySelector("[data-shown]");
+          const aOn = aBox && aBox.checked ? 0 : 1;
+          const bOn = bBox && bBox.checked ? 0 : 1;
+          if (aOn !== bOn) return aOn - bOn;
+          return Number((aBox && aBox.getAttribute("data-shown-i")) || 0) -
+            Number((bBox && bBox.getAttribute("data-shown-i")) || 0);
+        });
+        rows.forEach((row) => {
+          const on = Boolean(row.querySelector("[data-shown]") && row.querySelector("[data-shown]").checked);
+          row.classList.toggle("is-on", on);
+          box.appendChild(row);
+        });
+      }
+      function syncShownBar(box) {
+        const boxes = Array.from(box.querySelectorAll("[data-shown]"));
+        const head = box.querySelector("[data-shown-all]");
+        const n = boxes.filter((el) => el.checked).length;
+        if (head) {
+          head.checked = boxes.length > 0 && n === boxes.length;
+          head.indeterminate = n > 0 && n < boxes.length;
+        }
+        const count = box.querySelector(".account-models-count");
+        if (count) count.textContent = n + " / " + boxes.length;
+        orderShownRows(box);
+      }
+      async function saveShown(box) {
+        const id = box.getAttribute("data-shown-box");
+        if (!id) return;
+        const boxes = Array.from(box.querySelectorAll("[data-shown]"));
+        const checked = boxes.filter((el) => el.checked).map((el) => el.getAttribute("data-shown")).filter(Boolean);
+        const shownIds = checked.length === boxes.length ? null : checked;
+        const res = await fetch("/settings/shown", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: id, shownIds: shownIds }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          flash("error", body.error || "save failed");
+          await load();
+          return;
+        }
+        data = body;
+      }
+      let shownSave = Promise.resolve();
+      function queueShown(box) {
+        shownSave = shownSave.then(() => saveShown(box), () => saveShown(box));
+        return shownSave;
+      }
+      let pendingCc = null;
+      async function pollCc() {
+        if (!pendingCc) return;
+        const res = await fetch("/settings/commandcode/poll", { method: "POST" });
+        const body = await res.json();
+        if (body.ready || body.connected) {
+          pendingCc = null;
+          document.getElementById("oauth-panel").hidden = true;
+          flash("health", t("settings.connectedId", { id: "commandcode" }));
+          await load();
+          return;
+        }
+        if (body.error) {
+          pendingCc = null;
+          flash("error", body.error);
+          await load();
+          return;
+        }
+        setTimeout(pollCc, 1200);
+      }
+      document.getElementById("accounts").addEventListener("change", async (event) => {
+        const box = event.target.closest("[data-shown-box]");
+        if (!box) return;
+        const all = event.target.closest("[data-shown-all]");
+        if (all) {
+          const on = event.target.checked;
+          box.querySelectorAll("[data-shown]").forEach((el) => {
+            el.checked = on;
+          });
+        }
+        syncShownBar(box);
+        await queueShown(box);
+      });
       document.getElementById("accounts").addEventListener("click", async (event) => {
+        const ccLogin = event.target.closest("[data-cc-login]");
+        const ccLogout = event.target.closest("[data-cc-logout]");
+        const ccSave = event.target.closest("[data-cc-save]");
+        const ccSync = event.target.closest("[data-cc-sync]");
+        if (ccSync) {
+          ccSync.disabled = true;
+          flash("", t("settings.syncing"));
+          try {
+            const res = await fetch("/settings/commandcode/sync", { method: "POST" });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) { flash("error", body.error || t("settings.syncFailed")); return; }
+            data = body;
+            render();
+            flash("health", t("settings.synced", { n: body.synced || 0 }));
+          } finally {
+            ccSync.disabled = false;
+          }
+          return;
+        }
+        if (ccLogin) {
+          const res = await fetch("/settings/commandcode/login", { method: "POST" });
+          const body = await res.json();
+          if (!res.ok) { flash("error", body.error || "login failed"); return; }
+          if (body.loginUrl) {
+            window.open(body.loginUrl, "_blank", "noopener");
+            showOauthPanel({ verificationUri: body.loginUrl, flow: "pkce" });
+          }
+          pendingCc = "commandcode";
+          flash("muted", t("settings.commandCodeLoginOpened"));
+          pollCc();
+          return;
+        }
+        if (ccLogout) {
+          await fetch("/settings/commandcode/logout", { method: "POST" });
+          pendingCc = null;
+          await load();
+          return;
+        }
+        if (ccSave) {
+          const input = event.target.closest(".account").querySelector("[data-cc-key]");
+          const apiKey = input && input.value;
+          const res = await fetch("/settings/commandcode/key", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ apiKey: apiKey || "" }),
+          });
+          const body = await res.json();
+          if (!res.ok) { flash("error", body.error || "key failed"); return; }
+          flash("health", t("settings.connectedId", { id: "commandcode" }));
+          await load();
+          return;
+        }
         const webLogin = event.target.closest("[data-web-login]");
         const webLogout = event.target.closest("[data-web-logout]");
         const webDoctor = event.target.closest("[data-web-doctor]");
@@ -979,6 +1308,12 @@
         document.getElementById("oauth-panel").hidden = true;
         flash("health", t("settings.connectedId", { id: pendingOauth }));
         await load();
+      });
+      document.getElementById("account-tabs").addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-sub-tab]");
+        if (!tab) return;
+        subTab = tab.getAttribute("data-sub-tab") || "";
+        renderAccounts();
       });
       document.getElementById("provider-tabs").addEventListener("click", (event) => {
         if (event.target.closest("[data-add-provider]")) {

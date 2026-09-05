@@ -40,7 +40,7 @@ pnpm dev
 
 ## 據點怎麼運轉
 
-**誰會回。** 行首的 `@handle` 才是分派。兩行各一個 `@handle`，就是兩個人各自領一份：你的前言，加上他那一行。行首沒人時，內文**第一個** `@handle` 就是被指派的人，並拿到整段訊息；再往後的 `@` 只是提到。完全沒點名，就由上一個說話的冒險者接。`@all` / `@channel` / `@here` 會把據點每一席同時叫醒——通常是錯的。`@` 一個不在據點的人，會先把人拉進來再回。一個據點 6 席（`#general` 除外）：先重用編制，再招人。
+**誰會回。** 每張委託有一份**派工 List**。mention 追加作工紀錄，這輪做完就離開。同一則裡的編號項（`1. @design` / `2. @marketing`）同一波一起跑。`完成後` / `最後` / `再交 @infra` 進後面的波次，這輪先不叫。席與席 `@handle` 交棒時，規格會進兩人的 1:1 **交辦**，下一席從那份 brief 開工——不用你按按鈕。公開回覆仍寫在委託上。不再只靠行首 `@`。沒點名時，由上一個說話的人接，或派工 List 最前面還在的人。`@all` / `@channel` / `@here` 會把據點每一席同時叫醒——通常是錯的。`@` 一個不在據點的人不會被加進來。一個據點 6 席（`#general` 除外）：先重用編制，再招人。
 
 **輸入框。** 回覆某一則訊息，就是指定那個人，也讓他看到你指的是哪一句。有人在跑的時候，Enter 排隊，Cmd/Ctrl+↩ 插入這輪。暫停停住這輪（可換模型後繼續）；停止把那一名冒險者從這輪拉下來。重問只重問那一題。刪除拿掉那一則訊息與它的軌跡。頻道可在側欄改名。
 
@@ -53,7 +53,7 @@ pnpm dev
 - **單位是有名字的冒險者：** Soul / Agent / Skill / Position，用 `@handle` 叫。
 - 預設小隊五席——是編制，不是出征：`@infra` `@pm` `@rd` `@design` `@marketing`。出活仍點名一人。
 - 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。同一張表單也能叫模型替這席挑技能，上限 8 項；沒接模型時退回本機比對。
-- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Freebuff Chat 是可選的 chat-role 分頁（官方免費 session）；工具仍由 Guild 執行。
+- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Command Code 是可選的訂閱分頁（官方 Provider API；Go 帳號落到 `/alpha/generate`）。Freebuff Chat 是可選的 chat-role 分頁（官方免費 session）；工具仍由 Guild 執行。
 
 ![編制：五位有名字的冒險者。](docs/readme-roster-2026-08-29.png)
 
@@ -116,6 +116,8 @@ pnpm dev
 - 不是 `apps/desktop`（孤兒；產品 UI 是 daemon）
 
 ## 現況限制
+
+**Freebuff Chat 的憑證留在本機。** 官方裝置登入（`~/.config/manicode/credentials.json`）優先；沒有登入時，環境變數 `CODEBUFF_API_KEY` 是備援。無論哪條，token 只用來簽 SDK 對 Codebuff 的請求——遠端 agent 仍不能讀、寫、跑你機器上的任何東西。
 
 **預設：`run` 與 `write` 以你的身分、在你的 shell 執行（`GUILD_SANDBOX` 未設 = `full_access`，除非該 bot 的 POSITION.md 有 `sandbox:`）。** `run` 的預設 cwd 是 `$HOME`（`workspace_write` 用 `GUILD_WORKSPACE` 或本 checkout）。這是 tool gate，不是 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
 

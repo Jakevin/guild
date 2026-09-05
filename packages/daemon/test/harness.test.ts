@@ -179,6 +179,7 @@ test("workspace_write refuses browser", async () => {
   const names = guildTools([], ctx).map((tool) => tool.name);
   assert.ok(!names.includes("browser"));
   assert.ok(!names.includes("image_gen"));
+  assert.ok(!names.includes("tts"));
   assert.ok(names.includes("read"));
   assert.ok(names.includes("run"));
 });

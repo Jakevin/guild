@@ -24,6 +24,7 @@ function localImgSrc(href) {
     .trim()
     .replace(/"/g, "");
   if (!raw) return "";
+  if (/^\/generated\/[A-Za-z0-9._-]+\.mp3$/i.test(raw)) return "";
   if (/^\/generated\/[A-Za-z0-9._-]+$/.test(raw)) return raw;
   if (/^https?:\/\//i.test(raw)) return raw;
   let path = raw;
@@ -35,9 +36,33 @@ function localImgSrc(href) {
   return "/local?p=" + encodeURIComponent(path);
 }
 
+function localAudioSrc(href) {
+  const raw = String(href || "")
+    .trim()
+    .replace(/"/g, "");
+  if (/^\/generated\/[A-Za-z0-9._-]+\.mp3$/i.test(raw)) return raw;
+  return "";
+}
+
+function audioTag(src, label) {
+  const cap = label
+    ? '<span class="md-audio-cap">' + label + "</span>"
+    : "";
+  return (
+    '<span class="md-audio-wrap">' +
+    '<audio class="md-audio" controls preload="none" src="' +
+    src +
+    '"></audio>' +
+    cap +
+    "</span>"
+  );
+}
+
 function inlineMd(text) {
   let out = escapeMd(text);
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, function (m, alt, href) {
+    const audio = localAudioSrc(href);
+    if (audio) return audioTag(audio, alt);
     const src = localImgSrc(href);
     if (!src) return m;
     const label = alt || "image";
@@ -52,7 +77,10 @@ function inlineMd(text) {
       '" loading="lazy"></a>'
     );
   });
-  out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, function (_m, label, href) {
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, href) {
+    const audio = localAudioSrc(href);
+    if (audio) return audioTag(audio, label);
+    if (!/^https?:/i.test(href)) return m;
     return (
       '<a href="' +
       href.replace(/"/g, "") +
@@ -422,5 +450,6 @@ if (typeof module !== "undefined" && module.exports) {
     holdHtmlFrames,
     putHtmlFrames,
     localImgSrc,
+    localAudioSrc,
   };
 }

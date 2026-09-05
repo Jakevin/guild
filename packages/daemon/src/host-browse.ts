@@ -47,6 +47,8 @@ const SECRET_GUILD_FILES = new Set([
   "models.json",
   "mcp.json",
   "freebuff.json",
+  "commandcode.json",
+  "commandcode-models.json",
 ]);
 /** Credential dotfiles that live directly in `$HOME`. */
 const SECRET_HOME_FILES = new Set([
@@ -71,6 +73,7 @@ const SECRET_HOME_DIRS = [
   ".gnupg",
   ".claude",
   ".codex",
+  ".commandcode",
   ".cursor",
   ".kube",
   ".azure",
@@ -140,6 +143,7 @@ function isSecretPath(abs: string): boolean {
  * The attach picker browses `$HOME` on purpose, so /host/* is not confined to a
  * workspace. Secrets still have to stay shut: OAuth tokens, model keys, the MCP
  * store, the cloned browser profile, Freebuff Chat profile / `freebuff.json`,
+ * Command Code `commandcode.json` / `~/.commandcode`,
  * private keys, and the usual credential
  * dotfiles / folders (`.aws`, `.claude`, `.codex`, `.npmrc`, `.netrc`, …).
  * This is a denylist over the picker, not a chroot: non-secret `$HOME` and

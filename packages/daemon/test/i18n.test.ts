@@ -58,11 +58,15 @@ test("t interpolates and switches locale in memory", () => {
   assert.equal(t("model.settings"), "狀態欄");
   assert.equal(t("channel.nameRequired"), "委託要有名稱");
   assert.equal(t("settings.saveKey"), "儲存");
+  assert.equal(t("confirm.ok"), "確定");
   assert.equal(t("minutesAgo", { n: 3 }), "3 分鐘前");
   assert.equal(t("title.mobile"), "Guild — 外出");
   assert.equal(t("branch.close"), "結案");
   assert.equal(t("settings.keyless"), "無需金鑰");
   assert.equal(t("settings.sync"), "Sync");
+  assert.equal(t("settings.commandCode"), "Command Code");
+  assert.equal(t("settings.accountModels"), "大廳要出現的模型");
+  assert.equal(t("settings.selectAll"), "全選");
   assert.equal(t("settings.freebuffChat"), "Freebuff Chat");
   assert.equal(t("live.freebuffWait"), "Freebuff：等待官方 session…");
   assert.equal(t("live.freebuffQueue"), "Freebuff：排隊中…");

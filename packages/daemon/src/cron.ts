@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CronJobRow, CronRunRow } from "./db.ts";
+import type { CronDelivery, CronJobRow, CronRunRow, CronScope } from "./db.ts";
 import type { HandlerExtras } from "./handlers.ts";
 import { StoreError, type GuildStore } from "./store.ts";
 import type { ToolContext, ToolOutcome } from "./tools.ts";
@@ -27,10 +27,13 @@ function specOf(job: CronJobRow): CronSpec {
 }
 
 export function publicCronJob(job: CronJobRow) {
+  const scope: CronScope = job.scope === "bot" ? "bot" : "channel";
+  const delivery: CronDelivery =
+    scope === "bot" ? "sheet" : job.delivery === "sheet" ? "sheet" : "hall";
   return {
     id: job.id,
     name: job.name,
-    roomId: job.roomId,
+    roomId: scope === "bot" ? null : job.roomId,
     botId: job.botId,
     prompt: job.prompt,
     schedule: job.schedule,
@@ -42,7 +45,24 @@ export function publicCronJob(job: CronJobRow) {
     lastStatus: job.lastStatus,
     lastError: job.lastError,
     running: inflight.has(job.id),
+    scope,
+    delivery,
   };
+}
+
+function ensureSheetSession(store: GuildStore, job: CronJobRow): string {
+  const quest = job.scope === "channel" ? store.getRoom(job.roomId) : null;
+  const members =
+    quest?.kind === "channel"
+      ? quest.memberIds
+      : store.listBots().map((bot) => bot.id);
+  const ids = members.includes(job.botId) ? members : [...members, job.botId];
+  const session = store.ensureCronSession(job.id, job.name, ids);
+  if (job.sessionRoomId !== session.id) {
+    job.sessionRoomId = session.id;
+    store.writeCronJob(job);
+  }
+  return session.id;
 }
 
 export function publicCronRun(run: CronRunRow) {
@@ -83,19 +103,35 @@ function recordCronRun(
 export function createCronJob(
   store: GuildStore,
   input: {
-    roomId: string;
+    roomId?: string;
     botId: string;
     prompt: string;
     schedule: string;
     name?: string;
+    scope?: CronScope;
+    delivery?: CronDelivery;
   },
 ): CronJobRow {
-  const room = store.getRoom(input.roomId);
-  if (!room) throw new StoreError(404, "room not found");
   const bot = store.getBot(input.botId);
   if (!bot) throw new StoreError(400, "bot not found");
-  if (room.kind === "channel" && !room.memberIds.includes(bot.id)) {
-    throw new StoreError(400, "bot is not on this quest");
+  const scope: CronScope = input.scope === "bot" ? "bot" : "channel";
+  const delivery: CronDelivery =
+    scope === "bot"
+      ? "sheet"
+      : input.delivery === "sheet"
+        ? "sheet"
+        : "hall";
+  let roomId = "";
+  if (scope === "channel") {
+    const room = store.getRoom(input.roomId || "");
+    if (!room) throw new StoreError(404, "room not found");
+    if (room.kind !== "channel" && room.kind !== "dm") {
+      throw new StoreError(400, "cron channel jobs need a hall");
+    }
+    if (room.kind === "channel" && !room.memberIds.includes(bot.id)) {
+      throw new StoreError(400, "bot is not on this quest");
+    }
+    roomId = room.id;
   }
   const prompt = input.prompt.trim();
   if (!prompt) throw new StoreError(400, "prompt is required");
@@ -116,10 +152,20 @@ export function createCronJob(
     (input.name || "").trim() ||
     prompt.replace(/\s+/g, " ").trim().slice(0, 28) ||
     "cron";
+  const id = randomUUID();
+  if (scope === "bot") {
+    const members = store.listBots().map((item) => item.id);
+    const session = store.ensureCronSession(
+      id,
+      name,
+      members.includes(bot.id) ? members : [...members, bot.id],
+    );
+    roomId = session.id;
+  }
   const job: CronJobRow = {
-    id: randomUUID(),
+    id,
     name,
-    roomId: room.id,
+    roomId,
     botId: bot.id,
     prompt,
     schedule: spec.raw,
@@ -130,7 +176,13 @@ export function createCronJob(
     nextRunAt: new Date(nextRunAt(spec, now)).toISOString(),
     paused: false,
     createdAt: new Date(now).toISOString(),
+    scope,
+    delivery,
   };
+  if (delivery === "sheet") {
+    if (scope === "bot") job.sessionRoomId = roomId;
+    else job.sessionRoomId = ensureSheetSession(store, job);
+  }
   store.writeCronJob(job);
   return job;
 }
@@ -153,7 +205,12 @@ export function resumeCronJob(store: GuildStore, id: string): CronJobRow {
 export function updateCronJob(
   store: GuildStore,
   id: string,
-  patch: { name?: string; prompt?: string; schedule?: string },
+  patch: {
+    name?: string;
+    prompt?: string;
+    schedule?: string;
+    delivery?: CronDelivery;
+  },
 ): CronJobRow {
   const job = store.getCronJob(id);
   if (patch.name != null) {
@@ -187,12 +244,22 @@ export function updateCronJob(
     if (spec.atMs != null) job.atMs = spec.atMs;
     job.nextRunAt = new Date(nextRunAt(spec, Date.now())).toISOString();
   }
+  if (patch.delivery != null) {
+    if (job.scope === "bot") {
+      job.delivery = "sheet";
+    } else {
+      job.delivery = patch.delivery === "sheet" ? "sheet" : "hall";
+    }
+    if (job.delivery === "sheet") ensureSheetSession(store, job);
+  }
   store.writeCronJob(job);
   return job;
 }
 
 export function removeCronJob(store: GuildStore, id: string): { ok: true; id: string } {
+  const job = readCronJob(store, id);
   if (!store.deleteCronJob(id)) throw new StoreError(404, "cron job not found");
+  if (job) store.deleteCronSession(job.id);
   return { ok: true, id };
 }
 
@@ -212,6 +279,7 @@ function commitFiredJob(
   const current = readCronJob(store, id);
   if (!current) return;
   if (patch === "delete") {
+    store.deleteCronSession(id);
     store.deleteCronJob(id);
     return;
   }
@@ -258,15 +326,24 @@ export async function fireCronJob(
 ): Promise<{ ok: boolean; skipped?: string; error?: string }> {
   const job = store.getCronJob(id);
   const force = Boolean(opts.force);
+  const delivery: CronDelivery =
+    job.scope === "bot" || job.delivery === "sheet" ? "sheet" : "hall";
   if (job.paused && !force) return { ok: false, skipped: "paused" };
   if (inflight.has(job.id)) {
     if (force) recordCronRun(store, job.id, "skipped", "already running");
     return { ok: false, skipped: "already running" };
   }
-  const blocked = seatBlocked(store, job.roomId, job.botId);
-  if (blocked) {
-    if (force) recordCronRun(store, job.id, "skipped", blocked);
-    return { ok: false, skipped: blocked };
+  const fireRoomId =
+    delivery === "sheet" ? ensureSheetSession(store, job) : job.roomId;
+  if (delivery === "hall") {
+    const blocked = seatBlocked(store, job.roomId, job.botId);
+    if (blocked) {
+      if (force) recordCronRun(store, job.id, "skipped", blocked);
+      return { ok: false, skipped: blocked };
+    }
+  } else if (seatBlocked(store, fireRoomId, job.botId)) {
+    if (force) recordCronRun(store, job.id, "skipped", "already running");
+    return { ok: false, skipped: "already running" };
   }
   const room = store.getRoom(job.roomId);
   if (!room) {
@@ -278,7 +355,7 @@ export async function fireCronJob(
     recordCronRun(store, job.id, "failed", "room not found");
     return { ok: false, error: "room not found" };
   }
-  if (room.kind === "channel" && !room.memberIds.includes(job.botId)) {
+  if (job.scope !== "bot" && room.kind === "channel" && !room.memberIds.includes(job.botId)) {
     commitFiredJob(store, job.id, {
       paused: true,
       lastStatus: "failed",
@@ -314,15 +391,23 @@ export async function fireCronJob(
   try {
     const { postUserMessage } = await import("./handlers.ts");
     const body = `排程 · ${job.name}\n\n@${bot.handle} ${job.prompt}`;
+    const questRoomId =
+      job.scope === "channel" && room.kind === "channel" ? room.id : undefined;
     const posted = await postUserMessage(
       store,
-      job.roomId,
+      fireRoomId,
       body,
       env,
       undefined,
       undefined,
       job.botId,
-      { ...extras, mentions: [job.botId], harvest: false, cronRun: true },
+      {
+        ...extras,
+        mentions: [job.botId],
+        harvest: false,
+        cronRun: true,
+        ...(questRoomId ? { questRoomId } : {}),
+      },
     );
     const startedAt = new Date(now).toISOString();
     const spoke = (posted.replies || []).some((msg) => msg.author === job.botId);
@@ -334,7 +419,13 @@ export async function fireCronJob(
     const next = followingRun(specOf(job), now);
     if (next == null) {
       recordCronRun(store, job.id, "ok", undefined, startedAt);
-      commitFiredJob(store, job.id, "delete");
+      commitFiredJob(store, job.id, {
+        lastRunAt: new Date(now).toISOString(),
+        lastStatus: "ok",
+        lastError: undefined,
+        paused: true,
+        nextRunAt: new Date(now).toISOString(),
+      });
     } else {
       commitFiredJob(store, job.id, {
         lastRunAt: new Date(now).toISOString(),
@@ -400,6 +491,10 @@ export function executeCronjob(
     if (action === "create") {
       const schedule = String(args.schedule || "").trim();
       const prompt = String(args.prompt || args.task || "").trim();
+      const scope =
+        String(args.scope || "").trim() === "bot" ? "bot" : "channel";
+      const delivery =
+        String(args.delivery || "").trim() === "sheet" ? "sheet" : "hall";
       const roomId =
         (typeof args.room_id === "string" && args.room_id) || ctx.roomId || "";
       const botId =
@@ -407,7 +502,9 @@ export function executeCronjob(
         (typeof args.botId === "string" && args.botId) ||
         ctx.botId ||
         "";
-      if (!roomId) throw new StoreError(400, "room_id is required");
+      if (scope === "channel" && !roomId) {
+        throw new StoreError(400, "room_id is required");
+      }
       if (!botId) throw new StoreError(400, "bot_id is required");
       const job = createCronJob(store, {
         roomId,
@@ -415,6 +512,8 @@ export function executeCronjob(
         prompt,
         schedule,
         name: typeof args.name === "string" ? args.name : "",
+        scope,
+        delivery,
       });
       return {
         text: `created ${job.id} · ${job.name} · next ${job.nextRunAt} · ${job.schedule}`,
@@ -443,6 +542,12 @@ export function executeCronjob(
         name: typeof args.name === "string" ? args.name : undefined,
         prompt: typeof args.prompt === "string" ? args.prompt : undefined,
         schedule: typeof args.schedule === "string" ? args.schedule : undefined,
+        delivery:
+          typeof args.delivery === "string"
+            ? args.delivery === "sheet"
+              ? "sheet"
+              : "hall"
+            : undefined,
       });
       return {
         text: `updated ${job.id} · ${job.name} · next ${job.nextRunAt} · ${job.schedule}`,

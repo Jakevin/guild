@@ -108,7 +108,7 @@ export function resolveSubagent(
 }
 
 const CHILD_TOOLS = `You ARE already running on the user's local computer (Guild).
-Tools: run, read, write, list, skill, image_gen. You cannot spawn subagents.
+Tools: run, read, write, list, skill, image_gen, tts. You cannot spawn subagents.
 Never say you cannot access this machine. Check [exit code: N] on every run.
 Independent searches: emit multiple tool calls in one round; they run in parallel.`;
 

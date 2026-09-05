@@ -49,8 +49,10 @@ import {
 } from "./mcp.ts";
 import {
   assignmentFor,
+  dismissAssign,
   isBroadcastMention,
   messageMentionIds,
+  parseAssignmentWaves,
   parseMentionIds,
   sanitizeMentionIds,
 } from "./mention.ts";
@@ -78,6 +80,8 @@ export type HandlerExtras = {
   mentions?: string[];
   /** Hermes: cron child sessions cannot manage cron. */
   cronRun?: boolean;
+  /** Isolated cron still reads this quest's Channel.md / MEMORY.md. */
+  questRoomId?: string;
 };
 
 export function healthPayload(): HealthResponse {
@@ -512,11 +516,28 @@ export function workspace(store: GuildStore) {
   });
   channels.sort(byUpdatedAtDesc);
   listed.sort(byUpdatedAtDesc);
+  const peers = store.listPeers().map((room) => {
+    const last = store.lastMessagePreview(room.id);
+    return {
+      ...room,
+      members: room.memberIds
+        .map((id) => byId.get(id))
+        .filter((bot): bot is NonNullable<typeof bot> => Boolean(bot)),
+      updatedAt: last?.createdAt,
+      lastMessage: last ?? null,
+    };
+  });
+  peers.sort(byUpdatedAtDesc);
   const live = store.listLiveTurns().flatMap(({ roomId, turn }) => {
     if (!turn.botId) return [];
     const room = store.getRoom(roomId);
-    if (!room) return [];
-    const id = room.kind === "dm" ? roomId.replace(/^dm-/, "") : roomId;
+    if (!room || room.kind === "cron") return [];
+    const id =
+      room.kind === "dm"
+        ? roomId.startsWith("peer-")
+          ? roomId
+          : roomId.replace(/^dm-/, "")
+        : roomId;
     return [
       {
         kind: room.kind,
@@ -526,10 +547,11 @@ export function workspace(store: GuildStore) {
         thinking: turn.thinking,
         steps: turn.steps,
         ...(turn.paused ? { paused: true } : {}),
+        ...(turn.messageId ? { messageId: turn.messageId } : {}),
       },
     ];
   });
-  return { channels, bots: listed, live };
+  return { channels, bots: listed, live, peers };
 }
 
 export function createChannel(store: GuildStore, name: string) {
@@ -624,17 +646,79 @@ export function openDm(store: GuildStore, botId: string) {
   return store.openDm(botId);
 }
 
+export function resolveDm(store: GuildStore, raw: string) {
+  const id = decodeURIComponent(raw || "").trim();
+  if (!id) throw new StoreError(400, "missing id");
+  if (id.startsWith("peer-")) {
+    const room = store.getRoom(id);
+    if (!room || room.kind !== "dm") throw new StoreError(404, "room not found");
+    return room;
+  }
+  return store.openDm(id);
+}
+
 /** A seat may speak twice in one turn so report-back can resume the assigner. */
 const HANDOFF_SEAT_CAP = 2;
+
+function peerHistoryFor(
+  store: GuildStore,
+  peerId: string,
+  listenerId: string,
+): HistoryItem[] {
+  return store.listMessages(peerId).map((message) => {
+    if (message.author === listenerId) return toHistoryItem(message);
+    const from = store.getBot(message.author);
+    const label = from ? `@${from.handle}` : message.author;
+    return {
+      author: "you" as const,
+      body:
+        message.author === "you"
+          ? message.body
+          : `（${label}）\n${message.body}`,
+      ...(message.parts && message.parts.length ? { parts: message.parts } : {}),
+    };
+  });
+}
+
+function filePeerHandoff(
+  store: GuildStore,
+  fromId: string,
+  toId: string,
+  spec: string,
+): { peerId: string; history: HistoryItem[] } {
+  const peer = store.openPeer(fromId, toId);
+  store.appendMessage(
+    peer.id,
+    fromId,
+    spec,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [toId],
+  );
+  const history = peerHistoryFor(store, peer.id, toId);
+  history.pop();
+  return { peerId: peer.id, history };
+}
 
 function handoffTargets(
   store: GuildStore,
   memberIds: string[],
   replies: ChatMessage[],
-  asked: string,
-  history: HistoryItem[],
+  _asked: string,
+  _history: HistoryItem[],
   fresh: ChatMessage[],
-): { botId: string; fromHandle: string; asked: string; history: HistoryItem[] }[] {
+): {
+  botId: string;
+  fromHandle: string;
+  fromMessageId: string;
+  peerId: string;
+  asked: string;
+  history: HistoryItem[];
+}[] {
   const bots = store.listBots();
   const handles = bots.map((bot) => bot.handle);
   const spoke = new Map<string, number>();
@@ -644,6 +728,8 @@ function handoffTargets(
   const hops: {
     botId: string;
     fromHandle: string;
+    fromMessageId: string;
+    peerId: string;
     asked: string;
     history: HistoryItem[];
   }[] = [];
@@ -653,11 +739,8 @@ function handoffTargets(
     const ids = messageMentionIds(reply, bots);
     if (!ids.length) continue;
     const from = bots.find((bot) => bot.id === reply.author);
-    const fromHandle = from?.handle || reply.author;
-    const hopHistory = history.concat(
-      { author: "you", body: asked },
-      { author: reply.author, body: reply.body },
-    );
+    if (!from) continue;
+    const fromHandle = from.handle;
     for (const bot of bots) {
       if (!ids.includes(bot.id)) continue;
       if (!memberIds.includes(bot.id)) continue;
@@ -665,11 +748,14 @@ function handoffTargets(
       if ((spoke.get(bot.id) || 0) >= HANDOFF_SEAT_CAP || queued.has(bot.id)) continue;
       queued.add(bot.id);
       const spec = assignmentFor(reply.body, bot.handle, handles);
+      const filed = filePeerHandoff(store, from.id, bot.id, spec);
       hops.push({
         botId: bot.id,
         fromHandle,
+        fromMessageId: reply.id,
+        peerId: filed.peerId,
         asked: `（@${fromHandle} 交棒給 @${bot.handle}）\n${spec}`,
-        history: hopHistory,
+        history: filed.history,
       });
     }
   }
@@ -776,7 +862,7 @@ export function channelMarkdownForRoom(
   roomId: string,
 ): string {
   const room = store.getRoom(roomId);
-  if (!room || room.kind !== "channel") return "";
+  if (!room || (room.kind !== "channel" && room.kind !== "cron")) return "";
   return store.readChannelMd(roomId);
 }
 
@@ -903,11 +989,17 @@ export function chatTurnForBot(
   history: HistoryItem[] = [],
   userMessage = "",
   slashText?: string,
+  questRoomId?: string,
 ) {
   const detail = store.botDetail(botId);
   const room = store.getRoom(roomId);
   const asked = slashText ?? userMessage;
   const subagents = listSpawnRefs(store.listLibrary("subagents"));
+  const mdRoomId =
+    questRoomId && store.getRoom(questRoomId)?.kind === "channel"
+      ? questRoomId
+      : roomId;
+  const mdRoom = store.getRoom(mdRoomId);
   return {
     botName: detail.name,
     handle: detail.handle,
@@ -926,10 +1018,12 @@ export function chatTurnForBot(
     ),
     subagents,
     wantSpawn: extraTurnSubagents(asked, subagents),
-    channelMd: channelMarkdownForRoom(store, roomId),
+    channelMd: channelMarkdownForRoom(store, mdRoomId),
     botMemory: store.readBotMemory(botId),
     channelMemory:
-      room?.kind === "channel" ? store.readChannelMemory(roomId) : "",
+      mdRoom?.kind === "channel" || mdRoom?.kind === "cron"
+        ? store.readChannelMemory(mdRoomId)
+        : "",
     whisper: room?.kind === "dm",
     compact: store.readCompact(roomId),
     onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),
@@ -953,6 +1047,7 @@ function liveDetail(trace: ToolTrace): string {
   }
   if (trace.name === "skill") return String(args.name || "");
   if (trace.name === "image_gen") return String(args.prompt || "");
+  if (trace.name === "tts") return String(args.text || "");
   if (trace.name === "spawn") {
     return String(
       args.title ||
@@ -1004,6 +1099,7 @@ function publicLiveTurn(live: LiveTurn): LiveTurn {
     steps: live.steps,
     startedAt: live.startedAt,
     ...(live.paused ? { paused: true } : {}),
+    ...(live.messageId ? { messageId: live.messageId } : {}),
   };
 }
 
@@ -1076,7 +1172,13 @@ export function getLiveTurn(store: GuildStore, roomId: string) {
       running: true,
     })),
   };
-  return { ...live, bots, traj: liveTrajectoryForRoom(store, roomId) };
+  const room = store.getRoom(roomId);
+  return {
+    ...live,
+    bots,
+    traj: liveTrajectoryForRoom(store, roomId),
+    ...(room?.kind === "channel" ? { assign: store.assignList(roomId) } : {}),
+  };
 }
 
 export function abortLiveTurn(
@@ -1152,7 +1254,9 @@ export async function continueLiveTurn(
   const userMessage = messages[userIndex];
   const asked = live.asked?.trim() || userMessage.body.trim();
   if (!asked) throw new StoreError(409, "nothing to continue");
-  const history = messages.slice(0, userIndex).map(toHistoryItem);
+  const history = live.peerId
+    ? peerHistoryFor(store, live.peerId, id)
+    : messages.slice(0, userIndex).map(toHistoryItem);
   const parent = parentMessage(messages.slice(0, userIndex), userMessage.replyTo);
   const room = store.getRoom(roomId);
   store.setLiveTurn(roomId, { ...live, paused: false });
@@ -1168,7 +1272,10 @@ export async function continueLiveTurn(
     parent,
     extras,
   );
-  return { replies };
+  return {
+    replies,
+    ...(room?.kind === "channel" ? { assign: store.assignList(roomId) } : {}),
+  };
 }
 
 function isAbortError(err: unknown): boolean {
@@ -1228,7 +1335,13 @@ async function generateReplies(
   store: GuildStore,
   roomId: string,
   memberIds: string[],
-  userMessage: { author?: string; body: string; attachments?: ChatAttachment[]; mentions?: string[] },
+  userMessage: {
+    id?: string;
+    author?: string;
+    body: string;
+    attachments?: ChatAttachment[];
+    mentions?: string[];
+  },
   history: HistoryItem[],
   onlyBotId?: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -1239,24 +1352,48 @@ async function generateReplies(
     ? undefined
     : followBotId(store, history, parent);
   const asked = askedText(store, parent, userMessage);
+  const roomKind = store.getRoom(roomId)?.kind;
+  const incoming =
+    roomKind === "channel" && !onlyBotId
+      ? parseAssignmentWaves(userMessage.body, store.listBots(), "user")
+      : [];
+  if (roomKind === "channel" && !onlyBotId) {
+    store.enqueueAssign(roomId, incoming);
+    if (incoming[0]?.length) store.promoteAssign(roomId, incoming[0]);
+  }
+  const explicit = incoming[0]?.filter((id) => memberIds.includes(id)) ?? [];
+  const queued =
+    roomKind === "channel" ? store.assignList(roomId)[0] : undefined;
   const targets = onlyBotId
     ? [onlyBotId]
-    : replyBots(store, memberIds, userMessage, extraBotId);
+    : explicit.length
+      ? explicit
+      : queued?.length
+        ? queued.filter((id) => memberIds.includes(id))
+        : replyBots(store, memberIds, userMessage, extraBotId);
   const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
   const signal = store.beginTurn(roomId, targets);
-  plantLiveTurns(store, roomId, targets, memberIds, onlyBotId);
+  const turnMessageId =
+    targets
+      .map((id) => store.getLiveBotTurn(roomId, id)?.messageId)
+      .find((id): id is string => Boolean(id?.trim())) ||
+    userMessage.id?.trim() ||
+    undefined;
+  plantLiveTurns(store, roomId, targets, memberIds, onlyBotId, turnMessageId);
   const mcpTools = await resolveMcpTools(store, extras);
   const speak = async (
     botId: string,
     turnAsked: string,
     turnHistory: HistoryItem[],
+    hop?: { replyTo?: string; peerId?: string },
   ) => {
     if (!memberIds.includes(botId)) return;
     if (signal.aborted) return;
     const prev = store.getLiveBotTurn(roomId, botId);
     if (!prev || prev.paused) return;
     const startedAt = prev?.startedAt || new Date().toISOString();
+    const peerId = hop?.peerId || prev?.peerId;
     store.dropLastFailedReply(roomId, botId);
     store.setLiveTurn(roomId, {
       botId,
@@ -1266,6 +1403,8 @@ async function generateReplies(
       asked: turnAsked,
       startedAt,
       paused: false,
+      messageId: prev?.messageId || turnMessageId,
+      peerId,
     });
     const botSignal = store.armBotTurn(roomId, botId, signal);
     let generated;
@@ -1278,6 +1417,7 @@ async function generateReplies(
           turnHistory,
           turnAsked,
           userMessage.body,
+          extras.questRoomId,
         ),
         env,
         signal: botSignal,
@@ -1305,6 +1445,8 @@ async function generateReplies(
             asked: prev?.asked || turnAsked,
             startedAt: prev?.startedAt || startedAt,
             paused: false,
+            messageId: prev?.messageId || turnMessageId,
+            peerId: prev?.peerId || peerId,
             steps: [...(handoff ? [handoff] : []), ...keptSteer, ...rest].slice(0, 5),
           });
         },
@@ -1325,14 +1467,42 @@ async function generateReplies(
       botId,
       generated.body,
       generated.parts,
-      undefined,
+      hop?.replyTo,
       undefined,
       usage,
       undefined,
       undefined,
       hopMentions,
     );
+    if (peerId) {
+      try {
+        store.appendMessage(
+          peerId,
+          botId,
+          generated.body,
+          generated.parts,
+          undefined,
+          undefined,
+          usage,
+          undefined,
+          undefined,
+          hopMentions,
+        );
+      } catch {
+        /* peer mirror is inspectable inbox, not the public reply */
+      }
+    }
     store.dropLiveBotTurn(roomId, botId);
+    if (store.getRoom(roomId)?.kind === "channel") {
+      store.completeAssign(roomId, botId);
+      store.enqueueAssign(
+        roomId,
+        dismissAssign(
+          parseAssignmentWaves(generated.body, store.listBots(), "bot"),
+          botId,
+        ),
+      );
+    }
     recordTurn(store, roomId, botId, generated, reply);
     replies.push(reply);
     extras.onTurnComplete?.({
@@ -1375,7 +1545,7 @@ async function generateReplies(
     let seen = 0;
     const roomForHops = store.getRoom(roomId);
     for (let wave = 0; wave < CHANNEL_ROSTER_CAP && !signal.aborted; wave++) {
-      if (roomForHops?.kind !== "channel") break;
+      if (roomForHops?.kind !== "channel" && roomForHops?.kind !== "cron") break;
       const fresh = replies.slice(seen);
       seen = replies.length;
       const hops = handoffTargets(store, memberIds, replies, asked, history, fresh);
@@ -1394,14 +1564,25 @@ async function generateReplies(
             },
           ],
           startedAt: hopAt,
+          messageId: turnMessageId,
+          peerId: hop.peerId,
         });
       }
       await Promise.all(
-        hops.map((hop) => speak(hop.botId, hop.asked, hop.history)),
+        hops.map((hop) =>
+          speak(hop.botId, hop.asked, hop.history, {
+            replyTo: hop.fromMessageId,
+            peerId: hop.peerId,
+          }),
+        ),
       );
     }
     const room = store.getRoom(roomId);
-    if (room?.kind === "channel" && harvested.length && extras.harvest !== false) {
+    if (
+      (room?.kind === "channel" || room?.kind === "cron") &&
+      harvested.length &&
+      extras.harvest !== false
+    ) {
       await harvestChannelMemory({
         store,
         roomId,
@@ -1497,6 +1678,7 @@ function plantLiveTurns(
   botIds: string[],
   memberIds: string[],
   onlyBotId?: string,
+  messageId?: string,
 ): string {
   const startedAt = new Date().toISOString();
   for (const botId of botIds) {
@@ -1512,6 +1694,8 @@ function plantLiveTurns(
       asked: prev?.asked,
       startedAt: prev?.startedAt || startedAt,
       paused: false,
+      messageId: prev?.messageId || messageId,
+      peerId: prev?.peerId,
     });
   }
   return startedAt;
@@ -1658,7 +1842,11 @@ export async function postUserMessage(
     parent,
     extras,
   );
-  return { message, replies };
+  return {
+    message,
+    replies,
+    ...(room.kind === "channel" ? { assign: store.assignList(roomId) } : {}),
+  };
 }
 
 export async function retryMessage(
@@ -1715,7 +1903,11 @@ export async function retryMessage(
       parent,
       extras,
     );
-    return { message, replies };
+    return {
+      message,
+      replies,
+      ...(room.kind === "channel" ? { assign: store.assignList(roomId) } : {}),
+    };
   }
 
   let userIndex = index - 1;
@@ -1730,6 +1922,7 @@ export async function retryMessage(
     thinking: "",
     steps: [],
     startedAt,
+    messageId: userMessage.id,
   });
   const mcpTools = await resolveMcpTools(store, extras);
   let generated;
@@ -1751,6 +1944,7 @@ export async function retryMessage(
         store.setLiveTurn(roomId, {
           ...toLiveTurn(current.author, update),
           startedAt: prev?.startedAt || startedAt,
+          messageId: prev?.messageId || userMessage.id,
         });
       },
       pullSteers: () => store.drainSteers(roomId, current.author),
@@ -1813,6 +2007,7 @@ export { StoreError, localGenerate };
 export {
   publicModels,
   mergeModelsFile,
+  setShownModels,
   refreshOpenCodeFreeCatalog,
   refreshReasoningCatalog,
 } from "./llm.ts";

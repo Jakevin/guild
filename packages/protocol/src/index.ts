@@ -52,7 +52,7 @@ export type Bot = {
 /** Talent bench listing. Empty before any bots exist. */
 export type BenchListing = Bot[];
 
-export type RoomKind = "channel" | "dm";
+export type RoomKind = "channel" | "dm" | "cron";
 
 export type Room = {
   id: string;
@@ -64,6 +64,11 @@ export type Room = {
   parentId?: string;
   /** Message id in the parent room that opened this branch. */
   branchFromId?: string;
+  /**
+   * Quest dispatch queue. Inner arrays run together; outer order is sequential.
+   * Mentions append; a finished seat drops off.
+   */
+  assign?: string[][];
 };
 
 export type ChatPart =
@@ -180,6 +185,8 @@ export type ModelsFile = {
   aux?: Partial<Record<AuxRole, ModelRef | null>>;
   recent?: ModelRef[];
   providers: Record<string, ProviderEntry>;
+  /** Picker id → model ids shown in the hall. Missing key = all. */
+  shown?: Record<string, string[]>;
 };
 
 export const DEFAULT_GUILD_HOST = "127.0.0.1";

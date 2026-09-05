@@ -68,6 +68,8 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /#d\//);
   assert.match(html, /payload\.mentions/);
   assert.match(html, /deepDiving/);
+  assert.match(html, /live.messageId/);
+  assert.match(html, /data-copy-stat/);
   assert.match(html, /live\.stop/);
   assert.match(html, /summonedBotIds|botsFromSend/);
   assert.match(html, /hydrateHtmlPreviews/);
@@ -81,6 +83,8 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.doesNotMatch(html, /cleaned\.length > 8000/);
   assert.match(css, /\.md-html-frame/);
   assert.match(css, /\.html-zoom/);
+  assert.match(css, /\.turn-head/);
+  assert.match(css, /\.stats-kicker-id/);
   assert.match(css, /--tap:\s*44px/);
   assert.match(css, /min-height:\s*var\(--tap\)/);
   assert.match(css, /safe-area-inset/);
@@ -144,7 +148,7 @@ test("away page locks the five seats and can steer a live turn", () => {
   assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /classList\.toggle\("err"/);
-  assert.match(html, /mobile\.css\?v=code-cyan/);
+  assert.match(html, /mobile\.css\?v=liveid/);
   assert.doesNotMatch(html, /WebSocket/);
   assert.doesNotMatch(html, /fonts\.googleapis/);
   assert.doesNotMatch(html, /inn-street|#16100B/);

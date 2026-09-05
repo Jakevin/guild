@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import type { TrajectoryDraft, TrajectoryEvent } from "./trajectory.ts";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { closeGuildDb, openGuildDb, type CronJobRow, type CronRunRow, type GuildDb } from "./db.ts";
 import type {
@@ -27,8 +27,12 @@ import { CATALOG_SKILLS } from "./catalog/skills.ts";
 import { CATALOG_SUBAGENTS } from "./catalog/subagents.ts";
 import { parseAgentFile } from "./agent-file.ts";
 import {
+  dismissAssign,
+  mergeAssign,
   parseMentionIds,
+  promoteAssign,
   sanitizeMentionIds,
+  sanitizeWaves,
   withoutDeferredIds,
 } from "./mention.ts";
 
@@ -104,6 +108,10 @@ export type LiveTurn = {
   /** Seat assignment text, kept so Continue can resume after Pause. */
   asked?: string;
   paused?: boolean;
+  /** User message that started this turn. Shown on the live Deep diving row. */
+  messageId?: string;
+  /** 1:1 交辦 room when this live turn is a bot→bot hop. */
+  peerId?: string;
 };
 
 export class GuildStore {
@@ -649,6 +657,9 @@ export class GuildStore {
     }
     const dm = this.getRoom(`dm-${id}`);
     if (dm) this.removeRoomDir(dm.id);
+    for (const peer of this.listPeers()) {
+      if (peer.memberIds.includes(id)) this.removeRoomDir(peer.id);
+    }
     this.removeBotDir(bot.id);
     this.markRetired(bot.handle);
     return { ok: true, id: bot.id };
@@ -846,8 +857,93 @@ export class GuildStore {
     return this.listRooms().filter((room) => room.kind === "channel");
   }
 
+  cronDeskDir(jobId: string): string {
+    return join(this.dataDir, "cron", jobId);
+  }
+
+  cronSessionRoomId(jobId: string): string {
+    return `cron-${jobId}`;
+  }
+
+  ensureCronSession(jobId: string, name: string, memberIds: string[]): Room {
+    const id = this.cronSessionRoomId(jobId);
+    const existing = this.getRoom(id);
+    const members = [...new Set(memberIds.filter(Boolean))];
+    if (existing) {
+      const same =
+        existing.kind === "cron" &&
+        existing.memberIds.length === members.length &&
+        members.every((item) => existing.memberIds.includes(item));
+      if (same && existing.name === name) return existing;
+      const next = {
+        ...existing,
+        kind: "cron" as const,
+        name,
+        memberIds: members,
+      };
+      this.writeRoom(next);
+      return next;
+    }
+    const room: Room = {
+      id,
+      kind: "cron",
+      name,
+      memberIds: members,
+      createdAt: new Date().toISOString(),
+    };
+    this.writeRoom(room);
+    this.writeMessages(id, []);
+    mkdirSync(this.cronDeskDir(jobId), { recursive: true });
+    return room;
+  }
+
+  deleteCronSession(jobId: string): void {
+    const id = this.cronSessionRoomId(jobId);
+    const room = this.getRoom(id);
+    if (!room || room.kind !== "cron") return;
+    this.removeRoomDir(id);
+    rmSync(this.cronDeskDir(jobId), { recursive: true, force: true });
+  }
+
   getRoom(id: string): Room | null {
     return this.db.getRoom(id);
+  }
+
+  assignList(roomId: string): string[][] {
+    const room = this.getRoom(roomId);
+    if (!room || room.kind !== "channel") return [];
+    const members = new Set(room.memberIds);
+    return sanitizeWaves(room.assign, this.listBots())
+      .map((wave) => wave.filter((id) => members.has(id)))
+      .filter((wave) => wave.length > 0);
+  }
+
+  enqueueAssign(roomId: string, incoming: string[][]): string[][] {
+    const room = this.getRoom(roomId);
+    if (!room || room.kind !== "channel") return [];
+    const members = new Set(room.memberIds);
+    const waves = incoming
+      .map((wave) => wave.filter((id) => members.has(id)))
+      .filter((wave) => wave.length > 0);
+    const next = mergeAssign(this.assignList(roomId), waves);
+    this.writeRoom({ ...room, assign: next.length ? next : undefined });
+    return next;
+  }
+
+  completeAssign(roomId: string, botId: string): string[][] {
+    const room = this.getRoom(roomId);
+    if (!room || room.kind !== "channel") return [];
+    const next = dismissAssign(this.assignList(roomId), botId);
+    this.writeRoom({ ...room, assign: next.length ? next : undefined });
+    return next;
+  }
+
+  promoteAssign(roomId: string, ids: string[]): string[][] {
+    const room = this.getRoom(roomId);
+    if (!room || room.kind !== "channel") return [];
+    const next = promoteAssign(this.assignList(roomId), ids);
+    this.writeRoom({ ...room, assign: next.length ? next : undefined });
+    return next;
   }
 
   createChannel(name: string): Room {
@@ -962,6 +1058,41 @@ export class GuildStore {
     this.writeRoom(room);
     this.writeMessages(id, []);
     return room;
+  }
+
+  /** Hermes-shaped bot-to-bot inbox. Pairwise, durable, inspectable. */
+  static peerRoomId(a: string, b: string): string {
+    const [x, y] = [a, b].slice().sort();
+    return `peer-${x}-${y}`;
+  }
+
+  openPeer(a: string, b: string): Room {
+    const left = this.getBot(a);
+    const right = this.getBot(b);
+    if (!left || !right) throw new StoreError(404, "bot not found");
+    if (a === b) throw new StoreError(400, "peer needs two seats");
+    const id = GuildStore.peerRoomId(a, b);
+    const existing = this.getRoom(id);
+    if (existing) return existing;
+    const [first, second] = [left, right].sort((x, y) =>
+      x.id < y.id ? -1 : 1,
+    );
+    const room: Room = {
+      id,
+      kind: "dm",
+      name: `@${first.handle} ↔ @${second.handle}`,
+      memberIds: [first.id, second.id],
+      createdAt: new Date().toISOString(),
+    };
+    this.writeRoom(room);
+    this.writeMessages(id, []);
+    return room;
+  }
+
+  listPeers(): Room[] {
+    return this.listRooms().filter(
+      (room) => room.kind === "dm" && room.id.startsWith("peer-"),
+    );
   }
 
   addMember(roomId: string, botId: string): Room {
@@ -1228,13 +1359,18 @@ export class GuildStore {
   }
 
   private channelMdPath(roomId: string): string {
+    const room = this.getRoom(roomId);
+    if (room?.kind === "cron") {
+      const jobId = roomId.replace(/^cron-/, "");
+      return join(this.cronDeskDir(jobId), "CHANNEL.md");
+    }
     return join(this.dataDir, "rooms", roomId, "CHANNEL.md");
   }
 
   readChannelMd(roomId: string): string {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
-    if (room.kind !== "channel") {
+    if (room.kind !== "channel" && room.kind !== "cron") {
       throw new StoreError(400, "Channel.md is only for channels");
     }
     const path = this.channelMdPath(roomId);
@@ -1245,12 +1381,11 @@ export class GuildStore {
   writeChannelMd(roomId: string, body: string): string {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
-    if (room.kind !== "channel") {
+    if (room.kind !== "channel" && room.kind !== "cron") {
       throw new StoreError(400, "Channel.md is only for channels");
     }
     const text = typeof body === "string" ? body : "";
-    const dir = join(this.dataDir, "rooms", roomId);
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dirname(this.channelMdPath(roomId)), { recursive: true });
     writeFileSync(this.channelMdPath(roomId), text);
     return text;
   }
@@ -1276,13 +1411,18 @@ export class GuildStore {
   }
 
   private channelMemoryPath(roomId: string): string {
+    const room = this.getRoom(roomId);
+    if (room?.kind === "cron") {
+      const jobId = roomId.replace(/^cron-/, "");
+      return join(this.cronDeskDir(jobId), "MEMORY.md");
+    }
     return join(this.dataDir, "rooms", roomId, "MEMORY.md");
   }
 
   readChannelMemory(roomId: string): string {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
-    if (room.kind !== "channel") {
+    if (room.kind !== "channel" && room.kind !== "cron") {
       throw new StoreError(400, "Channel MEMORY.md is only for channels");
     }
     const path = this.channelMemoryPath(roomId);
@@ -1293,13 +1433,13 @@ export class GuildStore {
   writeChannelMemory(roomId: string, body: string): string {
     const room = this.getRoom(roomId);
     if (!room) throw new StoreError(404, "room not found");
-    if (room.kind !== "channel") {
+    if (room.kind !== "channel" && room.kind !== "cron") {
       throw new StoreError(400, "Channel MEMORY.md is only for channels");
     }
     const text = typeof body === "string" ? body : "";
-    const dir = join(this.dataDir, "rooms", roomId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(this.channelMemoryPath(roomId), text);
+    const path = this.channelMemoryPath(roomId);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
     return text;
   }
 

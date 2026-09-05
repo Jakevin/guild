@@ -40,7 +40,7 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 
 ## Run the hall
 
-**Who answers.** A `@handle` at the **start of a line** is the assignment. Two lines, two handles — two adventurers, each getting your preamble plus their own line. With nothing at a line start, the **first** `@handle` in the body is the assignee and gets the whole message; a later one is only a mention. Name nobody and the last adventurer who spoke continues. `@all` / `@channel` / `@here` wake every seat in the hall in parallel — usually the wrong move. `@` someone who is not in the hall and they are pulled in before they answer. A hall holds 6 seats (`#general` aside): reuse the roster before you hire.
+**Who answers.** Each quest keeps a **派工 list**. A mention appends a work record; finishing this turn drops that seat. Numbered items in one message (`1. @design` / `2. @marketing`) share a wave and run together. `完成後` / `最後` / `再交 @infra` append later waves and wait. A bot `@handle` files that spec in a 1:1 **交辦** so the next seat works from the brief, not the whole log — you do not press a button. Line-start `@handle` is not the only way on. Name nobody and the last adventurer who spoke continues, or the front of the 派工 list if it still has seats. `@all` / `@channel` / `@here` wake every seat in the hall in parallel — usually the wrong move. `@` someone who is not in the hall does not add them. A hall holds 6 seats (`#general` aside): reuse the roster before you hire.
 
 **The composer.** Reply to one message to aim at that adventurer and show which line you mean. While a turn is running, Enter queues your next line; Cmd/Ctrl+↩ inserts it into the live turn. Pause holds that adventurer so you can switch models and Continue; Stop pulls them out of the turn. Retry re-asks one question. Delete removes one message and its trajectory. Rename a channel from the sidebar.
 
@@ -53,7 +53,7 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 - **The unit is a named adventurer:** Soul / Agent / Skill / Position, invoked with `@handle`.
 - Default roster of five: `@infra` `@pm` `@rd` `@design` `@marketing`. A roster, not a sortie — work still goes to one `@handle` at a time.
 - Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI. On the same form, ask the model to pick up to 8 skills for that seat; with no model wired it falls back to a local match.
-- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius). Freebuff Chat is an optional chat-role picker (official free session); Guild still runs the tools.
+- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius). Command Code is an optional subscription picker (official Provider API; Go accounts fall back to `/alpha/generate`). Freebuff Chat is an optional chat-role picker (official free session); Guild still runs the tools.
 
 ![Roster of five named adventurers.](docs/readme-roster-2026-08-29.png)
 
@@ -116,6 +116,8 @@ Files: `packages/daemon/src/harness.ts` (loop, gate, policy) · `generate.ts` (s
 - Not `apps/desktop` (orphan; the product UI is the daemon)
 
 ## Current limits
+
+**Freebuff Chat credentials stay local.** Official device login (`~/.config/manicode/credentials.json`) wins; with no login, a `CODEBUFF_API_KEY` from your environment is the fallback. Either way the token only signs SDK requests to Codebuff — the remote agent still cannot read, write, or run anything on your machine.
 
 **Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`, unless the bot's POSITION.md has `sandbox:`).** Default cwd for `run` is `$HOME` (`workspace_write` uses `GUILD_WORKSPACE` or this checkout). The gate is not Codex isolation. Details: [SECURITY.md](./SECURITY.md).
 

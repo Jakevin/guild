@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { writeModelsFile } from "../src/llm.ts";
 import {
   continueLiveTurn,
+  getLiveTurn,
   parseAttachments,
   postUserMessage,
   retryMessage,
@@ -21,6 +22,10 @@ import {
   deferredHandles,
   isBroadcastMention,
   messageMentionIds,
+  parseAssignmentWaves,
+  mergeAssign,
+  dismissAssign,
+  promoteAssign,
 } from "../src/mention.ts";
 
 const CHAT_HTML = fileURLToPath(
@@ -368,6 +373,69 @@ test("chat composer lists @ mentions including outsiders", () => {
   assert.match(html, /id="assign"/);
   assert.match(html, /data-assign/);
   assert.match(html, /assigneeId/);
+  assert.doesNotMatch(html, /data-dispatch/);
+  assert.doesNotMatch(html, /function dispatchBotIds/);
+  assert.match(html, /id="assign-bar"/);
+  assert.match(html, /id="peers"/);
+  assert.match(html, /function isPeerDm/);
+  assert.match(html, /reply-quote-who/);
+  assert.match(html, /function renderAssignBar/);
+  assert.match(html, /function liveMessageIdHtml/);
+  assert.match(html, /live.messageId/);
+  assert.match(html, /turn-head/);
+});
+
+test("parseAssignmentWaves turns a numbered 已派 plan into parallel then later waves", () => {
+  const bots = [
+    { id: "bot-design", handle: "design" },
+    { id: "bot-pm", handle: "pm" },
+    { id: "bot-infra", handle: "infra" },
+  ];
+  const waves = parseAssignmentWaves(
+    "1. @design 錄 GIF\n2. @pm 驗收\n完成後 @infra 上版",
+    bots,
+    "user",
+  );
+  assert.deepEqual(waves[0].slice().sort(), ["bot-design", "bot-pm"].sort());
+  assert.deepEqual(waves[1], ["bot-infra"]);
+  const merged = mergeAssign([["bot-design"]], [["bot-pm"], ["bot-infra"]]);
+  assert.ok(merged[0].includes("bot-design"));
+  assert.ok(merged[0].includes("bot-pm"));
+  assert.deepEqual(promoteAssign([["bot-a"], ["bot-b"]], ["bot-b"])[0], [
+    "bot-a",
+    "bot-b",
+  ]);
+});
+
+test("abort leaves the seat on the 派工 list", () => {
+  assert.deepEqual(dismissAssign([["bot-a", "bot-b"], ["bot-c"]], "bot-a"), [
+    ["bot-b"],
+    ["bot-c"],
+  ]);
+});
+
+test("quest 派工 list appends mentions, drops a finished seat, and the next bare turn drains the front", () => {
+  const store = new GuildStore(tempHome());
+  try {
+    const bots = store.listBots();
+    const pm = bots.find((bot) => bot.handle === "pm");
+    const infra = bots.find((bot) => bot.handle === "infra");
+    assert.ok(pm && infra);
+    const room = store.createChannel("assign-demo");
+    store.addMember(room.id, pm.id);
+    store.addMember(room.id, infra.id);
+    store.enqueueAssign(
+      room.id,
+      parseAssignmentWaves("@pm 先寫規格。完成後 @infra 上版。", bots, "user"),
+    );
+    assert.deepEqual(store.assignList(room.id)[0], [pm.id]);
+    store.completeAssign(room.id, pm.id);
+    const after = store.assignList(room.id);
+    assert.ok(!after.flat().includes(pm.id));
+    assert.ok(after.flat().includes(infra.id));
+  } finally {
+    store.close();
+  }
 });
 
 test("thread has a jump-to-latest button when scrolled up", () => {
@@ -517,7 +585,10 @@ test("chat page bubbles bot text and has a reply composer", () => {
   assert.match(html, /t\("replying"\)/);
   assert.match(html, /data-reply/);
   assert.match(html, /data-msg-del/);
+  assert.match(html, /id="confirm-dialog"/);
+  assert.match(html, /function askConfirm/);
   assert.match(html, /function deleteChatMessage/);
+  assert.doesNotMatch(html, /confirm\(t\("msg.deleteConfirm"\)\)/);
   assert.match(html, /setReply/);
   assert.match(html, /class="bubble"/);
   assert.match(css, /\.msg\.bot \.bubble/);
@@ -691,9 +762,17 @@ function staffBot(store: GuildStore, handle: string) {
 }
 
 function stubTurn(
-  reply: (input: { handle: string; userMessage: string }) => string,
+  reply: (input: {
+    handle: string;
+    userMessage: string;
+    history?: { author: string; body: string }[];
+  }) => string,
 ) {
-  return async (input: { handle: string; userMessage: string }) => ({
+  return async (input: {
+    handle: string;
+    userMessage: string;
+    history?: { author: string; body: string }[];
+  }) => ({
     body: reply(input),
     parts: [],
     source: "local" as const,
@@ -957,11 +1036,68 @@ test("finished speaker drops live before handoff seats start", async () => {
   assert.ok(hopLive);
   assert.equal(hopLive?.steps[0]?.name, "handoff");
   assert.match(String(hopLive?.steps[0]?.detail), /@marketing/);
+  const user = store.listMessages(room.id).find((msg) => msg.author === "you");
+  assert.equal(hopLive?.messageId, user?.id);
   releaseHop();
   const done = await pending;
   assert.equal(done.replies.length, 2);
   assert.equal(done.replies[0].author, marketing.id);
   assert.equal(done.replies[1].author, design.id);
+});
+
+test("live Deep diving carries the user message id", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("live-id");
+  const infra = store.listBots().find((bot) => bot.handle === "infra");
+  assert.ok(infra);
+  store.addMember(room.id, infra.id);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const pending = postUserMessage(
+    store,
+    room.id,
+    "@infra 查一下",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: async () => {
+        await gate;
+        return {
+          body: "ok",
+          parts: [],
+          source: "local",
+          system: "",
+        };
+      },
+    },
+  );
+  for (let i = 0; i < 80; i++) {
+    if (store.getLiveBotTurn(room.id, infra.id)) break;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  const user = store.listMessages(room.id).find((msg) => msg.author === "you");
+  assert.ok(user);
+  const live = store.getLiveBotTurn(room.id, infra.id);
+  assert.ok(live);
+  assert.equal(live?.messageId, user.id);
+  const pub = getLiveTurn(store, room.id) as {
+    messageId?: string;
+    traces?: unknown;
+    bots: { messageId?: string; traces?: unknown }[];
+  };
+  assert.equal(pub.messageId, user.id);
+  assert.equal(pub.bots[0]?.messageId, user.id);
+  assert.equal(pub.traces, undefined);
+  assert.equal(pub.bots[0]?.traces, undefined);
+  release();
+  await pending;
+  store.close();
 });
 
 test("bot numbered list starts the first wave; 通過後 / 最後 wait", async () => {
@@ -1226,6 +1362,49 @@ test("bot report-back resumes the seat that handed off (pm → infra → pm)", a
   assert.equal(posted.replies[1].author, infra.id);
   assert.equal(posted.replies[2].author, pm.id);
   assert.match(posted.replies[2].body, /先不切版/);
+});
+
+test("bot handoff files a 1:1 交辦 and hops without the quest log", async () => {
+  const store = new GuildStore(tempHome());
+  const room = store.createChannel("peer-hop");
+  const pm = store.listBots().find((bot) => bot.handle === "pm");
+  const marketing = store.listBots().find((bot) => bot.handle === "marketing");
+  assert.ok(pm && marketing);
+  store.addMember(room.id, pm.id);
+  store.addMember(room.id, marketing.id);
+  store.appendMessage(room.id, "you", "這則是既有委託紀錄，交棒時不該整份帶進下一席。");
+  const hopHistory: number[] = [];
+  const posted = await postUserMessage(
+    store,
+    room.id,
+    "@pm 把文案交給行銷",
+    process.env,
+    undefined,
+    undefined,
+    undefined,
+    {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => {
+        hopHistory.push((input.history || []).length);
+        if (input.handle === "pm") {
+          return "@marketing\nGoal: 改 README\nDone when: 文案過關";
+        }
+        return "收到，開工。";
+      }),
+    },
+  );
+  assert.equal(posted.replies.length, 2);
+  assert.equal(posted.replies[0].author, pm.id);
+  assert.equal(posted.replies[1].author, marketing.id);
+  assert.equal(posted.replies[1].replyTo, posted.replies[0].id);
+  assert.ok(hopHistory[0] >= 1);
+  assert.equal(hopHistory[1], 0);
+  const peer = store.openPeer(pm.id, marketing.id);
+  const peerMsgs = store.listMessages(peer.id);
+  assert.ok(peerMsgs.some((msg) => msg.author === pm.id));
+  assert.ok(peerMsgs.some((msg) => msg.author === marketing.id));
+  assert.ok(store.listPeers().some((row) => row.id === peer.id));
 });
 
 test("bot @handle spec hands off once to that member", async () => {

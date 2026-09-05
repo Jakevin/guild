@@ -47,12 +47,13 @@ CREATE TABLE IF NOT EXISTS meta (
 
 CREATE TABLE IF NOT EXISTS rooms (
   id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('channel', 'dm')),
+  kind TEXT NOT NULL CHECK (kind IN ('channel', 'dm', 'cron')),
   name TEXT NOT NULL,
   member_ids TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
   parent_id TEXT,
-  branch_from_id TEXT
+  branch_from_id TEXT,
+  assign TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -114,7 +115,10 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
   created_at TEXT NOT NULL,
   last_run_at TEXT,
   last_status TEXT,
-  last_error TEXT
+  last_error TEXT,
+  scope TEXT NOT NULL DEFAULT 'channel' CHECK (scope IN ('channel', 'bot')),
+  delivery TEXT NOT NULL DEFAULT 'hall' CHECK (delivery IN ('hall', 'sheet')),
+  session_room_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS cron_jobs_next ON cron_jobs(paused, next_run_at);
@@ -138,6 +142,9 @@ type CompactRow = {
   messageCount: number;
 };
 
+export type CronScope = "channel" | "bot";
+export type CronDelivery = "hall" | "sheet";
+
 export type CronJobRow = {
   id: string;
   name: string;
@@ -155,6 +162,9 @@ export type CronJobRow = {
   lastRunAt?: string;
   lastStatus?: string;
   lastError?: string;
+  scope: CronScope;
+  delivery: CronDelivery;
+  sessionRoomId?: string;
 };
 
 export type CronRunRow = {
@@ -207,6 +217,10 @@ function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
   if (lastStatus) job.lastStatus = lastStatus;
   const lastError = asString(row.last_error);
   if (lastError) job.lastError = lastError;
+  job.scope = asString(row.scope) === "bot" ? "bot" : "channel";
+  job.delivery = asString(row.delivery) === "sheet" ? "sheet" : "hall";
+  const sessionRoomId = asString(row.session_room_id);
+  if (sessionRoomId) job.sessionRoomId = sessionRoomId;
   return job;
 }
 
@@ -352,7 +366,12 @@ function roomFromRow(row: Record<string, unknown>): Room {
   const memberIds = parseJson<string[]>(row.member_ids, []);
   const room: Room = {
     id: asString(row.id),
-    kind: asString(row.kind) === "dm" ? "dm" : "channel",
+    kind:
+      asString(row.kind) === "dm"
+        ? "dm"
+        : asString(row.kind) === "cron"
+          ? "cron"
+          : "channel",
     name: asString(row.name),
     memberIds: Array.isArray(memberIds)
       ? memberIds.filter((id) => typeof id === "string")
@@ -363,6 +382,18 @@ function roomFromRow(row: Record<string, unknown>): Room {
   if (parentId) room.parentId = parentId;
   const branchFromId = asString(row.branch_from_id);
   if (branchFromId) room.branchFromId = branchFromId;
+  if (typeof row.assign === "string" && row.assign) {
+    const assign = parseJson<unknown>(row.assign, []);
+    if (Array.isArray(assign)) {
+      const waves: string[][] = [];
+      for (const rowWave of assign) {
+        if (!Array.isArray(rowWave)) continue;
+        const ids = rowWave.filter((id): id is string => typeof id === "string");
+        if (ids.length) waves.push(ids);
+      }
+      if (waves.length) room.assign = waves;
+    }
+  }
   return room;
 }
 
@@ -384,6 +415,40 @@ function trajectoryFromRow(row: Record<string, unknown>): TrajectoryEvent {
   if (row.duration_ms != null) event.durationMs = asNumber(row.duration_ms);
   if (asNumber(row.is_error) === 1) event.isError = true;
   return event;
+}
+
+function migrateRoomsCronKind(sqlite: DatabaseSync): void {
+  const row = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'rooms'")
+    .get() as { sql?: unknown } | undefined;
+  const sql = typeof row?.sql === "string" ? row.sql : "";
+  if (sql.includes("'cron'")) return;
+  sqlite.exec("PRAGMA foreign_keys = OFF");
+  sqlite.exec("BEGIN");
+  try {
+    sqlite.exec(`
+CREATE TABLE rooms_new (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('channel', 'dm', 'cron')),
+  name TEXT NOT NULL,
+  member_ids TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  parent_id TEXT,
+  branch_from_id TEXT,
+  assign TEXT
+)`);
+    sqlite.exec(
+      "INSERT INTO rooms_new (id, kind, name, member_ids, created_at, parent_id, branch_from_id) SELECT id, kind, name, member_ids, created_at, parent_id, branch_from_id FROM rooms",
+    );
+    sqlite.exec("DROP TABLE rooms");
+    sqlite.exec("ALTER TABLE rooms_new RENAME TO rooms");
+    sqlite.exec("COMMIT");
+  } catch (error) {
+    sqlite.exec("ROLLBACK");
+    throw error;
+  } finally {
+    sqlite.exec("PRAGMA foreign_keys = ON");
+  }
 }
 
 export class GuildDb {
@@ -430,6 +495,23 @@ export class GuildDb {
     } catch {
       /* column already exists on fresh schema */
     }
+    migrateRoomsCronKind(this.sqlite);
+    try {
+      this.sqlite.exec("ALTER TABLE rooms ADD COLUMN assign TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
+    for (const column of [
+      "ALTER TABLE cron_jobs ADD COLUMN scope TEXT NOT NULL DEFAULT 'channel'",
+      "ALTER TABLE cron_jobs ADD COLUMN delivery TEXT NOT NULL DEFAULT 'hall'",
+      "ALTER TABLE cron_jobs ADD COLUMN session_room_id TEXT",
+    ]) {
+      try {
+        this.sqlite.exec(column);
+      } catch {
+        /* column already exists on fresh schema */
+      }
+    }
     try {
       this.sqlite.prepare(
         "INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -462,15 +544,16 @@ export class GuildDb {
   upsertRoom(room: Room): void {
     this.sqlite
       .prepare(
-        `INSERT INTO rooms (id, kind, name, member_ids, created_at, parent_id, branch_from_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, kind, name, member_ids, created_at, parent_id, branch_from_id, assign)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            kind = excluded.kind,
            name = excluded.name,
            member_ids = excluded.member_ids,
            created_at = excluded.created_at,
            parent_id = excluded.parent_id,
-           branch_from_id = excluded.branch_from_id`,
+           branch_from_id = excluded.branch_from_id,
+           assign = excluded.assign`,
       )
       .run(
         room.id,
@@ -480,6 +563,7 @@ export class GuildDb {
         room.createdAt,
         room.parentId ?? null,
         room.branchFromId ?? null,
+        room.assign?.length ? JSON.stringify(room.assign) : null,
       );
   }
 
@@ -898,8 +982,9 @@ export class GuildDb {
       .prepare(
         `INSERT INTO cron_jobs (
            id, name, room_id, bot_id, prompt, schedule, kind, every_ms, cron_expr, at_ms,
-           next_run_at, paused, created_at, last_run_at, last_status, last_error
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           next_run_at, paused, created_at, last_run_at, last_status, last_error,
+           scope, delivery, session_room_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            room_id = excluded.room_id,
@@ -914,7 +999,10 @@ export class GuildDb {
            paused = excluded.paused,
            last_run_at = excluded.last_run_at,
            last_status = excluded.last_status,
-           last_error = excluded.last_error`,
+           last_error = excluded.last_error,
+           scope = excluded.scope,
+           delivery = excluded.delivery,
+           session_room_id = excluded.session_room_id`,
       )
       .run(
         job.id,
@@ -933,6 +1021,9 @@ export class GuildDb {
         job.lastRunAt ?? null,
         job.lastStatus ?? null,
         job.lastError ?? null,
+        job.scope,
+        job.delivery,
+        job.sessionRoomId ?? null,
       );
   }
 

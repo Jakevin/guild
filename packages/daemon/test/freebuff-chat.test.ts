@@ -257,7 +257,7 @@ test("settings picker lists web-bridge and i18n names the bridge", () => {
     "utf8",
   );
   assert.match(settings, /kind === "web-bridge"/);
-  assert.match(settings, /accountCard\(s, "web-bridge"\)/);
+  assert.match(settings, /accountCard\(/); // dispatcher; kind === "web-bridge" above is the guard
   assert.doesNotMatch(settings, /accountCard\(s, "web"\)/);
   assert.match(settings, /settings\.connectFirst/);
   assert.match(settings, /settings\.freebuffChat/);

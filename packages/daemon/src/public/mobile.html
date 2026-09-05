@@ -9,9 +9,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=code-cyan" />
-    <script src="/i18n.js"></script>
-    <script src="/md.js"></script>
+    <link rel="stylesheet" href="/mobile.css?v=liveid" />
+    <script src="/i18n.js?v=liveid"></script>
+    <script src="/md.js?v=tts"></script>
   </head>
   <body class="m-away" data-i18n-page="mobile">
     <section class="screen" id="screen-list">
@@ -247,6 +247,7 @@
               steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
               startedAt: row.startedAt || "",
               paused: Boolean(row.paused),
+              messageId: row.messageId ? String(row.messageId) : "",
             }));
         }
         function isBusy() {
@@ -374,6 +375,7 @@
           if (name === "think") return t("think");
           if (name === "skill") return t("skill");
           if (name === "image_gen") return t("imageGen");
+          if (name === "tts") return t("tts");
           if (name === "spawn") return t("spawn");
           if (name === "run") return t("bash");
           if (name === "read") return t("read");
@@ -460,9 +462,19 @@
                 escapeHtml(bot.name) +
                 '</span><span class="handle">@' +
                 escapeHtml(bot.handle) +
-                '</span></div><div class="turn-live"><div class="turn-status">' +
+                '</span></div><div class="turn-live"><div class="turn-head"><div class="turn-status">' +
                 liveStatusLabel(live) +
                 clock +
+                "</div>" +
+                (live.messageId
+                  ? '<button type="button" class="stats-kicker-id" data-copy-stat="' +
+                    escapeHtml(live.messageId) +
+                    '" title="' +
+                    escapeHtml(t("copy")) +
+                    '">' +
+                    escapeHtml(live.messageId) +
+                    "</button>"
+                  : "") +
                 "</div>" +
                 liveStepsHtml(live.steps) +
                 '<div class="turn-actions">' +
@@ -1059,6 +1071,15 @@
             box.querySelectorAll("[data-html-view]").forEach((tab) => {
               tab.classList.toggle("on", tab.getAttribute("data-html-view") === view);
             });
+            return;
+          }
+          const copyStat = event.target.closest("[data-copy-stat]");
+          if (copyStat) {
+            event.preventDefault();
+            const value = copyStat.getAttribute("data-copy-stat") || "";
+            if (value && navigator.clipboard) {
+              navigator.clipboard.writeText(value).catch(() => {});
+            }
             return;
           }
           const fenceCopy = event.target.closest("[data-fence-copy]");

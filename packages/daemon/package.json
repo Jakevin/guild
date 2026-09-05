@@ -37,7 +37,7 @@
     "postpack": "node ./scripts/vendor-protocol.mjs postpack"
   },
   "dependencies": {
-    "@codebuff/sdk": "^0.10.7",
+    "@codebuff/sdk": "0.10.7",
     "@cordisjs/plugin-include": "1.0.4",
     "@cordisjs/plugin-loader": "1.0.0-rc.5",
     "@cordisjs/plugin-logger-console": "1.0.0",
@@ -46,10 +46,12 @@
     "@guild/protocol": "workspace:*",
     "cordis": "4.0.0-rc.8",
     "schemastery": "^3.18.0",
-    "tsx": "4.20.5"
+    "tsx": "4.20.5",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
+    "@types/ws": "^8.18.1",
     "typescript": "5.9.3"
   }
 }

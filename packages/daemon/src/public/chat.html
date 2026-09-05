@@ -8,9 +8,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=cron-sheet" />
-    <script src="/i18n.js"></script>
-    <script src="/md.js"></script>
+    <link rel="stylesheet" href="/chat.css?v=handoff" />
+    <script src="/i18n.js?v=handoff"></script>
+    <script src="/md.js?v=tts"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
     <div class="nav-scrim" id="nav-scrim" hidden></div>
@@ -68,6 +68,21 @@
         </div>
         <ul class="navlist" id="dms"></ul>
       </div>
+      <div class="nav-sec folded" data-nav-sec="peers" id="peers-sec" hidden>
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="peers" aria-expanded="false" aria-controls="peers">
+            <span class="sec-chev" aria-hidden="true"></span>
+            <span class="sec-ico" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <path d="M5 5.2c0-1 .8-1.8 1.8-1.8h2.4c1 0 1.8.8 1.8 1.8v.2M4.2 11.6c0-1.2 1.3-2.2 3.8-2.2s3.8 1 3.8 2.2"/>
+                <path d="M3.5 8.2h9"/>
+              </svg>
+            </span>
+            <span data-i18n="peers">交辦</span>
+          </button>
+        </div>
+        <ul class="navlist" id="peers"></ul>
+      </div>
       </div>
       <div class="side-foot">
         <a href="/studio" data-i18n="nav.studio">編制</a>
@@ -100,6 +115,10 @@
             <div id="members-out"></div>
           </div>
         </div>
+        </div>
+        <div class="assign-bar" id="assign-bar" hidden>
+          <span class="assign-kicker" data-i18n="assign.bar">派工</span>
+          <div class="assign-waves" id="assign-waves"></div>
         </div>
       </header>
       <div class="thread-wrap">
@@ -175,7 +194,7 @@
                     </button>
                     <button type="button" class="model-row" data-sheet="reasoning">
                       <span data-i18n="reasoning">推理強度</span>
-                      <span class="model-row-val" id="model-row-reason">中</span>
+                      <span class="model-row-val" id="model-row-reason">—</span>
                       <span class="model-row-chev" aria-hidden>›</span>
                     </button>
                     <button type="button" class="model-row" data-sheet="speed">
@@ -258,7 +277,20 @@
           <textarea id="cron-sheet-prompt" rows="7"></textarea>
           <label for="cron-sheet-when" data-i18n="cron.when">執行時機</label>
           <input id="cron-sheet-when" autocomplete="off" />
+          <div id="cron-sheet-delivery-wrap">
+            <span data-i18n="cron.delivery">回應</span>
+            <label class="cron-delivery">
+              <input type="radio" name="cron-sheet-delivery" value="hall" />
+              <span data-i18n="cron.deliveryHall">混進聊天室</span>
+            </label>
+            <label class="cron-delivery">
+              <input type="radio" name="cron-sheet-delivery" value="sheet" />
+              <span data-i18n="cron.deliverySheet">只在排程頁</span>
+            </label>
+          </div>
           <p class="cron-sheet-next" id="cron-sheet-next"></p>
+          <h3 data-i18n="cron.log">這一輪</h3>
+          <ul class="cron-log" id="cron-sheet-log"></ul>
           <h3 data-i18n="cron.history">執行歷史紀錄</h3>
           <ul class="cron-runs" id="cron-sheet-runs"></ul>
         </div>
@@ -300,15 +332,29 @@
     </dialog>
     <dialog id="cron-dialog">
       <h2 data-i18n="cron.title">排程</h2>
-      <p data-i18n="cron.help">新增會請這席呼叫 cronjob。時間用自然語言寫即可，例如「每10分鐘跟我說一次 Hi」。guildd 每 60 秒看一次；到點後這席開一輪新的 @handle，prompt 必須自包含。</p>
+      <p data-i18n="cron.help">委託排程點名該據點一席；獨立排程不進聊天室。時間用自然語言即可。</p>
       <div id="cron-list" class="cron-list"></div>
+      <label for="cron-scope" data-i18n="cron.scope">種類</label>
+      <select id="cron-scope">
+        <option value="channel" data-i18n="cron.scopeChannel">委託</option>
+        <option value="bot" data-i18n="cron.scopeBot">獨立</option>
+      </select>
+      <div id="cron-delivery-row">
+        <label for="cron-delivery" data-i18n="cron.delivery">回應</label>
+        <select id="cron-delivery">
+          <option value="hall" data-i18n="cron.deliveryHall">混進聊天室</option>
+          <option value="sheet" data-i18n="cron.deliverySheet">只在排程頁</option>
+        </select>
+      </div>
       <label for="cron-bot" data-i18n="cron.seat">席</label>
       <select id="cron-bot"></select>
+      <label for="cron-when" data-i18n="cron.when">執行時機</label>
+      <input id="cron-when" autocomplete="off" placeholder="每1小時" data-i18n-placeholder="cron.whenPh" />
       <label for="cron-ask" data-i18n="cron.ask">要排什麼</label>
       <textarea id="cron-ask" rows="4" placeholder="每10分鐘跟我說一次 Hi" data-i18n-placeholder="cron.askPh"></textarea>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="cron-cancel" data-i18n="cancel">取消</button>
-        <button type="button" id="cron-add" data-i18n="cron.add">請他排</button>
+        <button type="button" id="cron-add" data-i18n="cron.create">新增</button>
       </div>
     </dialog>
     <dialog id="bot-memory">
@@ -337,6 +383,14 @@
         <button type="button" id="invite-save" data-i18n="invite.save">加入</button>
       </div>
     </dialog>
+    <dialog id="confirm-dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-copy"></p>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="confirm-cancel" data-i18n="cancel">取消</button>
+        <button type="button" id="confirm-ok" data-i18n="confirm.ok">確定</button>
+      </div>
+    </dialog>
     <div class="img-preview" id="img-preview" hidden>
       <img alt="" />
     </div>
@@ -360,6 +414,7 @@
       const state = {
         channels: [],
         bots: [],
+        peers: [],
         kind: "channel",
         id: "channel-general",
         messages: [],
@@ -484,10 +539,19 @@
         if (!msg.replyTo) return "";
         const parent = state.messages.find((item) => item.id === msg.replyTo);
         if (!parent) return "";
+        const whoBot = parent.author === "you" ? null : botById(parent.author);
+        const who =
+          parent.author === "you"
+            ? t("you")
+            : whoBot
+              ? "@" + whoBot.handle
+              : parent.author;
         return (
           '<button type="button" class="reply-quote" data-jump="' +
           escapeHtml(msg.replyTo) +
-          '"><span class="reply-quote-arrow" aria-hidden="true">↩</span><span>' +
+          '"><span class="reply-quote-who">' +
+          escapeHtml(who) +
+          "</span><span>" +
           escapeHtml(previewLine(parent.body)) +
           "</span></button>"
         );
@@ -567,6 +631,9 @@
       function iconImage() {
         return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2.2" y="2.8" width="9.6" height="8.4" rx="1.4" stroke="currentColor" stroke-width="1.2"/><circle cx="5.1" cy="5.7" r="1" fill="currentColor"/><path d="M2.8 10.2 5.6 7.6l2 2 1.5-1.6 2.1 2.2" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
       }
+      function iconAudio() {
+        return '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.2 5.4h2.1L8 3.2v7.6L5.3 8.6H3.2V5.4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9.6 5.3a2.2 2.2 0 0 1 0 3.4M11.2 4.1a4 4 0 0 1 0 5.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+      }
       function iconStats() {
         return '<svg width="16" height="14" viewBox="0 0 16 14" fill="none" aria-hidden="true"><rect x="1.2" y="1.2" width="13.6" height="11.6" rx="2.4" stroke="currentColor" stroke-width="1.2"/><path d="M5 10V7.1M8 10V4.4M11 10V6.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
       }
@@ -639,49 +706,61 @@
           "</button>"
         );
       }
-      function statsPanelHtml(usage) {
-        if (!usage) return "";
+      function statsPanelHtml(usage, msg) {
+        if (!usage && !msg) return "";
         const model =
-          usage.model || usage.provider
+          usage && (usage.model || usage.provider)
             ? displayName({
                 provider: usage.provider || "",
                 model: usage.model || "",
               })
             : "—";
-        const cost = formatUsd(usage.costUsd);
+        const cost = usage ? formatUsd(usage.costUsd) : "";
         const subTokens =
-          usage.input || usage.output
+          usage && (usage.input || usage.output || usage.cacheRead)
             ? t("stats.inOut", {
                 in: formatCount(usage.input || 0),
+                cache: formatCount(usage.cacheRead || 0),
                 out: formatCount(usage.output || 0),
               })
-            : usage.estimated
+            : usage && usage.estimated
               ? t("stats.estimated")
               : "";
         const subTime =
-          usage.rounds
+          usage && usage.rounds
             ? usage.rounds + " " + t("stats.rounds")
-            : usage.estimated
+            : usage && usage.estimated
               ? t("stats.estimated")
               : "";
+        const messageId = msg && msg.id ? String(msg.id) : "";
         return (
           '<div class="stats-panel">' +
-          '<div class="stats-kicker">' +
+          '<div class="stats-kicker"><span>' +
           t("stats.title") +
-          (usage.estimated ? " · " + t("stats.estimated") : "") +
+          (usage && usage.estimated ? " · " + t("stats.estimated") : "") +
+          "</span>" +
+          (messageId
+            ? '<button type="button" class="stats-kicker-id" data-copy-stat="' +
+              escapeHtml(messageId) +
+              '" title="' +
+              escapeHtml(t("copy")) +
+              '">' +
+              escapeHtml(messageId) +
+              "</button>"
+            : "") +
           "</div>" +
           '<div class="stats-grid">' +
           '<div class="stats-cell"><span>' +
           t("stats.tokens") +
           "</span><b>" +
-          formatCount(usage.totalTokens) +
+          formatCount(usage && usage.totalTokens) +
           "</b>" +
           (subTokens ? "<em>" + escapeHtml(subTokens) + "</em>" : "") +
           "</div>" +
           '<div class="stats-cell"><span>' +
           t("stats.time") +
           "</span><b>" +
-          formatDuration(usage.durationMs) +
+          formatDuration(usage && usage.durationMs) +
           "</b>" +
           (subTime ? "<em>" + escapeHtml(subTime) + "</em>" : "") +
           "</div>" +
@@ -828,6 +907,23 @@
             error: err,
           });
         }
+        if (part.name === "tts") {
+          const src = String(part.output || "").match(/\/generated\/[A-Za-z0-9._-]+\.mp3/i);
+          const audio = src
+            ? '<audio class="md-audio" controls preload="none" src="' +
+              src[0] +
+              '"></audio>'
+            : "";
+          return disclosureRow({
+            title: t("tts"),
+            icon: iconAudio(),
+            summary: part.detail || "tts",
+            bodyHtml: audio + (part.output ? "<pre class=\"term-out\">" + escapeHtml(part.output) + "</pre>" : ""),
+            card: true,
+            cardKind: "audio",
+            error: err,
+          });
+        }
         return disclosureRow({
           title: toolTitle(part.name),
           icon: iconWrench(),
@@ -962,7 +1058,12 @@
         });
         flushTrace();
         flushTexts();
-        return '<div class="assistant-doc">' + chunks.join("") + "</div>";
+        return (
+          replyQuoteHtml(msg) +
+          '<div class="assistant-doc">' +
+          chunks.join("") +
+          "</div>"
+        );
       }
       function botById(id) {
         return state.bots.find((bot) => bot.id === id);
@@ -1174,9 +1275,11 @@
         const members = new Set(
           state.kind === "channel"
             ? ((currentChannel() && currentChannel().memberIds) || [])
-            : state.kind === "dm"
-              ? [state.id]
-              : [],
+            : isPeerDm()
+              ? peerMemberIds()
+              : state.kind === "dm"
+                ? [state.id]
+                : [],
         );
         const known = new Map(
           (state.bots || [])
@@ -1226,7 +1329,24 @@
         }
         return "";
       }
+      function isPeerDm() {
+        return state.kind === "dm" && String(state.id || "").indexOf("peer-") === 0;
+      }
+      function currentPeer() {
+        return (state.peers || []).find((row) => row.id === state.id);
+      }
+      function peerMemberIds() {
+        const peer = currentPeer();
+        return (peer && peer.memberIds) || [];
+      }
       function botsFromSend(text) {
+        if (isPeerDm()) {
+          const ids = summonedBotIds(text);
+          if (ids.length) return ids;
+          const last = lastBotAuthor();
+          if (last) return [last];
+          return peerMemberIds().slice(0, 1);
+        }
         if (state.kind === "dm") return [state.id];
         const scan = mentionScanText(text);
         if (/(^|\s)@(channel|quest|here|all)\b/i.test(scan)) {
@@ -1402,7 +1522,8 @@
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
           );
-          return (hit && hit.reasoning) || null;
+          if (!hit || hit.kind === "commandcode") return null;
+          return hit.reasoning || null;
         })();
         const reasonVal = clampEffort(
           ref && ref.reasoning,
@@ -1441,7 +1562,12 @@
           ? '<span class="busy-flash" title="' + t("busy") + '"></span>'
           : "";
         const av = opts.av
-          ? '<span class="nav-av">' + opts.av + flash + "</span>"
+          ? '<span class="nav-av' +
+            (opts.pair ? " pair" : "") +
+            '">' +
+            opts.av +
+            flash +
+            "</span>"
           : flash;
         const foot = opts.party
           ? opts.party
@@ -1700,6 +1826,49 @@
             });
           })
           .join("");
+        const peerRows = (state.peers || [])
+          .filter((peer) => {
+            const hay = String(peer.name || "").toLowerCase();
+            return !q || hay.includes(q);
+          })
+          .slice()
+          .sort(byUpdatedAtDesc);
+        const peersSec = document.getElementById("peers-sec");
+        const peersList = document.getElementById("peers");
+        if (peersSec) peersSec.hidden = peerRows.length === 0 && !q;
+        if (peersList) {
+          peersList.innerHTML = peerRows
+            .map((peer) => {
+              const members = peer.members || [];
+              const av = members
+                .slice(0, 2)
+                .map((bot) => {
+                  return (
+                    '<span class="avatar" style="background:' +
+                    hue(bot.handle) +
+                    '">' +
+                    avatarFace(bot) +
+                    "</span>"
+                  );
+                })
+                .join("");
+              return navRowHtml({
+                href: "#d/" + encodeURIComponent(peer.id),
+                on: isPeerDm() && state.id === peer.id,
+                pair: true,
+                av: av,
+                name: peer.name,
+                updatedAt: peer.updatedAt,
+                preview: previewLine(
+                  peer.lastMessage && peer.lastMessage.body
+                    ? peer.lastMessage.body
+                    : "",
+                ),
+                unread: state.unread.has(roomKey("dm", peer.id)),
+              });
+            })
+            .join("");
+        }
         const cronBox = document.getElementById("cron-nav");
         if (cronBox) {
           const jobs = (state.cronJobs || []).filter((job) => {
@@ -1717,28 +1886,44 @@
               .toLowerCase();
             return hay.includes(q);
           });
-          cronBox.innerHTML = jobs.length
-            ? jobs
-                .map((job) => {
-                  const bot = botById(job.botId);
-                  return navRowHtml({
-                    href: cronJobHref(job),
-                    on: state.cronOpen === job.id,
-                    av: bot
-                      ? '<span class="avatar" style="background:' +
-                        hue(bot.handle) +
-                        '">' +
-                        avatarFace(bot) +
-                        "</span>"
-                      : "",
-                    name: job.name || t("cron.title"),
-                    updatedAt: job.nextRunAt,
-                    preview: cronNavPreview(job),
-                    busy: Boolean(job.running),
-                    chip: job.paused ? t("cron.pause") : "",
-                  });
-                })
-                .join("")
+          function cronRow(job) {
+            const bot = botById(job.botId);
+            return navRowHtml({
+              href: cronJobHref(job),
+              on: state.cronOpen === job.id,
+              av: bot
+                ? '<span class="avatar" style="background:' +
+                  hue(bot.handle) +
+                  '">' +
+                  avatarFace(bot) +
+                  "</span>"
+                : "",
+              name: job.name || t("cron.title"),
+              updatedAt: job.nextRunAt,
+              preview: cronNavPreview(job),
+              busy: Boolean(job.running),
+              chip: job.paused ? t("cron.pause") : "",
+            });
+          }
+          const channelJobs = jobs.filter((job) => job.scope !== "bot");
+          const botJobs = jobs.filter((job) => job.scope === "bot");
+          let html = "";
+          if (channelJobs.length) {
+            html +=
+              '<li class="nav-empty">' +
+              escapeHtml(t("cron.scopeChannel")) +
+              "</li>" +
+              channelJobs.map(cronRow).join("");
+          }
+          if (botJobs.length) {
+            html +=
+              '<li class="nav-empty">' +
+              escapeHtml(t("cron.scopeBot")) +
+              "</li>" +
+              botJobs.map(cronRow).join("");
+          }
+          cronBox.innerHTML = html
+            ? html
             : '<li class="nav-empty">' + escapeHtml(t("cron.navEmpty")) + "</li>";
         }
         applyNavFold();
@@ -1781,6 +1966,35 @@
         const wrap = document.getElementById("members-wrap");
         const av = document.getElementById("head-av");
         if (state.kind === "dm") {
+          if (isPeerDm()) {
+            const peer = currentPeer();
+            const members = (peer && peer.members) || [];
+            document.getElementById("title").textContent =
+              peer && peer.name ? peer.name : t("peers");
+            document.getElementById("subtitle").textContent = "";
+            wrap.hidden = true;
+            document.getElementById("members-pop").hidden = true;
+            av.style.background = "transparent";
+            av.classList.remove("hash-av");
+            av.innerHTML = members
+              .slice(0, 2)
+              .map((bot) => {
+                return (
+                  '<span class="avatar sm" style="background:' +
+                  hue(bot.handle) +
+                  '">' +
+                  avatarFace(bot) +
+                  "</span>"
+                );
+              })
+              .join("");
+            av.removeAttribute("href");
+            av.removeAttribute("data-bot-id");
+            av.setAttribute("title", peer && peer.name ? peer.name : t("peers"));
+            setModelPickerVisible(false);
+            syncDraftPlaceholder();
+            return;
+          } else {
           const bot = botById(state.id);
           document.getElementById("title").textContent = bot ? bot.name : t("dm");
           document.getElementById("subtitle").textContent = "";
@@ -1802,6 +2016,7 @@
           renderModelList();
           syncDraftPlaceholder();
           return;
+          }
         }
         const ch = currentChannel();
         document.getElementById("title").textContent = ch ? ch.name : "…";
@@ -1846,12 +2061,67 @@
         syncDraftPlaceholder();
         renderQueue();
         syncSendButton();
+        renderAssignBar();
+      }
+      function applyAssign(roomId, waves) {
+        if (!roomId || !Array.isArray(state.channels)) return;
+        state.channels = state.channels.map((ch) =>
+          ch.id === roomId ? { ...ch, assign: waves } : ch,
+        );
+        renderAssignBar();
+      }
+      function renderAssignBar() {
+        const bar = document.getElementById("assign-bar");
+        const wavesEl = document.getElementById("assign-waves");
+        if (!bar || !wavesEl) return;
+        if (state.kind !== "channel") {
+          bar.hidden = true;
+          wavesEl.innerHTML = "";
+          return;
+        }
+        const ch = currentChannel();
+        const waves = (ch && ch.assign) || [];
+        if (!waves.length) {
+          bar.hidden = true;
+          wavesEl.innerHTML = "";
+          return;
+        }
+        bar.hidden = false;
+        wavesEl.innerHTML = waves
+          .map((wave, index) => {
+            const chips = (wave || [])
+              .map((id) => {
+                const bot = botById(id);
+                if (!bot) return "";
+                return (
+                  '<span class="assign-chip' +
+                  (index === 0 ? " on" : "") +
+                  '" title="@' +
+                  escapeHtml(bot.handle) +
+                  '"><span class="avatar sm" style="background:' +
+                  hue(bot.handle) +
+                  '">' +
+                  avatarFace(bot) +
+                  "</span>@" +
+                  escapeHtml(bot.handle) +
+                  "</span>"
+                );
+              })
+              .join("");
+            const sep =
+              index > 0
+                ? '<span class="assign-then">' + t("assign.then") + "</span>"
+                : "";
+            return sep + '<span class="assign-wave">' + chips + "</span>";
+          })
+          .join("");
       }
 
       function liveStepLabel(name) {
         if (name === "think") return t("think");
         if (name === "skill") return t("skill");
         if (name === "image_gen") return t("imageGen");
+        if (name === "tts") return t("tts");
         if (name === "steer") return t("steer.live");
         if (name === "handoff") return t("handoff");
         return toolTitle(name);
@@ -1941,6 +2211,7 @@
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
+            messageId: row.messageId ? String(row.messageId) : "",
           }));
       }
       function rebuildBusyBots() {
@@ -1970,6 +2241,7 @@
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
+            messageId: row.messageId ? String(row.messageId) : "",
             room: { kind: r.kind, id: r.id },
           }));
         state.lives = others.concat(tagged);
@@ -2009,6 +2281,19 @@
               : "") +
             "</div>",
         };
+      }
+      function liveMessageIdHtml(live) {
+        const id = live && live.messageId ? String(live.messageId) : "";
+        if (!id) return "";
+        return (
+          '<button type="button" class="stats-kicker-id" data-copy-stat="' +
+          escapeHtml(id) +
+          '" title="' +
+          escapeHtml(t("copy")) +
+          '">' +
+          escapeHtml(id) +
+          "</button>"
+        );
       }
       function turnStatusInnerHtml(live) {
         const started = live && live.startedAt ? Date.parse(live.startedAt) : NaN;
@@ -2050,9 +2335,12 @@
           : "";
         return (
           '<div class="turn-live">' +
+          '<div class="turn-head">' +
           '<div class="turn-status">' +
           liveStatusLabel(live) +
           clock +
+          "</div>" +
+          liveMessageIdHtml(live) +
           "</div>" +
           liveStepsHtml(live && live.steps) +
           actions +
@@ -2116,17 +2404,25 @@
             renderThread();
             return;
           }
-          if (status) {
-            const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
-            const elapsed = Number.isFinite(started)
-              ? Date.now() - started
-              : Date.now() - (state.busySince || Date.now());
-            const clock =
-              elapsed >= 15000
-                ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
-                : "";
-            status.innerHTML = liveStatusLabel(live) + clock;
+          const head = block.querySelector(".turn-head");
+          if (!head || !status) {
+            renderThread();
+            return;
           }
+          const started = live.startedAt ? Date.parse(live.startedAt) : NaN;
+          const elapsed = Number.isFinite(started)
+            ? Date.now() - started
+            : Date.now() - (state.busySince || Date.now());
+          const clock =
+            elapsed >= 15000
+              ? '<span class="clock">' + Math.floor(elapsed / 1000) + "s</span>"
+              : "";
+          head.innerHTML =
+            '<div class="turn-status">' +
+            liveStatusLabel(live) +
+            clock +
+            "</div>" +
+            liveMessageIdHtml(live);
           const html = liveStepsHtml(live.steps);
           const existing = block.querySelector(".live-steps");
           if (!html) {
@@ -2333,7 +2629,7 @@
               const editing = state.editingId === msg.id;
               const statsOn = !you && state.statsId === msg.id;
               const usage = you ? null : usageFor(msg, index);
-              const statsPanel = statsOn ? statsPanelHtml(usage) : "";
+              const statsPanel = statsOn ? statsPanelHtml(usage, msg) : "";
               const statsBtn = you ? "" : statsBtnHtml(msg.id, statsOn);
               const body = editing
                 ? '<textarea class="edit-draft" data-edit-id="' +
@@ -2508,6 +2804,7 @@
         const data = await fetch("/workspace").then((r) => r.json());
         state.channels = data.channels || [];
         state.bots = data.bots || [];
+        state.peers = data.peers || [];
         state.serverLive = Array.isArray(data.live) ? data.live : [];
         if (state.kind === "channel" && !currentChannel() && state.channels[0]) {
           state.id = state.channels[0].id;
@@ -2522,7 +2819,13 @@
           alert(t("channel.keepGeneral"));
           return;
         }
-        if (!confirm(t("channel.deleteConfirm", { name: name || id }))) return;
+        const sure = await askConfirm({
+          title: t("channel.delete"),
+          body: t("channel.deleteConfirm", { name: name || id }),
+          danger: true,
+          ok: t("delete"),
+        });
+        if (!sure) return;
         const res = await fetch("/channels/" + encodeURIComponent(id), {
           method: "DELETE",
         });
@@ -2537,10 +2840,16 @@
       }
       async function closeBranch(id, ch) {
         if (!id) return;
-        if (!confirm(t("branch.closeConfirm", { name: (ch && ch.name) || id }))) {
-          return;
-        }
-        const merge = confirm(t("branch.closeMerge"));
+        const sure = await askConfirm({
+          title: t("branch.close"),
+          body: t("branch.closeConfirm", { name: (ch && ch.name) || id }),
+          ok: t("branch.close"),
+        });
+        if (!sure) return;
+        const merge = await askConfirm({
+          title: t("branch.closeMerge"),
+          ok: t("confirm.ok"),
+        });
         const res = await fetch(
           "/channels/" + encodeURIComponent(id) + "/close",
           {
@@ -2857,6 +3166,9 @@
         const body = await res.json().catch(() => ({}));
         const lives = liveTurnsFrom(body);
         const here = currentRoomRef();
+        if (here && here.kind === "channel" && Array.isArray(body.assign)) {
+          applyAssign(here.id, body.assign);
+        }
         if (!res.ok || !lives.length) {
           if (currentRoomBusy() && !state.posting) {
             setBusy(false, [], { room: here });
@@ -2923,9 +3235,61 @@
         state.messages = kept;
         return true;
       }
+      function askConfirm(opts) {
+        const dialog = document.getElementById("confirm-dialog");
+        const title = document.getElementById("confirm-title");
+        const copy = document.getElementById("confirm-copy");
+        const ok = document.getElementById("confirm-ok");
+        const cancel = document.getElementById("confirm-cancel");
+        if (!dialog || !title || !ok || !cancel) return Promise.resolve(false);
+        title.textContent = opts.title || "";
+        if (opts.body) {
+          copy.hidden = false;
+          copy.textContent = opts.body;
+        } else {
+          copy.hidden = true;
+          copy.textContent = "";
+        }
+        ok.textContent = opts.ok || t("confirm.ok");
+        ok.classList.toggle("danger", Boolean(opts.danger));
+        cancel.textContent = opts.cancel || t("cancel");
+        return new Promise((resolve) => {
+          let settled = false;
+          function finish(value) {
+            if (settled) return;
+            settled = true;
+            ok.removeEventListener("click", onOk);
+            cancel.removeEventListener("click", onCancel);
+            dialog.removeEventListener("close", onClose);
+            if (dialog.open) dialog.close();
+            resolve(value);
+          }
+          function onOk(event) {
+            event.preventDefault();
+            finish(true);
+          }
+          function onCancel(event) {
+            event.preventDefault();
+            finish(false);
+          }
+          function onClose() {
+            finish(false);
+          }
+          ok.addEventListener("click", onOk);
+          cancel.addEventListener("click", onCancel);
+          dialog.addEventListener("close", onClose);
+          dialog.showModal();
+          ok.focus();
+        });
+      }
       async function deleteChatMessage(id) {
         if (!id) return;
-        if (!confirm(t("msg.deleteConfirm"))) return;
+        const ok = await askConfirm({
+          title: t("msg.deleteConfirm"),
+          danger: true,
+          ok: t("delete"),
+        });
+        if (!ok) return;
         if (String(id).indexOf("pending-") === 0) {
           state.messages = state.messages.filter((item) => item.id !== id);
           if (state.replyTo && state.replyTo.id === id) clearReply();
@@ -3057,6 +3421,7 @@
         const reply = event.target.closest("[data-reply]");
         const jump = event.target.closest("[data-jump]");
         const copy = event.target.closest("[data-copy]");
+        const copyStat = event.target.closest("[data-copy-stat]");
         const edit = event.target.closest("[data-edit]");
         const retry = event.target.closest("[data-retry]");
         const stats = event.target.closest("[data-stats]");
@@ -3173,6 +3538,15 @@
               (item) => item.id === reply.getAttribute("data-reply"),
             );
             if (msg) setReply(msg);
+            return;
+          }
+          if (copyStat) {
+            event.preventDefault();
+            const value = copyStat.getAttribute("data-copy-stat") || "";
+            if (value) {
+              await navigator.clipboard.writeText(value);
+              showToast(t("copied"));
+            }
             return;
           }
           if (copy) {
@@ -3524,6 +3898,14 @@
       document.getElementById("cron-sheet-back").addEventListener("click", () => {
         closeCronSheet();
       });
+      document.getElementById("cron-sheet-delivery-wrap")?.addEventListener("change", (event) => {
+        const el = event.target.closest("[name=cron-sheet-delivery]");
+        if (!el || !el.checked) return;
+        saveCronSheet({ delivery: el.value });
+      });
+      document.getElementById("cron-scope")?.addEventListener("change", () => {
+        fillCronDialogBots();
+      });
       document.getElementById("cron-sheet-on").addEventListener("change", async (event) => {
         const id = state.cronOpen;
         if (!id) return;
@@ -3544,7 +3926,12 @@
       document.getElementById("cron-sheet-del").addEventListener("click", async () => {
         const id = state.cronOpen;
         if (!id) return;
-        if (!confirm(t("cron.deleteConfirm"))) return;
+        const sure = await askConfirm({
+          title: t("cron.deleteConfirm"),
+          danger: true,
+          ok: t("delete"),
+        });
+        if (!sure) return;
         const res = await fetch("/cron/" + encodeURIComponent(id), { method: "DELETE" });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -3604,6 +3991,10 @@
       document.getElementById("cron-add").addEventListener("click", async () => {
         const botId = document.getElementById("cron-bot").value;
         const ask = document.getElementById("cron-ask").value.trim();
+        const when = (document.getElementById("cron-when")?.value || "").trim();
+        const scope = document.getElementById("cron-scope")?.value || "channel";
+        const delivery =
+          document.getElementById("cron-delivery")?.value || "hall";
         const bot = botById(botId);
         if (!bot) {
           alert(t("cron.needSeat"));
@@ -3611,6 +4002,43 @@
         }
         if (!ask) {
           alert(t("cron.needAsk"));
+          return;
+        }
+        const ch = currentChannel();
+        const roomId =
+          ch && ch.id
+            ? ch.id
+            : state.kind === "dm" && state.id
+              ? "dm-" + state.id
+              : "";
+        if (scope === "bot" || when) {
+          if (scope === "channel" && !roomId) {
+            alert(t("cron.needSeat"));
+            return;
+          }
+          const res = await fetch("/cron", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              botId: botId,
+              prompt: ask,
+              schedule: when || ask,
+              name: ask.replace(/\s+/g, " ").slice(0, 28),
+              scope: scope,
+              delivery: scope === "bot" ? "sheet" : delivery,
+              roomId: scope === "channel" ? roomId : undefined,
+            }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            alert(body.error || t("cron.saveFailed"));
+            return;
+          }
+          document.getElementById("cron-ask").value = "";
+          document.getElementById("cron-when").value = "";
+          document.getElementById("cron-dialog").close();
+          await loadNavCron();
+          location.hash = "#s/" + encodeURIComponent(body.id);
           return;
         }
         const raw = "@" + bot.handle + " " + t("cron.askBody", { ask: ask });
@@ -4743,7 +5171,8 @@
         );
       }
       function applyCronRoom(job) {
-        const roomId = String((job && job.roomId) || "");
+        if (!job || job.scope === "bot" || !job.roomId) return;
+        const roomId = String(job.roomId || "");
         if (roomId.indexOf("dm-") === 0) {
           state.kind = "dm";
           state.id = roomId.slice(3);
@@ -4780,6 +5209,36 @@
             runBtn.disabled = Boolean(job.running);
             runBtn.textContent = job.running ? t("busy") : t("cron.test");
           }
+          const delivWrap = document.getElementById("cron-sheet-delivery-wrap");
+          if (delivWrap) {
+            delivWrap.hidden = job.scope === "bot";
+            delivWrap.querySelectorAll("[name=cron-sheet-delivery]").forEach((el) => {
+              el.checked = el.value === (job.delivery || "hall");
+            });
+          }
+        }
+        const log = document.getElementById("cron-sheet-log");
+        if (log) {
+          const rows = Array.isArray(job.messages) ? job.messages : [];
+          log.innerHTML = rows.length
+            ? rows
+                .map((msg) => {
+                  const who =
+                    msg.author === "you"
+                      ? t("you")
+                      : (botById(msg.author) || {}).handle || msg.author;
+                  return (
+                    "<li><b>" +
+                    escapeHtml(who) +
+                    "</b> " +
+                    escapeHtml(String(msg.body || "").slice(0, 400)) +
+                    "</li>"
+                  );
+                })
+                .join("")
+            : '<li class="cron-runs-empty">' +
+              escapeHtml(t("cron.logEmpty")) +
+              "</li>";
         }
         const box = document.getElementById("cron-sheet-runs");
         if (!box) return;
@@ -4899,14 +5358,21 @@
           })
           .join("");
       }
-      async function openCronDialog() {
-        const dialog = document.getElementById("cron-dialog");
+      function fillCronDialogBots() {
         const sel = document.getElementById("cron-bot");
+        const scope = document.getElementById("cron-scope")?.value || "channel";
         const ch = currentChannel();
         const members = ch ? ch.members || [] : [];
         const dmBot =
           state.kind === "dm" && state.id ? botById(state.id) : null;
-        const bots = members.length ? members : dmBot ? [dmBot] : [];
+        const bots =
+          scope === "bot"
+            ? state.bots || []
+            : members.length
+              ? members
+              : dmBot
+                ? [dmBot]
+                : state.bots || [];
         sel.innerHTML = bots
           .map(
             (bot) =>
@@ -4917,6 +5383,17 @@
               "</option>",
           )
           .join("");
+        const row = document.getElementById("cron-delivery-row");
+        if (row) row.hidden = scope === "bot";
+      }
+      async function openCronDialog() {
+        const dialog = document.getElementById("cron-dialog");
+        const scopeSel = document.getElementById("cron-scope");
+        const ch = currentChannel();
+        if (scopeSel) {
+          scopeSel.value = ch || (state.kind === "dm" && state.id) ? "channel" : "bot";
+        }
+        fillCronDialogBots();
         await renderCronList();
         dialog.showModal();
         const ask = document.getElementById("cron-ask");
@@ -5121,6 +5598,9 @@
           const body = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(body.error || "send failed");
           ok = true;
+          if (Array.isArray(body.assign) && sent.kind === "channel") {
+            applyAssign(sent.id, body.assign);
+          }
           const here =
             state.kind === sent.kind && state.id === sent.id;
           if (here) {
@@ -6101,6 +6581,7 @@
       function modelGlyph(kind, name) {
         const hay = String(name || "");
         if (kind === "web-bridge") return { mark: "◌", tone: "" };
+        if (kind === "commandcode") return { mark: "⌘", tone: "" };
         if (/claude|anthropic/i.test(hay)) return { mark: "✶", tone: "claude" };
         if (/grok|xai/i.test(hay)) return { mark: "✦", tone: "grok" };
         if (/gpt|openai|codex/i.test(hay)) return { mark: "◎", tone: "openai" };
@@ -6148,7 +6629,8 @@
         const hit = allModels().find(
           (row) => row.provider === ref.provider && row.model === ref.model,
         );
-        return (hit && hit.reasoning) || null;
+        if (!hit || hit.kind === "commandcode") return null;
+        return hit.reasoning || null;
       }
       function effortChoices(spec) {
         const raw = spec && spec.supportedEfforts;
@@ -6169,8 +6651,9 @@
         if (spec.defaultEffort && choices.indexOf(spec.defaultEffort) >= 0) {
           return spec.defaultEffort;
         }
-        if (choices.indexOf("high") >= 0) return "high";
         if (choices.indexOf("medium") >= 0) return "medium";
+        if (choices.indexOf("high") >= 0) return "high";
+        if (choices.indexOf("low") >= 0) return "low";
         return choices[0];
       }
       function speedLabel() {
@@ -6353,7 +6836,8 @@
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
           );
-          return (hit && hit.reasoning) || null;
+          if (!hit || hit.kind === "commandcode") return null;
+          return hit.reasoning || null;
         })();
         const reason = clampEffort(
           document.getElementById("model-reasoning").value || ref.reasoning,

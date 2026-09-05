@@ -38,7 +38,9 @@ export function assembleParts(input: {
           ? String(trace.args.command ?? "")
           : trace.name === "image_gen"
             ? String(trace.args.prompt ?? "")
-            : trace.name === "spawn"
+            : trace.name === "tts"
+              ? String(trace.args.text ?? "")
+              : trace.name === "spawn"
               ? String(
                   trace.args.title ||
                     trace.args.description ||
