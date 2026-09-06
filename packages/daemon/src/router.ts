@@ -20,6 +20,7 @@ import {
   getChannelMemory,
   setChannelMemory,
   generateKind,
+  draftListing,
   pickBotSkills,
   generateBotLook,
   getBotDetail,
@@ -1184,6 +1185,13 @@ export async function handleRequest(
         str(body, "prompt"),
       );
       json(res, 200, generated);
+      return;
+    }
+
+    if (method === "POST" && path === "/generate/listing") {
+      const body = asRecord(await readJson(req));
+      const draft = await draftListing(str(body, "url"));
+      json(res, 200, draft);
       return;
     }
 

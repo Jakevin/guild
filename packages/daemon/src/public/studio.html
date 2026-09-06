@@ -87,6 +87,16 @@
       <p class="lede" id="page-lede">寫好 Soul / Agent / Position，勾技能（含本機 Codex、Grok 等 CLI），請他入座。</p>
       <p id="flash" class="muted"></p>
       <form id="create-bot">
+        <section class="card" id="listing-card">
+          <h2 data-i18n="studio.listingTitle">從說明頁起草</h2>
+          <p class="muted" data-i18n="studio.listingHint">貼 Grok Bot 市集的說明頁，例如 https://x.ai/bot/marketplace/bots/pg。會填入名字與 Soul / Agent / Position 草稿。不會複製技能、排程或 MCP。入座前請你改。</p>
+          <label data-i18n="studio.listingUrl">說明頁網址</label>
+          <input id="listing-url" placeholder="https://x.ai/bot/marketplace/bots/pg" data-i18n-placeholder="studio.listingPh" />
+          <div class="gen-row">
+            <button type="button" class="secondary" id="listing-draft" data-i18n="studio.listingDraft">起草</button>
+            <p class="block-flash" id="listing-flash" hidden></p>
+          </div>
+        </section>
         <section class="card">
           <label>Name</label>
           <input name="name" required placeholder="Ada" />
@@ -205,6 +215,7 @@
           document.getElementById("page-lede").textContent = t("studio.editLede");
           document.title = t("studio.editDocTitle");
           submit.hidden = true;
+          document.getElementById("listing-card").hidden = true;
           document.getElementById("delete-bot").hidden = false;
           document.getElementById("gen-look").hidden = false;
           document.getElementById("gen-look").textContent = t("studio.genLook");
@@ -222,6 +233,7 @@
           document.getElementById("page-lede").textContent = t("studio.hireLede");
           submit.hidden = false;
           submit.textContent = t("studio.seat");
+          document.getElementById("listing-card").hidden = false;
           document.getElementById("delete-bot").hidden = true;
           document.getElementById("gen-look").hidden = true;
           document.title = t("title.studio");
@@ -704,6 +716,64 @@
               if (openId === id) render();
             })
             .catch(() => {});
+        }
+      });
+
+      document.getElementById("listing-url").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          document.getElementById("listing-draft").click();
+        }
+      });
+      document.getElementById("listing-draft").addEventListener("click", async () => {
+        const button = document.getElementById("listing-draft");
+        const url = document.getElementById("listing-url").value.trim();
+        const listingFlash = document.getElementById("listing-flash");
+        if (!url) {
+          setNodeFlash(listingFlash, "error", t("studio.listingNeedUrl"));
+          return;
+        }
+        if (!beginBusy(button, t("studio.listingBusy"))) return;
+        try {
+          const response = await fetch("/generate/listing", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: url }),
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            setNodeFlash(listingFlash, "error", body.error || "draft failed");
+            return;
+          }
+          form.name.value = body.name || "";
+          form.handle.value = body.handle || "";
+          form.oneLiner.value = body.oneLiner || "";
+          const fill = (kind, draft, prompt) => {
+            const block = document.querySelector('[data-kind="' + kind + '"]');
+            if (!block || !draft) return;
+            block.querySelector(".body").value = draft.body || "";
+            if (block.querySelector(".gen-name")) {
+              block.querySelector(".gen-name").value = draft.name || "";
+            }
+            if (prompt) block.querySelector(".prompt").value = prompt;
+          };
+          const prompt = body.oneLiner || body.name || "";
+          fill("soul", body.soul, prompt);
+          fill("agent", body.agent, prompt);
+          fill("position", body.position, prompt);
+          setNodeFlash(
+            listingFlash,
+            "health",
+            body.thin ? t("studio.listingThin") : t("studio.listingDone"),
+          );
+          setFlash(
+            "health",
+            body.thin ? t("studio.listingThin") : t("studio.listingDone"),
+          );
+        } catch (err) {
+          setNodeFlash(listingFlash, "error", err.message);
+        } finally {
+          endBusy(button, t("studio.listingDraft"));
         }
       });
 

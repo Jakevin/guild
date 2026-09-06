@@ -515,6 +515,14 @@ test("generate turns a prompt into markdown", async () => {
     const body = soul.body as { name: string; body: string };
     assert.match(body.body, /謹慎少廢話的資深工程師/);
     assert.match(body.body, /^# /);
+    const listing = await postJson(origin, "/generate/listing", {
+      url: "https://example.com",
+    });
+    assert.equal(listing.status, 400);
+    const addLink = await postJson(origin, "/generate/listing", {
+      url: "grokbot://app/v1/bot-template?id=abc",
+    });
+    assert.equal(addLink.status, 400);
   } finally {
     await closeServer(server);
   }
@@ -916,6 +924,12 @@ test("home is chat and studio is the roster", () => {
   assert.match(studio, /用 AI 挑選/);
   assert.match(studio, /id="skill-pick"/);
   assert.match(studio, /\/generate\/skills/);
+  assert.match(studio, /\/generate\/listing/);
+  assert.match(studio, /id="listing-draft"/);
+  assert.match(studio, /id="listing-url"/);
+  assert.match(studio, /listing-url"\)\.addEventListener\("keydown"/);
+  assert.match(studio, /從說明頁起草/);
+  assert.doesNotMatch(studio, /一鍵匯入/);
   assert.match(studio, /\/generate/);
   assert.match(studio, /await saveMarkdown\(/);
   assert.match(studio, /studio\.generatedSaved/);

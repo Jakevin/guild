@@ -24,6 +24,7 @@ import {
   userTrajectoryEvent,
 } from "./trajectory.ts";
 import { importFromGithub, importFromUrl } from "./skill-import.ts";
+import { draftListingFromUrl } from "./listing-draft.ts";
 import {
   harvestBotMemory,
   harvestChannelMemory,
@@ -463,6 +464,13 @@ export async function importSkills(
       slug: draft.slug,
     }),
   );
+}
+
+export async function draftListing(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return draftListingFromUrl(url, fetchImpl);
 }
 
 export async function generateKind(
