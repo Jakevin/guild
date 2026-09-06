@@ -23,7 +23,6 @@ import {
   emitProgress,
   openaiTools,
   throwIfAborted,
-  TOOL_LOOP_WRAP,
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
@@ -182,9 +181,9 @@ export async function completeCommandCodeGenerate(input: {
     traces,
     thinkingChunks,
     nullIfNoTraces: true,
-    ask: async ({ wrap, steer }) => {
+    ask: async ({ wrap, wrapPrompt, steer }) => {
       throwIfAborted(input.ctx);
-      if (wrap) ccMessages.push({ role: "user", content: TOOL_LOOP_WRAP });
+      if (wrapPrompt) ccMessages.push({ role: "user", content: wrapPrompt });
       if (steer) ccMessages.push({ role: "user", content: steer });
       const extra = estimateSendTokens(input.system) + 2048;
       const fitted = trimSendMessages(
@@ -206,7 +205,7 @@ export async function completeCommandCodeGenerate(input: {
         params: {
           model: input.model,
           messages: ccMessages,
-          tools: catalog,
+          ...(wrap ? {} : { tools: catalog }),
           system: input.system,
           max_tokens: 64_000,
           stream: true,

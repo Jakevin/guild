@@ -20,11 +20,14 @@ import {
   formatToolTranscript,
   hostContext,
   MAX_TOOL_ROUNDS,
+  SPAWN_TOOL_ROUNDS,
   nextToolRound,
   openaiTools,
   roundSignal,
   takeSteers,
   TOOL_LOOP_EXHAUSTED,
+  TOOL_LOOP_STALL,
+  TOOL_LOOP_WRAP,
   TOOL_SYSTEM,
   type ToolContext,
 } from "../src/tools.ts";
@@ -593,13 +596,19 @@ test("README documents the Hermes-shaped harness without claiming 128 or Hermes 
   assert.match(ja, /import も同意プロンプトも無い/);
 });
 
-test("tool loop follows Codex: no 8-round budget, fuse is last-resort", () => {
+test("tool loop last-resort round fuse and Hermes wrap tools=None", () => {
   assert.ok(MAX_TOOL_ROUNDS > 8);
   assert.equal(nextToolRound(0), "continue");
   assert.equal(nextToolRound(8), "continue");
   assert.equal(nextToolRound(MAX_TOOL_ROUNDS - 2), "continue");
   assert.equal(nextToolRound(MAX_TOOL_ROUNDS - 1), "wrap");
   assert.equal(nextToolRound(MAX_TOOL_ROUNDS), "stop");
+  assert.ok(SPAWN_TOOL_ROUNDS > 8);
+  assert.ok(SPAWN_TOOL_ROUNDS < MAX_TOOL_ROUNDS);
+  assert.equal(nextToolRound(SPAWN_TOOL_ROUNDS - 2, 1), "continue");
+  assert.equal(nextToolRound(SPAWN_TOOL_ROUNDS - 1, 1), "wrap");
+  assert.equal(nextToolRound(SPAWN_TOOL_ROUNDS, 1), "stop");
+  assert.equal(nextToolRound(SPAWN_TOOL_ROUNDS, 0), "continue");
   assert.match(TOOL_LOOP_EXHAUSTED, /再送一次/);
   const oauth = readFileSync(new URL("../src/oauth.ts", import.meta.url), "utf8");
   const llm = readFileSync(new URL("../src/llm.ts", import.meta.url), "utf8");
@@ -611,4 +620,19 @@ test("tool loop follows Codex: no 8-round budget, fuse is last-resort", () => {
   assert.match(oauth, /runAgentLoop/);
   assert.match(llm, /runAgentLoop/);
   assert.match(loop, /nextToolRound/);
+  assert.match(TOOL_LOOP_WRAP, /without calling any more tools/);
+  assert.match(TOOL_LOOP_WRAP, /maximum number of tool-calling iterations/);
+  assert.doesNotMatch(TOOL_LOOP_STALL, /maximum number of tool-calling iterations/);
+  assert.match(loop, /TOOL_LOOP_STALL/);
+  assert.match(loop, /wrapPrompt/);
+  assert.match(llm, /wrap\s*\? \{\}\s*: \{ tools: catalog, tool_choice: "auto" \}/);
+  assert.doesNotMatch(llm, /wrap[\s\S]{0,120}tool_choice:\s*"none"/);
+  assert.match(llm, /wrap \? \{\} : \{ tools \}/);
+  assert.match(llm, /wrap \? \{\} : \{ tools, tool_choice: "auto" \}/);
+  assert.match(oauth, /useTools && !wrap \? \{ tools \}/);
+  const cc = readFileSync(
+    new URL("../src/commandcode-generate.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(cc, /wrap \? \{\} : \{ tools: catalog \}/);
 });

@@ -942,8 +942,13 @@ function loadSkill(name: string, skills: SkillRef[]): ToolOutcome {
  * This number is only a runaway fuse so a stuck tool loop cannot hang guildd.
  */
 export const MAX_TOOL_ROUNDS = 128;
+/** Spawn child loop cap (includes the wrap round). */
+export const SPAWN_TOOL_ROUNDS = 12;
 
 export const TOOL_LOOP_WRAP =
+  "You've reached the maximum number of tool-calling iterations allowed. Please provide a final response summarizing what you've found and accomplished so far, without calling any more tools.";
+
+export const TOOL_LOOP_STALL =
   "Stop calling tools now and write the user a final reply with what you already have. If you cannot finish, say what is still missing.";
 
 export const TOOL_LOOP_EXHAUSTED =
@@ -951,9 +956,13 @@ export const TOOL_LOOP_EXHAUSTED =
 
 export type ToolRoundPhase = "continue" | "wrap" | "stop";
 
-export function nextToolRound(round: number): ToolRoundPhase {
-  if (round >= MAX_TOOL_ROUNDS) return "stop";
-  if (round === MAX_TOOL_ROUNDS - 1) return "wrap";
+export function nextToolRound(
+  round: number,
+  spawnDepth = 0,
+): ToolRoundPhase {
+  const cap = spawnDepth >= 1 ? SPAWN_TOOL_ROUNDS : MAX_TOOL_ROUNDS;
+  if (round >= cap) return "stop";
+  if (round === cap - 1) return "wrap";
   return "continue";
 }
 

@@ -26,7 +26,6 @@ import {
   guildTools,
   roundSignal,
   TOOL_LOOP_EXHAUSTED,
-  TOOL_LOOP_WRAP,
   type SkillRef,
   type ToolContext,
   type ToolTrace,
@@ -1357,11 +1356,11 @@ export async function completeOAuth(input: {
     toolCtx,
     traces,
     thinkingChunks,
-    ask: async ({ wrap, steer }) => {
-      if (wrap) {
+    ask: async ({ wrap, wrapPrompt, steer }) => {
+      if (wrapPrompt) {
         transcript.push({
           role: "user",
-          content: TOOL_LOOP_WRAP,
+          content: wrapPrompt,
           timestamp: Date.now(),
         });
       }
@@ -1391,7 +1390,7 @@ export async function completeOAuth(input: {
                 {
                   systemPrompt: input.system,
                   messages: transcript,
-                  ...(useTools ? { tools } : {}),
+                  ...(useTools && !wrap ? { tools } : {}),
                 },
                 options,
                 toolCtx,

@@ -10,6 +10,8 @@ export type TurnLane = "quick" | "default" | "deep";
 
 export const TURN_SKILL_CAP = 3;
 const STALL_WINDOW = 3;
+const CYCLE_WINDOW = 6;
+const CYCLE_UNIQUE = 2;
 
 export function scoreTurnLane(asked: string): TurnLane {
   const text = String(asked || "").trim();
@@ -163,11 +165,15 @@ export function toolSignature(trace: ToolTrace): string {
   return `${trace.name}:${args}`;
 }
 
-/** Three errors in a row, or the same call three times: wrap. Not a wall clock. */
+/** Three errors in a row, the same call three times, or a short A/B cycle: wrap. Not a wall clock. */
 export function stalledToolLoop(traces: ToolTrace[]): boolean {
   if (traces.length < STALL_WINDOW) return false;
   const last = traces.slice(-STALL_WINDOW);
   if (last.every((row) => row.isError)) return true;
   const sig = last.map(toolSignature);
-  return Boolean(sig[0]) && sig[0] === sig[1] && sig[1] === sig[2];
+  if (Boolean(sig[0]) && sig[0] === sig[1] && sig[1] === sig[2]) return true;
+  if (traces.length < CYCLE_WINDOW) return false;
+  const cycle = traces.slice(-CYCLE_WINDOW).map(toolSignature).filter(Boolean);
+  if (cycle.length < CYCLE_WINDOW) return false;
+  return new Set(cycle).size <= CYCLE_UNIQUE;
 }

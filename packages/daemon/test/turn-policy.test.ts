@@ -78,6 +78,10 @@ test("stalledToolLoop wraps after three errors or three identical calls", () => 
     ]),
     false,
   );
+  const a = { ...same, args: { path: "/tmp/a" } };
+  const b = { ...same, args: { path: "/tmp/b" } };
+  assert.equal(stalledToolLoop([a, b, a, b, a, b]), true);
+  assert.equal(stalledToolLoop([a, b, a, b, a]), false);
 });
 
 test("deep lane hint is available; catalog still omits skill bodies", () => {

@@ -302,6 +302,7 @@ export async function runAgentLoop(input: {
   ask: (state: {
     round: number;
     wrap: boolean;
+    wrapPrompt: string | null;
     steer: string | null;
   }) => Promise<LoopAsk | null>;
   onRetry?: (lateSteer: string) => void;
@@ -317,6 +318,8 @@ export async function runAgentLoop(input: {
     throwIfAborted,
     emitProgress,
     TOOL_LOOP_EXHAUSTED,
+    TOOL_LOOP_STALL,
+    TOOL_LOOP_WRAP,
   } = await import("./tools.ts");
   const traces = input.traces ?? [];
   const thinkingChunks = input.thinkingChunks ?? [];
@@ -326,7 +329,7 @@ export async function runAgentLoop(input: {
 
   for (let round = 0; ; round++) {
     throwIfAborted(input.toolCtx);
-    const native = nextToolRound(round);
+    const native = nextToolRound(round, input.toolCtx.spawnDepth ?? 0);
     const stalled =
       native === "continue" &&
       (await import("./turn-policy.ts")).stalledToolLoop(traces);
@@ -336,9 +339,16 @@ export async function runAgentLoop(input: {
       return { text: exhausted, traces, thinking: thinkingOf() };
     }
     emitProgress(input.toolCtx, traces, thinkingOf());
+    const wrapPrompt =
+      phase === "wrap"
+        ? stalled
+          ? TOOL_LOOP_STALL
+          : TOOL_LOOP_WRAP
+        : null;
     const asked = await input.ask({
       round,
       wrap: phase === "wrap",
+      wrapPrompt,
       steer: takeSteers(input.toolCtx),
     });
     if (!asked) return null;
@@ -347,6 +357,11 @@ export async function runAgentLoop(input: {
       emitProgress(input.toolCtx, traces, thinkingOf());
     }
     const thinking = thinkingOf();
+    if (phase === "wrap") {
+      takeSteers(input.toolCtx);
+      const text = asked.text.trim();
+      return { text: text || emptyAfterTools, traces, thinking };
+    }
     if (!asked.calls.length) {
       const late = takeSteers(input.toolCtx);
       if (late) {

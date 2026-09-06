@@ -25,7 +25,6 @@ import {
   openaiTools,
   roundSignal,
   throwIfAborted,
-  TOOL_LOOP_WRAP,
   type SkillRef,
   type ToolContext,
   type ToolTrace,
@@ -967,8 +966,8 @@ async function completeOpenAiTools(
     traces,
     thinkingChunks,
     nullIfNoTraces: true,
-    ask: async ({ wrap, steer }) => {
-      if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
+    ask: async ({ wrap, wrapPrompt, steer }) => {
+      if (wrapPrompt) msgs.push({ role: "user", content: wrapPrompt });
       if (steer) msgs.push({ role: "user", content: steer });
       const extra =
         estimateSendTokens(system) +
@@ -988,8 +987,10 @@ async function completeOpenAiTools(
               model: target.model,
               temperature,
               messages: msgs,
-              tools: catalog,
-              tool_choice: "auto",
+              // Omit both: Chat Completions rejects tool_choice when tools is empty.
+              ...(wrap
+                ? {}
+                : { tools: catalog, tool_choice: "auto" }),
               ...reasoningPayload(target.providerId, target.baseUrl, effort),
             }),
             signal: roundSignal(ctx),
@@ -1098,8 +1099,8 @@ async function completeAnthropicTools(
     toolCtx: ctx,
     traces,
     nullIfNoTraces: true,
-    ask: async ({ wrap, steer }) => {
-      if (wrap) msgs.push({ role: "user", content: TOOL_LOOP_WRAP });
+    ask: async ({ wrap, wrapPrompt, steer }) => {
+      if (wrapPrompt) msgs.push({ role: "user", content: wrapPrompt });
       if (steer) msgs.push({ role: "user", content: steer });
       const extra =
         estimateSendTokens(system) +
@@ -1122,7 +1123,7 @@ async function completeAnthropicTools(
                 max_tokens: 2048,
                 system,
                 messages: msgs,
-                tools,
+                ...(wrap ? {} : { tools }),
               }),
               signal: roundSignal(ctx),
             },
@@ -1297,8 +1298,8 @@ async function completeZenResponsesTools(
     traces,
     thinkingChunks,
     nullIfNoTraces: true,
-    ask: async ({ wrap, steer }) => {
-      if (wrap) input.push({ role: "user", content: TOOL_LOOP_WRAP });
+    ask: async ({ wrap, wrapPrompt, steer }) => {
+      if (wrapPrompt) input.push({ role: "user", content: wrapPrompt });
       if (steer) input.push({ role: "user", content: steer });
       const extra =
         estimateSendTokens(system) +
@@ -1317,8 +1318,7 @@ async function completeZenResponsesTools(
               model: target.model,
               instructions: system,
               input,
-              tools,
-              tool_choice: "auto",
+              ...(wrap ? {} : { tools, tool_choice: "auto" }),
               ...reasoningPayload(target.providerId, target.baseUrl, effort),
             },
             roundSignal(ctx),

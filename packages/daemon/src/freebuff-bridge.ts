@@ -66,7 +66,6 @@ import {
   emitProgress,
   guildTools,
   roundSignal,
-  TOOL_LOOP_WRAP,
   type ToolContext,
   type ToolOutcome,
   type ToolTrace,
@@ -478,8 +477,12 @@ function compileModeB(user: string, notes: string | null, steer: string | null):
   return [notes, user, steer].filter(Boolean).join("\n\n");
 }
 
-function compileSuffix(results: string, wrap: boolean, steer: string | null): string {
-  return [results, wrap ? TOOL_LOOP_WRAP : "", steer ?? ""].filter(Boolean).join("\n\n");
+function compileSuffix(
+  results: string,
+  wrapPrompt: string | null,
+  steer: string | null,
+): string {
+  return [results, wrapPrompt ?? "", steer ?? ""].filter(Boolean).join("\n\n");
 }
 
 function withAdvertisedTools(ctx: ToolContext): ToolContext {
@@ -780,25 +783,25 @@ async function runLockedTurn(input: {
     onTools: (calls, outcomes: ToolOutcome[]) => {
       pendingResults = formatGuildToolResults(calls, outcomes);
     },
-    ask: async ({ round, wrap, steer }) => {
+    ask: async ({ round, wrapPrompt, steer }) => {
       const extra = steer || pendingSteer;
       pendingSteer = null;
       const mode: FreebuffPasteMode = round >= 1 ? "C" : match ? "B" : "A";
       let paste = "";
       if (mode === "C") {
-        paste = compileSuffix(pendingResults, wrap, extra);
+        paste = compileSuffix(pendingResults, wrapPrompt, extra);
         pendingResults = "";
         if (!paste.trim()) return { calls: [], text: lastAskText, thinking: "" };
       } else if (mode === "A") {
         paste = compileFull(system, messages, extra);
-        if (wrap) paste = [paste, TOOL_LOOP_WRAP].filter(Boolean).join("\n\n");
+        if (wrapPrompt) paste = [paste, wrapPrompt].filter(Boolean).join("\n\n");
       } else {
         const notes =
           tabLease && tabLease.lastMemoryHash !== memHash
             ? formatStandingNotes(input.lease?.botMemory, input.lease?.channelMemory)
             : null;
         paste = compileModeB(lastUserText(messages, input.lease), notes, extra);
-        if (wrap) paste = [paste, TOOL_LOOP_WRAP].filter(Boolean).join("\n\n");
+        if (wrapPrompt) paste = [paste, wrapPrompt].filter(Boolean).join("\n\n");
       }
       if (!paste.trim()) throw codeErr("freebuff_composer_rejected");
       if (overComposerBudget(paste)) throw codeErr("freebuff_context_too_large");

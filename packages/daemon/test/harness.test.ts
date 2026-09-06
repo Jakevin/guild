@@ -114,6 +114,64 @@ test("runAgentLoop runs a round's tools in parallel", async () => {
   assert.ok(Math.abs(started[1] - started[0]) < 50);
 });
 
+test("wrap after a looping call does not run another tool batch", async () => {
+  const ran: string[] = [];
+  const wraps: boolean[] = [];
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async (name, args) => {
+        ran.push(`${name}:${JSON.stringify(args)}`);
+        return { text: "ok", isError: false };
+      },
+    },
+    ask: async ({ round, wrap }) => {
+      wraps.push(wrap);
+      if (round === 0) {
+        return { calls: [same, same, same], text: "" };
+      }
+      return { calls: [same], text: "enough" };
+    },
+  });
+  assert.equal(result?.text, "enough");
+  assert.equal(ran.length, 3);
+  assert.deepEqual(wraps, [false, true]);
+});
+
+test("wrap is terminal even if a late steer is queued", async () => {
+  let pulls = 0;
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+      pullSteers: () => {
+        pulls += 1;
+        return pulls > 1 ? ["keep going"] : [];
+      },
+    },
+    ask: async ({ round, wrap }) => {
+      if (round === 0) return { calls: [same, same, same], text: "" };
+      assert.equal(wrap, true);
+      return { calls: [], text: "summary" };
+    },
+  });
+  assert.equal(result?.text, "summary");
+});
+
+test("wrap with leftover calls and no text uses emptyAfterTools", async () => {
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+    },
+    ask: async ({ round }) => {
+      if (round === 0) return { calls: [same, same, same], text: "" };
+      return { calls: [same], text: "" };
+    },
+  });
+  assert.equal(result?.text, "（工具跑完了，但模型沒寫最終回覆）");
+});
+
 test("workspace_write allows write inside and refuses outside", async () => {
   const workspace = tempDir();
   const inside = join(workspace, "ok.txt");
