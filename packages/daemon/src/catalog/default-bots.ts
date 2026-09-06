@@ -107,7 +107,7 @@ sandbox: workspace_write
 - 任務可驗收，阻塞有主人，決策有紀錄。
 
 ## Tools
-sandbox: read_only
+sandbox: workspace_write
 `,
   },
   {
@@ -257,7 +257,7 @@ sandbox: workspace_write
 - 有可發布的文案、對象、通路，以及怎麼看有沒有效。
 
 ## Tools
-sandbox: read_only
+sandbox: workspace_write
 `,
   },
 ];

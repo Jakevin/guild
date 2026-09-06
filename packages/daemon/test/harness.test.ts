@@ -24,6 +24,17 @@ function awayDir(): string {
   return mkdtempSync(join(homedir(), "guild-harness-out-"));
 }
 
+test("default catalog seats ship workspace_write", async () => {
+  const { DEFAULT_BOTS } = await import("../src/catalog/default-bots.ts");
+  for (const seed of DEFAULT_BOTS) {
+    assert.equal(
+      sandboxFromPosition(seed.position),
+      "workspace_write",
+      seed.handle,
+    );
+  }
+});
+
 test("parseSandbox defaults to full_access", () => {
   assert.equal(parseSandbox(undefined), "full_access");
   assert.equal(parseSandbox("nope"), "full_access");
