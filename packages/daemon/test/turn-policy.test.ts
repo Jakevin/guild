@@ -54,7 +54,7 @@ test("calibrationFor is a short family paragraph", () => {
   assert.match(calibrationFor("commandcode", "deepseek/deepseek-v4-flash"), /Guild still runs tools/);
 });
 
-test("stalledToolLoop wraps after three errors or three identical calls", () => {
+test("stalledToolLoop wraps after three error rounds or three identical rounds", () => {
   assert.equal(stalledToolLoop([]), false);
   const fail = (n: string) => ({
     name: n,
@@ -62,26 +62,33 @@ test("stalledToolLoop wraps after three errors or three identical calls", () => 
     text: "no",
     isError: true,
   });
-  assert.equal(stalledToolLoop([fail("run"), fail("run"), fail("run")]), true);
+  assert.equal(stalledToolLoop([[fail("run"), fail("run"), fail("run")]]), false);
+  assert.equal(
+    stalledToolLoop([[fail("run")], [fail("run")], [fail("run")]]),
+    true,
+  );
   const same = {
     name: "read",
     args: { path: "/tmp/a" },
     text: "ok",
     isError: false,
   };
-  assert.equal(stalledToolLoop([same, same, same]), true);
+  assert.equal(stalledToolLoop([[same, same, same]]), false);
+  assert.equal(stalledToolLoop([[same], [same], [same]]), true);
   assert.equal(
     stalledToolLoop([
-      { ...same, args: { path: "/tmp/a" } },
-      { ...same, args: { path: "/tmp/b" } },
-      { ...same, args: { path: "/tmp/c" } },
+      [
+        { ...same, args: { path: "/tmp/a" } },
+        { ...same, args: { path: "/tmp/b" } },
+        { ...same, args: { path: "/tmp/c" } },
+      ],
     ]),
     false,
   );
   const a = { ...same, args: { path: "/tmp/a" } };
   const b = { ...same, args: { path: "/tmp/b" } };
-  assert.equal(stalledToolLoop([a, b, a, b, a, b]), true);
-  assert.equal(stalledToolLoop([a, b, a, b, a]), false);
+  assert.equal(stalledToolLoop([[a], [b], [a], [b], [a], [b]]), true);
+  assert.equal(stalledToolLoop([[a], [b], [a], [b], [a]]), false);
 });
 
 test("deep lane hint is available; catalog still omits skill bodies", () => {

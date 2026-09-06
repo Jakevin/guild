@@ -663,6 +663,7 @@ async function tryChatLlm(
     prefer,
     checkpoint: input.compact,
     tokenLimit: DEFAULT_AUTO_COMPACT_TOKENS,
+    selfAuthor: input.botId,
     onCompact: input.onCompact,
     onProgress: input.onProgress,
     signal: input.signal,

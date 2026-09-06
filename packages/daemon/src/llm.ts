@@ -9,7 +9,7 @@ import type {
   ProviderEntry,
 } from "@guild/protocol";
 import { StoreError } from "./store.ts";
-import { estimateSendTokens, trimSendMessages } from "./send-budget.ts";
+import { estimateSendTokens, fitSendMessages } from "./send-budget.ts";
 import {
   completeOAuth,
   formatOAuthError,
@@ -23,8 +23,10 @@ import {
 import {
   emitProgress,
   openaiTools,
+  parseToolArgs,
   roundSignal,
   throwIfAborted,
+  truncatedToolArgs,
   type SkillRef,
   type ToolContext,
   type ToolTrace,
@@ -973,8 +975,8 @@ async function completeOpenAiTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(catalog)) +
         2048;
-      const fitted = trimSendMessages(msgs, extra);
-      if (fitted.length < msgs.length) {
+      const fitted = fitSendMessages(msgs, extra, { compact: !wrap });
+      if (fitted.length !== msgs.length || fitted[0] !== msgs[0]) {
         msgs.splice(0, msgs.length, ...fitted);
       }
       const response = await withTransientRetries(
@@ -1028,18 +1030,14 @@ async function completeOpenAiTools(
       if (!message) return null;
       addUsage(usage, fromOpenAiUsage(data.usage));
       lastAssistant = message;
-      const calls = (message.tool_calls ?? []).map((call) => {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || "{}") as Record<
-            string,
-            unknown
-          >;
-        } catch {
-          args = {};
-        }
-        return { id: call.id, name: call.function.name, args };
-      });
+      const truncated = data.choices?.[0]?.finish_reason === "length";
+      const rawCalls = message.tool_calls ?? [];
+      const failAll = truncated && rawCalls.length > 0;
+      const calls = rawCalls.map((call) => ({
+        id: call.id,
+        name: call.function.name,
+        args: parseToolArgs(call.function.arguments || "{}", failAll),
+      }));
       return {
         calls,
         text: message.content?.trim() ?? "",
@@ -1106,8 +1104,8 @@ async function completeAnthropicTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(tools)) +
         2048;
-      const fitted = trimSendMessages(msgs, extra);
-      if (fitted.length < msgs.length) {
+      const fitted = fitSendMessages(msgs, extra, { compact: !wrap });
+      if (fitted.length !== msgs.length || fitted[0] !== msgs[0]) {
         msgs.splice(0, msgs.length, ...fitted);
       }
       const response = await withTransientRetries(
@@ -1120,7 +1118,7 @@ async function completeAnthropicTools(
               headers,
               body: JSON.stringify({
                 model: target.model,
-                max_tokens: 2048,
+                max_tokens: 16_384,
                 system,
                 messages: msgs,
                 ...(wrap ? {} : { tools }),
@@ -1160,13 +1158,11 @@ async function completeAnthropicTools(
       const parts = data.content ?? [];
       lastParts = parts;
       addUsage(usage, fromAnthropicUsage(data.usage));
-      const uses =
-        data.stop_reason === "tool_use"
-          ? parts.filter(
-              (part): part is Extract<Part, { type: "tool_use" }> =>
-                part.type === "tool_use",
-            )
-          : [];
+      const truncated = data.stop_reason === "max_tokens";
+      const uses = parts.filter(
+        (part): part is Extract<Part, { type: "tool_use" }> =>
+          part.type === "tool_use",
+      );
       const textPart = parts.find((part) => part.type === "text");
       const body =
         textPart && textPart.type === "text" ? textPart.text.trim() : "";
@@ -1174,7 +1170,7 @@ async function completeAnthropicTools(
         calls: uses.map((call) => ({
           id: call.id,
           name: call.name,
-          args: call.input ?? {},
+          args: truncated ? truncatedToolArgs() : (call.input ?? {}),
         })),
         text: body,
       };
@@ -1293,6 +1289,7 @@ async function completeZenResponsesTools(
   const usage = blankUsage();
   const started = Date.now();
   let lastCalls: Extract<ZenInput, { type: "function_call" }>[] = [];
+  let lastText = "";
   const looped = await runAgentLoop({
     toolCtx: ctx,
     traces,
@@ -1305,8 +1302,8 @@ async function completeZenResponsesTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(tools)) +
         2048;
-      const fitted = trimSendMessages(input, extra);
-      if (fitted.length < input.length) {
+      const fitted = fitSendMessages(input, extra, { compact: !wrap });
+      if (fitted.length !== input.length || fitted[0] !== input[0]) {
         input.splice(0, input.length, ...fitted);
       }
       const response = await withTransientRetries(
@@ -1344,6 +1341,8 @@ async function completeZenResponsesTools(
       }
       const data = (await response.json()) as {
         output?: Record<string, unknown>[];
+        status?: string;
+        incomplete_details?: { reason?: string };
         usage?: {
           input_tokens?: number;
           output_tokens?: number;
@@ -1363,6 +1362,9 @@ async function completeZenResponsesTools(
         }),
       );
       lastCalls = [];
+      const truncated =
+        data.status === "incomplete" ||
+        data.incomplete_details?.reason === "max_output_tokens";
       const calls: { id: string; name: string; args: Record<string, unknown> }[] =
         [];
       for (const item of data.output ?? []) {
@@ -1376,24 +1378,25 @@ async function completeZenResponsesTools(
           name,
           arguments: String(item.arguments || "{}"),
         });
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(String(item.arguments || "{}")) as Record<
-            string,
-            unknown
-          >;
-        } catch {
-          args = {};
-        }
-        calls.push({ id: callId, name, args });
+        calls.push({
+          id: callId,
+          name,
+          args: parseToolArgs(String(item.arguments || "{}"), truncated),
+        });
       }
+      lastText = extractResponsesText(data as Record<string, unknown>) ?? "";
       return {
         calls,
-        text: extractResponsesText(data as Record<string, unknown>) ?? "",
+        text: lastText,
         thinking: "",
       };
     },
     onRetry: (late) => {
+      if (lastCalls.length) {
+        for (const call of lastCalls) input.push(call);
+      } else if (lastText.trim()) {
+        input.push({ role: "assistant", content: lastText });
+      }
       input.push({ role: "user", content: late });
     },
     onTools: (calls, outcomes) => {

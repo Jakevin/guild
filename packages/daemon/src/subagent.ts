@@ -5,6 +5,8 @@ import type { LibraryItem } from "@guild/protocol";
 import { parseSandbox, type Sandbox } from "./harness.ts";
 import {
   hostContext,
+  EMPTY_AFTER_TOOLS,
+  TOOL_LOOP_EXHAUSTED,
   type SpawnHandle,
   type SubAgentRef,
   type ToolContext,
@@ -378,6 +380,7 @@ export async function spawnSubagent(input: {
       cronRun: input.ctx.cronRun,
       dispatch: input.ctx.dispatch,
       signal: input.ctx.signal,
+      onProgress: input.ctx.onProgress,
     },
   });
   if (!result) {
@@ -386,8 +389,12 @@ export async function spawnSubagent(input: {
   const body = result.text.trim() || "(empty)";
   const clipped =
     body.length > OUTPUT_CAP ? `${body.slice(0, OUTPUT_CAP)}\n… truncated …` : body;
+  const exhausted =
+    body === TOOL_LOOP_EXHAUSTED ||
+    body === EMPTY_AFTER_TOOLS ||
+    body === "(empty)";
   return {
     text: `# ${label}\nagent: ${agent.name}${agent.readOnly ? " · read-only" : ""}\nmodel: ${result.model}\n\n${clipped}`,
-    isError: false,
+    isError: exhausted,
   };
 }

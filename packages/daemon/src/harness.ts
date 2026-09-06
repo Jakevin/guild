@@ -289,8 +289,6 @@ export type AgentLoopResult = {
   thinking: string;
 };
 
-const EMPTY_AFTER_TOOLS = "（工具跑完了，但模型沒寫最終回覆）";
-
 /**
  * Shared tool loop (DSH-style). Providers only implement `ask`.
  * Tool execution always goes through executeToolTraced → ctx.tools when dispatched.
@@ -312,11 +310,13 @@ export async function runAgentLoop(input: {
   nullIfNoTraces?: boolean;
 }): Promise<AgentLoopResult | null> {
   const {
+    abortBackgroundSpawns,
     executeToolTraced,
     nextToolRound,
     takeSteers,
     throwIfAborted,
     emitProgress,
+    EMPTY_AFTER_TOOLS,
     TOOL_LOOP_EXHAUSTED,
     TOOL_LOOP_STALL,
     TOOL_LOOP_WRAP,
@@ -326,17 +326,22 @@ export async function runAgentLoop(input: {
   const exhausted = input.exhausted ?? TOOL_LOOP_EXHAUSTED;
   const emptyAfterTools = input.emptyAfterTools ?? EMPTY_AFTER_TOOLS;
   const thinkingOf = () => thinkingChunks.join("\n\n");
+  const rounds: import("./tools.ts").ToolTrace[][] = [];
+  const finish = (text: string, abortKids = false): AgentLoopResult => {
+    if (abortKids) abortBackgroundSpawns(input.toolCtx);
+    return { text, traces, thinking: thinkingOf() };
+  };
 
   for (let round = 0; ; round++) {
     throwIfAborted(input.toolCtx);
     const native = nextToolRound(round, input.toolCtx.spawnDepth ?? 0);
     const stalled =
       native === "continue" &&
-      (await import("./turn-policy.ts")).stalledToolLoop(traces);
+      (await import("./turn-policy.ts")).stalledToolLoop(rounds);
     const phase = native === "stop" ? "stop" : stalled ? "wrap" : native;
     if (phase === "stop") {
       if (!traces.length && input.nullIfNoTraces) return null;
-      return { text: exhausted, traces, thinking: thinkingOf() };
+      return finish(exhausted, true);
     }
     emitProgress(input.toolCtx, traces, thinkingOf());
     const wrapPrompt =
@@ -351,7 +356,10 @@ export async function runAgentLoop(input: {
       wrapPrompt,
       steer: takeSteers(input.toolCtx),
     });
-    if (!asked) return null;
+    if (!asked) {
+      if (!traces.length && input.nullIfNoTraces) return null;
+      return finish(traces.length ? exhausted : emptyAfterTools, true);
+    }
     if (asked.thinking?.trim()) {
       thinkingChunks.push(asked.thinking.trim());
       emitProgress(input.toolCtx, traces, thinkingOf());
@@ -360,7 +368,7 @@ export async function runAgentLoop(input: {
     if (phase === "wrap") {
       takeSteers(input.toolCtx);
       const text = asked.text.trim();
-      return { text: text || emptyAfterTools, traces, thinking };
+      return finish(text || emptyAfterTools, true);
     }
     if (!asked.calls.length) {
       const late = takeSteers(input.toolCtx);
@@ -369,10 +377,12 @@ export async function runAgentLoop(input: {
         continue;
       }
       const text = asked.text.trim();
-      if (text) return { text, traces, thinking };
-      if (traces.length) return { text: emptyAfterTools, traces, thinking };
-      return input.nullIfNoTraces ? null : { text: emptyAfterTools, traces, thinking };
+      if (text) return finish(text);
+      if (traces.length) return finish(emptyAfterTools, true);
+      if (input.nullIfNoTraces) return null;
+      return finish(emptyAfterTools);
     }
+    const before = traces.length;
     const outcomes = await Promise.all(
       asked.calls.map((call) =>
         executeToolTraced(
@@ -384,6 +394,7 @@ export async function runAgentLoop(input: {
         ),
       ),
     );
+    rounds.push(traces.slice(before));
     input.onTools?.(asked.calls, outcomes);
   }
 }

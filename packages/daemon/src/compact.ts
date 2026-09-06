@@ -15,9 +15,13 @@ const MAX_TOOL_PARTS = 8;
 const THINK_CAP = 400;
 const SUMMARY_CAP = 4_000;
 
+import { compactPrefix } from "./send-budget.ts";
+
 export {
   SEND_TOKEN_BUDGET,
+  compactPrefix,
   estimateSendTokens,
+  fitSendMessages,
   trimSendMessages,
 } from "./send-budget.ts";
 
@@ -114,7 +118,10 @@ export function toHistoryItem(message: {
   };
 }
 
-export function toModelMessage(item: HistoryItem): {
+export function toModelMessage(
+  item: HistoryItem,
+  selfAuthor?: string,
+): {
   role: "user" | "assistant";
   content: string;
 } {
@@ -125,9 +132,10 @@ export function toModelMessage(item: HistoryItem): {
       content: tools ? `${item.body}\n\n<tools>\n${tools}\n</tools>` : item.body,
     };
   }
-  const text = `${item.author}: ${item.body}`;
+  const mine = Boolean(selfAuthor && item.author === selfAuthor);
+  const text = mine ? item.body : `[${item.author}] ${item.body}`;
   return {
-    role: "assistant",
+    role: mine ? "assistant" : "user",
     content: tools ? `${text}\n\n<tools>\n${tools}\n</tools>` : text,
   };
 }
@@ -165,25 +173,7 @@ export function localCompactSummary(items: HistoryItem[]): string {
   return lines.join("\n").slice(0, SUMMARY_CAP);
 }
 
-export function compactPrefix(summary: string): {
-  role: "user" | "assistant";
-  content: string;
-}[] {
-  const body = String(summary || "").trim() || "(empty compact)";
-  return [
-    {
-      role: "user",
-      content:
-        "# Conversation so far (compacted)\n" +
-        "Use this summary as prior context. Messages after it are the recent turns at full fidelity.\n\n" +
-        body,
-    },
-    {
-      role: "assistant",
-      content: "Understood. I'll continue from this summary plus the recent turns.",
-    },
-  ];
-}
+
 
 function lastId(items: HistoryItem[]): string {
   return items[items.length - 1]?.id || `count:${items.length}`;
@@ -204,9 +194,10 @@ export function planCompact(input: {
   history: HistoryItem[];
   userMessage: string;
   tokenLimit?: number;
+  selfAuthor?: string;
 }): { mode: "full" | "compact"; old: HistoryItem[]; recent: HistoryItem[] } {
   const limit = input.tokenLimit ?? DEFAULT_AUTO_COMPACT_TOKENS;
-  const mapped = input.history.map(toModelMessage);
+  const mapped = input.history.map((item) => toModelMessage(item, input.selfAuthor));
   const user = { role: "user" as const, content: input.userMessage };
   const fullCost =
     estimateTokens(input.system) + messagesTokens([...mapped, user]);
@@ -225,7 +216,8 @@ export function planCompact(input: {
   let recentCount = 0;
   let used = 0;
   for (let i = input.history.length - 1; i >= 0; i -= 1) {
-    const cost = estimateTokens(toModelMessage(input.history[i]).content) + 8;
+    const cost =
+      estimateTokens(toModelMessage(input.history[i], input.selfAuthor).content) + 8;
     if (recentCount >= KEEP_RECENT_FLOOR && used + cost > tailBudget) break;
     if (recentCount >= KEEP_RECENT_MIN && used + cost > tailBudget) break;
     used += cost;
@@ -292,7 +284,7 @@ async function summarizeOld(input: {
       {
         role: "user",
         content:
-          "Summarize the older conversation for continuing work. Capture goals, decisions, constraints, files/tools used, and open questions. Do not mention this summarization. Be dense.\n\n" +
+          "Summarize the older conversation for continuing work. Capture goal, done-when, constraints, files/tools, open @handle specs, and unanswered questions. This is background only — the latest user message after the summary is the live task. Do not mention this summarization. Be dense.\n\n" +
           (input.previous?.trim()
             ? `Previous compact:\n${input.previous.trim()}\n\n`
             : "") +
@@ -318,6 +310,7 @@ export async function packHistory(input: {
   tokenLimit?: number;
   /** Local summary skips the compression LLM. Omit onCompact to skip persisting a checkpoint. */
   summarize?: "llm" | "local";
+  selfAuthor?: string;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
   signal?: AbortSignal;
@@ -329,10 +322,11 @@ export async function packHistory(input: {
     history,
     userMessage: input.userMessage,
     tokenLimit: input.tokenLimit,
+    selfAuthor: input.selfAuthor,
   });
   if (plan.mode === "full") {
     return {
-      messages: [...plan.recent.map(toModelMessage), user],
+      messages: [...plan.recent.map((item) => toModelMessage(item, input.selfAuthor)), user],
       compacted: false,
       checkpoint: input.checkpoint ?? null,
     };
@@ -380,7 +374,7 @@ export async function packHistory(input: {
   return {
     messages: [
       ...compactPrefix(summary),
-      ...plan.recent.map(toModelMessage),
+      ...plan.recent.map((item) => toModelMessage(item, input.selfAuthor)),
       user,
     ],
     compacted: true,

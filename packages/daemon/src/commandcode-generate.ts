@@ -23,10 +23,11 @@ import {
   emitProgress,
   openaiTools,
   throwIfAborted,
+  TOOL_LOOP_EXHAUSTED,
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
-import { estimateSendTokens, trimSendMessages } from "./send-budget.ts";
+import { estimateSendTokens, fitSendMessages } from "./send-budget.ts";
 import { addUsage, blankUsage, withDuration } from "./usage.ts";
 
 export type CommandCodeGenerateResult = {
@@ -175,6 +176,7 @@ export async function completeCommandCodeGenerate(input: {
   const usage = blankUsage();
   const started = Date.now();
   const catalog = input.tools ? toolsToCc(input.ctx) : [];
+  let lastAsk: { calls: GenerateCall[]; text: string } | null = null;
 
   const looped = await runAgentLoop({
     toolCtx: input.ctx,
@@ -186,14 +188,8 @@ export async function completeCommandCodeGenerate(input: {
       if (wrapPrompt) ccMessages.push({ role: "user", content: wrapPrompt });
       if (steer) ccMessages.push({ role: "user", content: steer });
       const extra = estimateSendTokens(input.system) + 2048;
-      const fitted = trimSendMessages(
-        ccMessages.map((row) => ({
-          role: row.role === "assistant" ? "assistant" : "user",
-          content: typeof row.content === "string" ? row.content : JSON.stringify(row.content),
-        })),
-        extra,
-      );
-      if (fitted.length < ccMessages.length) {
+      const fitted = fitSendMessages(ccMessages, extra, { compact: !wrap });
+      if (fitted.length !== ccMessages.length || fitted[0] !== ccMessages[0]) {
         ccMessages.length = 0;
         ccMessages.push(...fitted);
       }
@@ -240,6 +236,7 @@ export async function completeCommandCodeGenerate(input: {
           cacheWrite: 0,
           totalTokens: 0,
         });
+        lastAsk = { calls: round.calls, text: round.text };
         return {
           calls: round.calls.map((call) => ({
             id: call.id,
@@ -253,6 +250,14 @@ export async function completeCommandCodeGenerate(input: {
         idle.dispose();
       }
     },
+    onRetry: (late) => {
+      if (lastAsk?.calls.length) {
+        ccMessages.push(assistantToolMessage(lastAsk.calls));
+      } else if (lastAsk?.text) {
+        ccMessages.push({ role: "assistant", content: lastAsk.text });
+      }
+      ccMessages.push({ role: "user", content: late });
+    },
     onTools: (calls, outcomes) => {
       const mapped: GenerateCall[] = calls.map((call) => ({
         id: call.id,
@@ -263,7 +268,13 @@ export async function completeCommandCodeGenerate(input: {
       ccMessages.push(toolResultMessage(mapped, outcomes.map((row) => row?.text ?? "")));
     },
   });
-  if (!looped) return { text: "", traces, thinking: thinkingChunks.join("\n\n") };
+  if (!looped) {
+    return {
+      text: traces.length ? TOOL_LOOP_EXHAUSTED : "",
+      traces,
+      thinking: thinkingChunks.join("\n\n"),
+    };
+  }
   emitProgress(input.ctx, traces, looped.thinking);
   return {
     text: looped.text,

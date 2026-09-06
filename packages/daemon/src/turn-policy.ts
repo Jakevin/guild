@@ -165,15 +165,30 @@ export function toolSignature(trace: ToolTrace): string {
   return `${trace.name}:${args}`;
 }
 
-/** Three errors in a row, the same call three times, or a short A/B cycle: wrap. Not a wall clock. */
-export function stalledToolLoop(traces: ToolTrace[]): boolean {
-  if (traces.length < STALL_WINDOW) return false;
-  const last = traces.slice(-STALL_WINDOW);
-  if (last.every((row) => row.isError)) return true;
-  const sig = last.map(toolSignature);
+function roundSignature(round: ToolTrace[]): string {
+  return round
+    .map(toolSignature)
+    .filter(Boolean)
+    .sort()
+    .join("\n");
+}
+
+/**
+ * Stall is per tool *round* (one `Promise.all` batch), not per flattened
+ * trace. Parallel reads in one round are siblings, not a loop.
+ * Three all-error rounds, the same batch three rounds, or a short A/B
+ * cycle across rounds: wrap. Not a wall clock.
+ */
+export function stalledToolLoop(rounds: ToolTrace[][]): boolean {
+  if (rounds.length < STALL_WINDOW) return false;
+  const last = rounds.slice(-STALL_WINDOW);
+  if (last.every((round) => round.length > 0 && round.every((row) => row.isError))) {
+    return true;
+  }
+  const sig = last.map(roundSignature);
   if (Boolean(sig[0]) && sig[0] === sig[1] && sig[1] === sig[2]) return true;
-  if (traces.length < CYCLE_WINDOW) return false;
-  const cycle = traces.slice(-CYCLE_WINDOW).map(toolSignature).filter(Boolean);
+  if (rounds.length < CYCLE_WINDOW) return false;
+  const cycle = rounds.slice(-CYCLE_WINDOW).map(roundSignature).filter(Boolean);
   if (cycle.length < CYCLE_WINDOW) return false;
   return new Set(cycle).size <= CYCLE_UNIQUE;
 }

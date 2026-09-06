@@ -100,6 +100,41 @@ export function attachSpawnHandles(ctx: ToolContext): Map<string, SpawnHandle> {
   return ctx.spawnHandles;
 }
 
+/** Stall/round wrap is not User Stop; still stop leftover background children. */
+export function abortBackgroundSpawns(ctx: ToolContext): void {
+  const handles = ctx.spawnHandles;
+  if (!handles) return;
+  for (const handle of handles.values()) {
+    handle.abort?.abort();
+  }
+}
+
+export const TRUNCATED_TOOL_FLAG = "__guild_truncated";
+
+export function truncatedToolArgs(): Record<string, unknown> {
+  return { [TRUNCATED_TOOL_FLAG]: true };
+}
+
+export function isTruncatedToolArgs(
+  args: Record<string, unknown> | null | undefined,
+): boolean {
+  return Boolean(args && args[TRUNCATED_TOOL_FLAG] === true);
+}
+
+/** `outputTruncated` is Pi: fail every tool in a length-cut message. */
+export function parseToolArgs(raw: string, outputTruncated = false): Record<string, unknown> {
+  if (outputTruncated) return truncatedToolArgs();
+  try {
+    const args = JSON.parse(raw || "{}") as unknown;
+    if (args && typeof args === "object" && !Array.isArray(args)) {
+      return args as Record<string, unknown>;
+    }
+  } catch {
+    /* invalid or cut-off JSON */
+  }
+  return truncatedToolArgs();
+}
+
 const BASE_TOOLS: Tool[] = [
   {
     name: "run",
@@ -548,6 +583,12 @@ export async function executeTool(
   ctx: ToolContext = {},
 ): Promise<ToolOutcome> {
   try {
+    if (isTruncatedToolArgs(args)) {
+      return {
+        text: "tool arguments were truncated by the output token limit; do not retry the same call unchanged",
+        isError: true,
+      };
+    }
     const refused = gateTool(name, args, ctx);
     if (refused) return refused;
     attachSpawnHandles(ctx);
@@ -943,7 +984,9 @@ function loadSkill(name: string, skills: SkillRef[]): ToolOutcome {
  */
 export const MAX_TOOL_ROUNDS = 128;
 /** Spawn child loop cap (includes the wrap round). */
-export const SPAWN_TOOL_ROUNDS = 12;
+export const SPAWN_TOOL_ROUNDS = 48;
+
+export const EMPTY_AFTER_TOOLS = "（工具跑完了，但模型沒寫最終回覆）";
 
 export const TOOL_LOOP_WRAP =
   "You've reached the maximum number of tool-calling iterations allowed. Please provide a final response summarizing what you've found and accomplished so far, without calling any more tools.";

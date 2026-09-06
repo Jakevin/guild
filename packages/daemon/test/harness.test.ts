@@ -114,7 +114,24 @@ test("runAgentLoop runs a round's tools in parallel", async () => {
   assert.ok(Math.abs(started[1] - started[0]) < 50);
 });
 
-test("wrap after a looping call does not run another tool batch", async () => {
+test("one parallel batch of identical calls does not stall-wrap", async () => {
+  const wraps: boolean[] = [];
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+    },
+    ask: async ({ round, wrap }) => {
+      wraps.push(wrap);
+      if (round === 0) return { calls: [same, same, same], text: "" };
+      return { calls: [], text: "done" };
+    },
+  });
+  assert.equal(result?.text, "done");
+  assert.deepEqual(wraps, [false, false]);
+});
+
+test("wrap after three identical rounds does not run another tool batch", async () => {
   const ran: string[] = [];
   const wraps: boolean[] = [];
   const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
@@ -127,15 +144,13 @@ test("wrap after a looping call does not run another tool batch", async () => {
     },
     ask: async ({ round, wrap }) => {
       wraps.push(wrap);
-      if (round === 0) {
-        return { calls: [same, same, same], text: "" };
-      }
+      if (round < 3) return { calls: [{ ...same, id: String(round) }], text: "" };
       return { calls: [same], text: "enough" };
     },
   });
   assert.equal(result?.text, "enough");
   assert.equal(ran.length, 3);
-  assert.deepEqual(wraps, [false, true]);
+  assert.deepEqual(wraps, [false, false, false, true]);
 });
 
 test("wrap is terminal even if a late steer is queued", async () => {
@@ -146,11 +161,11 @@ test("wrap is terminal even if a late steer is queued", async () => {
       dispatch: async () => ({ text: "ok", isError: false }),
       pullSteers: () => {
         pulls += 1;
-        return pulls > 1 ? ["keep going"] : [];
+        return pulls > 3 ? ["keep going"] : [];
       },
     },
     ask: async ({ round, wrap }) => {
-      if (round === 0) return { calls: [same, same, same], text: "" };
+      if (round < 3) return { calls: [{ ...same, id: String(round) }], text: "" };
       assert.equal(wrap, true);
       return { calls: [], text: "summary" };
     },
@@ -165,11 +180,78 @@ test("wrap with leftover calls and no text uses emptyAfterTools", async () => {
       dispatch: async () => ({ text: "ok", isError: false }),
     },
     ask: async ({ round }) => {
-      if (round === 0) return { calls: [same, same, same], text: "" };
+      if (round < 3) return { calls: [{ ...same, id: String(round) }], text: "" };
       return { calls: [same], text: "" };
     },
   });
   assert.equal(result?.text, "（工具跑完了，但模型沒寫最終回覆）");
+});
+
+test("null ask after tools returns exhausted instead of dropping traces", async () => {
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+    },
+    nullIfNoTraces: true,
+    ask: async ({ round }) => {
+      if (round === 0) return { calls: [same], text: "" };
+      return null;
+    },
+  });
+  assert.match(result?.text || "", /再送一次/);
+  assert.equal(result?.traces.length, 1);
+});
+
+test("a normal final reply does not abort background spawns", async () => {
+  const { attachSpawnHandles } = await import("../src/tools.ts");
+  const abort = new AbortController();
+  const ctx = {
+    dispatch: async () => ({ text: "ok", isError: false }),
+    spawnHandles: undefined as ReturnType<typeof attachSpawnHandles> | undefined,
+  };
+  attachSpawnHandles(ctx).set("child", {
+    id: "child",
+    title: "explorer",
+    profile: "explorer",
+    done: Promise.resolve({ text: "", isError: false }),
+    abort,
+  });
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: ctx,
+    ask: async ({ round }) => {
+      if (round === 0) return { calls: [same], text: "" };
+      return { calls: [], text: "started explorer" };
+    },
+  });
+  assert.equal(result?.text, "started explorer");
+  assert.equal(abort.signal.aborted, false);
+});
+
+test("wrap aborts leftover background spawns", async () => {
+  const { attachSpawnHandles } = await import("../src/tools.ts");
+  const abort = new AbortController();
+  const ctx = {
+    dispatch: async () => ({ text: "ok", isError: false }),
+    spawnHandles: undefined as ReturnType<typeof attachSpawnHandles> | undefined,
+  };
+  attachSpawnHandles(ctx).set("child", {
+    id: "child",
+    title: "explorer",
+    profile: "explorer",
+    done: Promise.resolve({ text: "", isError: false }),
+    abort,
+  });
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  await runAgentLoop({
+    toolCtx: ctx,
+    ask: async ({ round }) => {
+      if (round < 3) return { calls: [{ ...same, id: String(round) }], text: "" };
+      return { calls: [], text: "summary" };
+    },
+  });
+  assert.equal(abort.signal.aborted, true);
 });
 
 test("workspace_write allows write inside and refuses outside", async () => {

@@ -23,12 +23,14 @@ import {
   SPAWN_TOOL_ROUNDS,
   nextToolRound,
   openaiTools,
+  parseToolArgs,
   roundSignal,
   takeSteers,
   TOOL_LOOP_EXHAUSTED,
   TOOL_LOOP_STALL,
   TOOL_LOOP_WRAP,
   TOOL_SYSTEM,
+  truncatedToolArgs,
   type ToolContext,
 } from "../src/tools.ts";
 import { assembleParts, bodyFromParts } from "../src/chat-parts.ts";
@@ -635,4 +637,14 @@ test("tool loop last-resort round fuse and Hermes wrap tools=None", () => {
     "utf8",
   );
   assert.match(cc, /wrap \? \{\} : \{ tools: catalog \}/);
+});
+
+test("truncated tool args are not executed", async () => {
+  const parsed = parseToolArgs("{", false);
+  assert.equal(parsed.__guild_truncated, true);
+  assert.deepEqual(parseToolArgs("{\"path\":\"a\"}", true).__guild_truncated, true);
+  const ran = await executeTool("run", truncatedToolArgs());
+  assert.equal(ran.isError, true);
+  assert.match(ran.text, /truncated/);
+  assert.doesNotMatch(ran.text, /exit code/);
 });

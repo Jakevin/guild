@@ -545,6 +545,7 @@ async function trimToComposer(
     prefer: { provider: input.target.providerId, model: input.target.model },
     tokenLimit: FREEBUFF_COMPOSER_TOKEN_BUDGET,
     summarize: "local",
+    selfAuthor: input.toolCtx?.botId,
     signal: input.signal ?? input.toolCtx?.signal,
   });
   if (
