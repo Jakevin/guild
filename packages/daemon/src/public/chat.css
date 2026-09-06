@@ -1613,6 +1613,19 @@ a.invite-btn:hover { text-decoration: none; }
   color: #c8c8c8;
 }
 .assistant-text a { color: #d8dce0; text-underline-offset: 2px; }
+.assistant-text a.md-file {
+  color: var(--code);
+  background: var(--code-bg);
+  border: 1px solid var(--code-bg);
+  border-radius: 6px;
+  padding: 0.12em 0.4em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  font-weight: 500;
+  cursor: pointer;
+}
 .assistant-text code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.86em;

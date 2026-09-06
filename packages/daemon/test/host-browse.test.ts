@@ -9,6 +9,7 @@ import {
   assertHostPathAllowed,
   hostGit,
   hostList,
+  hostOpen,
   hostRead,
   hostTree,
 } from "../src/host-browse.ts";
@@ -142,6 +143,15 @@ function notRefused(fn: () => unknown): void {
     }
   }
 }
+
+test("hostOpen refuses secrets and missing paths without launching", async () => {
+  await assert.rejects(
+    () => hostOpen(join(homedir(), ".guild", "oauth.json")),
+    StoreError,
+  );
+  await assert.rejects(() => hostOpen("/no/such/guild-open-path"), StoreError);
+  await assert.rejects(() => hostOpen(""), StoreError);
+});
 
 test("hostRead refuses guild secrets before touching the disk", () => {
   // The deny runs before stat, so these 403 whether or not the file exists.

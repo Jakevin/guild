@@ -78,6 +78,21 @@ test("renderMarkdown rewrites local /tmp screenshots through /local", () => {
   assert.doesNotMatch(blocked, /<img/);
 });
 
+test("renderMarkdown turns file:// citations into short Host path pills", () => {
+  const html = renderMarkdown(
+    "落地：[README.md:128](file:///Users/jakevinlo/project/RustPrj/bot-cordis/README.md#L128)",
+  );
+  assert.match(html, /class="md-file"/);
+  assert.match(html, />README.md:128</);
+  assert.match(html, /data-path="[^"]*README.md"/);
+  assert.match(html, /data-line="128"/);
+  assert.doesNotMatch(html, /href="file:/);
+  assert.doesNotMatch(html, />file:\/\//);
+  const blocked = renderMarkdown("[x](javascript:alert(1))");
+  assert.doesNotMatch(blocked, /class="md-file"/);
+  assert.doesNotMatch(renderMarkdown("[x](/etc/passwd)"), /class="md-file"/);
+});
+
 test("renderMarkdown code fences expose copy and insert chrome", () => {
   const html = renderMarkdown("```js\nconst n = 1;\n```");
   assert.match(html, /class="md-fence-lang"/);

@@ -355,3 +355,27 @@ export async function hostGit(rawPath: string): Promise<{
     asHostError(error, "git failed");
   }
 }
+
+/**
+ * DSH session/openWorkspacePath: the Host opens the path in the OS.
+ * Do not serve workspace files over the chat origin.
+ */
+export async function hostOpen(rawPath: string): Promise<{ path: string }> {
+  try {
+    if (!String(rawPath || "").trim()) throw new StoreError(400, "path required");
+    const target = resolveUserPath(rawPath);
+    assertHostPathAllowed(target);
+    if (!existsSync(target)) throw new StoreError(404, "path not found");
+    const opts = { timeout: 8_000 };
+    if (process.platform === "darwin") {
+      await execFileAsync("open", [target], opts);
+    } else if (process.platform === "win32") {
+      await execFileAsync("cmd", ["/c", "start", "", target], opts);
+    } else {
+      await execFileAsync("xdg-open", [target], opts);
+    }
+    return { path: target };
+  } catch (error) {
+    asHostError(error, "open failed");
+  }
+}

@@ -71,6 +71,7 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /live.messageId/);
   assert.match(html, /draft: row\.draft \? String\(row\.draft\) : ""/);
   assert.match(html, /live\.draft/);
+  assert.match(html, /\/host\/open/);
   assert.match(html, /data-copy-stat/);
   assert.match(html, /live\.stop/);
   assert.match(html, /summonedBotIds|botsFromSend/);

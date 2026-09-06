@@ -1055,6 +1055,18 @@
           if (event.target.id === "html-zoom") closeHtmlZoom();
         });
         document.getElementById("thread").addEventListener("click", (event) => {
+          const fileLink = event.target.closest("a.md-file[data-path]");
+          if (fileLink) {
+            event.preventDefault();
+            const path = decodeURIComponent(fileLink.getAttribute("data-path") || "");
+            if (!path) return;
+            fetch("/host/open", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ path: path }),
+            }).catch(() => {});
+            return;
+          }
           const htmlExpand = event.target.closest("[data-html-expand]");
           if (htmlExpand) {
             event.preventDefault();

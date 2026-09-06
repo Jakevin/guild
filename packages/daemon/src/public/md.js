@@ -44,6 +44,61 @@ function localAudioSrc(href) {
   return "";
 }
 
+/** DSH: file:// is a Host path, not a browser URL. */
+function parseLocalFileHref(href) {
+  let raw = String(href || "")
+    .trim()
+    .replace(/"/g, "")
+    .replace(/&amp;/g, "&");
+  if (!raw) return null;
+  const lineMatch = raw.match(/#L(\d+)\s*$/i);
+  const line = lineMatch ? lineMatch[1] : "";
+  raw = raw.replace(/#.*$/, "");
+  if (!/^file:\/\//i.test(raw)) return null;
+  raw = raw.replace(/^file:\/\//i, "");
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    /* keep raw */
+  }
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("..")) {
+    return null;
+  }
+  return { path: raw, line: line };
+}
+
+function fileLinkLabel(label, path, line) {
+  const s = String(label || "").trim();
+  if (s && !/^file:/i.test(s) && !s.startsWith("/") && s.length < 180) return s;
+  const base = String(path).split("/").pop() || path;
+  return line ? base + ":" + line : base;
+}
+
+function fileLinkTag(label, href) {
+  const parsed = parseLocalFileHref(href);
+  if (!parsed) return "";
+  const given = String(label || "").trim();
+  const useGiven =
+    given &&
+    !/^file:/i.test(given) &&
+    !given.startsWith("/") &&
+    given.length < 180;
+  const text = useGiven ? given : escapeMd(fileLinkLabel("", parsed.path, parsed.line));
+  const title = parsed.line ? parsed.path + ":" + parsed.line : parsed.path;
+  return (
+    '<a class="md-file" href="#"' +
+    ' data-path="' +
+    encodeURIComponent(parsed.path) +
+    '"' +
+    (parsed.line ? ' data-line="' + parsed.line + '"' : "") +
+    ' title="' +
+    escapeMd(title) +
+    '">' +
+    text +
+    "</a>"
+  );
+}
+
 function audioTag(src, label) {
   const cap = label
     ? '<span class="md-audio-cap">' + label + "</span>"
@@ -80,6 +135,8 @@ function inlineMd(text) {
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, href) {
     const audio = localAudioSrc(href);
     if (audio) return audioTag(audio, label);
+    const file = fileLinkTag(label, href);
+    if (file) return file;
     if (!/^https?:/i.test(href)) return m;
     return (
       '<a href="' +
@@ -451,5 +508,6 @@ if (typeof module !== "undefined" && module.exports) {
     putHtmlFrames,
     localImgSrc,
     localAudioSrc,
+    parseLocalFileHref,
   };
 }

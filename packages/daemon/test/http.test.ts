@@ -653,6 +653,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /id="jump-bottom"/);
   assert.match(home, /id="prompt-rail"/);
   assert.match(home, /function showToast/);
+  assert.match(home, /\/host\/open/);
   assert.match(home, /function liveTurnsFrom/);
   assert.match(home, /draft: row\.draft \? String\(row\.draft\) : ""/);
   assert.match(home, /function liveMessageIdHtml/);

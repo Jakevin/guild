@@ -88,7 +88,7 @@ import {
   antigravityStatus,
   refreshAntigravityCatalog,
 } from "./antigravity.ts";
-import { hostGit, hostList, hostRead, hostTree } from "./host-browse.ts";
+import { hostGit, hostList, hostOpen, hostRead, hostTree } from "./host-browse.ts";
 import { listHostSkills } from "./host-skills.ts";
 import { listHostAgents } from "./host-agents.ts";
 import { generatedDir, isSafeGeneratedName } from "./image-gen.ts";
@@ -653,6 +653,11 @@ export async function handleRequest(
     }
     if (method === "GET" && path === "/host/git") {
       json(res, 200, await hostGit(requestUrl(req).searchParams.get("path") || "~"));
+      return;
+    }
+    if (method === "POST" && path === "/host/open") {
+      const body = asRecord(await readJson(req));
+      json(res, 200, await hostOpen(str(body, "path")));
       return;
     }
 

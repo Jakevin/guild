@@ -3462,6 +3462,26 @@
         jumpToYouMessage(tick.getAttribute("data-prompt-jump"));
       });
       document.getElementById("thread").addEventListener("click", async (event) => {
+        const fileLink = event.target.closest("a.md-file[data-path]");
+        if (fileLink) {
+          event.preventDefault();
+          const path = decodeURIComponent(fileLink.getAttribute("data-path") || "");
+          if (!path) return;
+          try {
+            const res = await fetch("/host/open", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ path: path }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              showToast(body.error || "open failed");
+            }
+          } catch (err) {
+            showToast(err.message || "open failed");
+          }
+          return;
+        }
         const fenceCopy = event.target.closest("[data-fence-copy]");
         const fenceInput = event.target.closest("[data-fence-input]");
         const reply = event.target.closest("[data-reply]");
