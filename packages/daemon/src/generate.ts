@@ -24,6 +24,13 @@ import {
   type ToolProgress,
   type ToolTrace,
 } from "./tools.ts";
+import {
+  calibrationFor,
+  effortForLane,
+  PARALLEL_HINT,
+  scoreTurnLane,
+  selectTurnSkills,
+} from "./turn-policy.ts";
 
 export type ChatReply = {
   body: string;
@@ -604,13 +611,15 @@ async function tryChatLlm(
   prefer: ModelRef | null | undefined,
   skills: SkillRef[],
 ): Promise<Omit<ChatReply, "source"> | null> {
+  const lane = scoreTurnLane(input.userMessage);
+  const turnSkills = selectTurnSkills(skills, input.userMessage);
   let system = buildChatSystem({
     botName: input.botName,
     handle: input.handle,
     soul: input.soul,
     agent: input.agent,
     position: input.position,
-    skills,
+    skills: turnSkills,
     subagents: input.subagents ?? [],
     wantSpawn: input.wantSpawn ?? [],
     channelMd: input.channelMd,
@@ -619,6 +628,13 @@ async function tryChatLlm(
     whisper: input.whisper,
   });
   const peek = resolveLlm(dataDir, env, "chat", prefer);
+  if (peek) {
+    const extra = [
+      calibrationFor(peek.providerId, peek.model),
+      lane === "deep" ? PARALLEL_HINT : "",
+    ].filter(Boolean);
+    if (extra.length) system = `${system}\n\n${extra.join("\n")}`;
+  }
   const webBridge = Boolean(peek && isWebBridgeTarget(peek));
   const policy = policyFor(env, {
     sandbox: input.sandbox,
@@ -628,7 +644,7 @@ async function tryChatLlm(
   const mcpTools = input.mcpTools ?? (await listMcpToolRefs(dataDir));
   if (webBridge) {
     system = withFreebuffToolSystem(system, {
-      skills,
+      skills: turnSkills,
       subagents: input.subagents ?? [],
       mcpTools,
       allowWrite: true,
@@ -658,7 +674,7 @@ async function tryChatLlm(
     soul: input.soul,
     agent: input.agent,
     position: input.position,
-    skillIds: skills.map((skill) => skill.slug || skill.name),
+    skillIds: turnSkills.map((skill) => skill.slug || skill.name),
     channelMd: input.channelMd ?? "",
     botMemory: input.botMemory ?? "",
     channelMemory: input.channelMemory ?? "",
@@ -673,11 +689,12 @@ async function tryChatLlm(
     temperature: 0.5,
     role: "chat",
     prefer,
+    laneEffort: prefer?.reasoning ? undefined : effortForLane(lane),
     tools: true,
-    skills,
+    skills: turnSkills,
     lease,
     toolCtx: {
-      skills,
+      skills: turnSkills,
       subagents: input.subagents ?? [],
       dataDir,
       env,

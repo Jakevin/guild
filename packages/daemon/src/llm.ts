@@ -675,6 +675,8 @@ export async function llmComplete(input: {
   temperature?: number;
   role?: AuxRole | "chat";
   prefer?: ModelRef | null;
+  /** Per-turn effort when the seat did not pin reasoning. Lane only, not a new fuse. */
+  laneEffort?: string;
   tools?: boolean;
   skills?: SkillRef[];
   toolCtx?: ToolContext;
@@ -703,7 +705,9 @@ export async function llmComplete(input: {
     (model) => model.id === target.model,
   )?.reasoning;
   const effort = clampEffort(
-    file.fast ? "low" : input.prefer ? input.prefer.reasoning : file.reasoning,
+    file.fast
+      ? "low"
+      : input.prefer?.reasoning || input.laneEffort || file.reasoning,
     resolveReasoning(target.providerId, target.model, target.baseUrl, stored),
     Boolean(file.fast),
   );

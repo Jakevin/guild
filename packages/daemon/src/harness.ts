@@ -326,7 +326,11 @@ export async function runAgentLoop(input: {
 
   for (let round = 0; ; round++) {
     throwIfAborted(input.toolCtx);
-    const phase = nextToolRound(round);
+    const native = nextToolRound(round);
+    const stalled =
+      native === "continue" &&
+      (await import("./turn-policy.ts")).stalledToolLoop(traces);
+    const phase = native === "stop" ? "stop" : stalled ? "wrap" : native;
     if (phase === "stop") {
       if (!traces.length && input.nullIfNoTraces) return null;
       return { text: exhausted, traces, thinking: thinkingOf() };
