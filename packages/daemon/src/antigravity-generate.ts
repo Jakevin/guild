@@ -2,7 +2,10 @@
  * Spawn official `agy` stream-json for a hall turn.
  * agy owns tools on this seat. User Stop is ctx.signal (AbortError).
  * No wall-clock turn fuse — do not copy the bridge's 600s timer.
+ * agy's own print default is 5m; pass a long --print-timeout so that
+ * is not the interrupt.
  */
+
 import { spawn } from "node:child_process";
 import {
   agyModelId,
@@ -26,6 +29,10 @@ export type AgyEvent =
 export type AgyTurnResult = {
   text: string;
 };
+
+/** agy print-mode default is 5m0s. That killed Infra mid-turn. */
+export const AGY_PRINT_TIMEOUT = "24h";
+
 
 export type AgySpawnTurnInput = {
   agyPath: string;
@@ -141,23 +148,37 @@ function kill(child: ReturnType<typeof spawn> | undefined): void {
   }
 }
 
+export function agyCliArgs(input: {
+  model: string;
+  mode: "accept-edits" | "plan";
+  skipPermissions: boolean;
+  terminalSandbox: boolean;
+  effort: "low" | "medium" | "high";
+  cwd: string;
+}): string[] {
+  const args = [
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--print-timeout",
+    AGY_PRINT_TIMEOUT,
+    "--model",
+    agyModelId(input.model),
+    "--mode",
+    input.mode,
+  ];
+  if (input.skipPermissions) args.push("--dangerously-skip-permissions");
+  if (input.terminalSandbox) args.push("--sandbox");
+  if (input.mode !== "plan") args.push("--disable-slash-commands");
+  args.push("--effort", input.effort);
+  if (input.cwd.trim()) args.push("--add-dir", input.cwd);
+  return args;
+}
+
 function spawnAgyTurn(input: AgySpawnTurnInput): Promise<AgyTurnResult> {
   return new Promise((resolve, reject) => {
-    const args = [
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-      "--model",
-      agyModelId(input.model),
-      "--mode",
-      input.mode,
-    ];
-    if (input.skipPermissions) args.push("--dangerously-skip-permissions");
-    if (input.terminalSandbox) args.push("--sandbox");
-    if (input.mode !== "plan") args.push("--disable-slash-commands");
-    args.push("--effort", input.effort);
-    if (input.cwd.trim()) args.push("--add-dir", input.cwd);
+    const args = agyCliArgs(input);
 
     let child: ReturnType<typeof spawn> | undefined;
     try {

@@ -16,6 +16,8 @@ import {
   setAntigravityHooksForTest,
 } from "../src/antigravity.ts";
 import {
+  AGY_PRINT_TIMEOUT,
+  agyCliArgs,
   agyModeForSandbox,
   buildAgyChatPrompt,
   completeAntigravity,
@@ -132,6 +134,22 @@ test("completeAntigravity maps stream-json and honors Stop", async () => {
   } finally {
     setAntigravityGenerateHooksForTest();
   }
+});
+
+test("agy print wait is not the 5m default", () => {
+  const args = agyCliArgs({
+    model: "gemini-3.8-flash-medium",
+    mode: "accept-edits",
+    skipPermissions: true,
+    terminalSandbox: true,
+    effort: "medium",
+    cwd: "/tmp",
+  });
+  const i = args.indexOf("--print-timeout");
+  assert.ok(i >= 0);
+  assert.equal(args[i + 1], AGY_PRINT_TIMEOUT);
+  assert.notEqual(args[i + 1], "5m0s");
+  assert.notEqual(args[i + 1], "5m");
 });
 
 test("agy mode follows Guild sandbox: plan only for read_only", () => {
