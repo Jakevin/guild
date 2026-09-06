@@ -1380,15 +1380,11 @@ async function generateReplies(
     if (incoming[0]?.length) store.promoteAssign(roomId, incoming[0]);
   }
   const explicit = incoming[0]?.filter((id) => memberIds.includes(id)) ?? [];
-  const queued =
-    roomKind === "channel" ? store.assignList(roomId)[0] : undefined;
   const targets = onlyBotId
     ? [onlyBotId]
     : explicit.length
       ? explicit
-      : queued?.length
-        ? queued.filter((id) => memberIds.includes(id))
-        : replyBots(store, memberIds, userMessage, extraBotId);
+      : replyBots(store, memberIds, userMessage, extraBotId);
   const replies: ChatMessage[] = [];
   const harvested: { handle: string; author: string; body: string }[] = [];
   const signal = store.beginTurn(roomId, targets);

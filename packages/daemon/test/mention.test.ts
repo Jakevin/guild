@@ -1762,6 +1762,62 @@ test("live turn is planted before MCP handshake", async () => {
   assert.equal(done.replies[0].author, rd.id);
 });
 
+test("bare follow-up goes to the last bot, not a leftover 派工 seat", async () => {
+  const store = new GuildStore(tempHome());
+  try {
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    assert.ok(pm && infra);
+    const room = store.createChannel("bare-follow");
+    store.addMember(room.id, pm.id);
+    store.addMember(room.id, infra.id);
+    const extras = {
+      harvest: false,
+      mcp: false,
+      turn: stubTurn((input) => `${input.handle} ok`),
+    };
+    const first = await postUserMessage(
+      store,
+      room.id,
+      "@pm 整理上版",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      extras,
+    );
+    assert.equal(first.replies[0].author, pm.id);
+    store.enqueueAssign(room.id, [[infra.id]]);
+    assert.deepEqual(store.assignList(room.id)[0], [infra.id]);
+    const bare = await postUserMessage(
+      store,
+      room.id,
+      "發佈",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      extras,
+    );
+    assert.equal(bare.replies.length, 1);
+    assert.equal(bare.replies[0].author, pm.id);
+    const pill = await postUserMessage(
+      store,
+      room.id,
+      "請發佈",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      { ...extras, mentions: [pm.id] },
+    );
+    assert.equal(pill.replies.length, 1);
+    assert.equal(pill.replies[0].author, pm.id);
+  } finally {
+    store.close();
+  }
+});
+
 test("retry of a follow-up without @mention plants live before MCP", async () => {
   const store = new GuildStore(tempHome());
   const design = store.listBots().find((bot) => bot.handle === "design");
