@@ -8,6 +8,8 @@
 
 Local-first. Your files. Your models.
 
+![Local AI Guild. @mention the right one.](docs/readme-cover-en.png)
+
 ![A local guild. @mention one adventurer.](docs/demo-hall-en-2026-08-31.gif)
 
 ## Open the hall
