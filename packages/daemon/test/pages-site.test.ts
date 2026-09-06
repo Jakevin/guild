@@ -422,6 +422,8 @@ test("README points at the Pages demo without moving the first screen", () => {
   const zh = readFileSync(join(ROOT, "README.zh.md"), "utf8");
   const ja = readFileSync(join(ROOT, "README.ja.md"), "utf8");
   const first = en.split("\n").slice(0, 20).join("\n");
+  const zhHead = zh.split("\n").slice(0, 16).join("\n");
+  assert.match(zhHead, /docs\/readme-cover-zh\.png/);
   assert.match(first, /docs\/demo-hall-en-2026-08-31\.gif/);
   assert.match(first, /## Open the hall/);
   assert.doesNotMatch(first, /jakevin\.github\.io/);
