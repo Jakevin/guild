@@ -30,7 +30,7 @@ pnpm dev
 
 Fixture preview (no model, no tools): [jakevin.github.io/guild](https://jakevin.github.io/guild/).
 
-1. **Models** (`/settings`) — **first click.** Connect a subscription (OAuth) or paste an API key, then Apply a default. Without a ready model Guild cannot think or run tools. Do not `@mention` yet.
+1. **Models** (`/settings`) — **first click.** Guild ships with OpenCode Free by default (prompts route keyless to `opencode.ai`), or you can connect your own subscription (OAuth) or paste an API key, then Apply a default. Without a ready model Guild cannot think or run tools. Do not `@mention` yet.
 2. Open a channel — a contract. Write `Channel.md` if the hall has a job.
 3. `@pm` to scope, `@rd` to look at code. Put the `@handle` at the **start of a line** — that is the assignment. They also answer when you reply to them; name nobody and the last adventurer who spoke continues. `@channel` pings the whole roster — usually the wrong move.
 
@@ -44,6 +44,10 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 
 **The composer.** Reply to one message to aim at that adventurer and show which line you mean. While a turn is running, Enter queues your next line; Cmd/Ctrl+↩ inserts it into the live turn. Pause holds that adventurer so you can switch models and Continue; Stop pulls them out of the turn. Retry re-asks one question. Delete removes one message and its trajectory. Rename a channel from the sidebar.
 
+**Branch a quest.** Open a branch from any message to explore a side task without cluttering the main contract. The child keeps the roster, `Channel.md`, and up to 20 recent messages. Closing a branch can optionally merge its `MEMORY.md` back into the parent channel.
+
+**/m mobile hall.** Open `http://127.0.0.1:7420/m` (or your LAN/Tailscale address) from a mobile browser: read, reply, pause, stop, and steer over lightweight mobile HTTP without the desktop chrome. `/m` has no authentication; anyone with network access to the port can reach the hall.
+
 **Bring context.** Drag files into the composer, paste them, or pick them from the attachment menu — up to 12 per message. An image gets a hover preview; the preview is UI only, the model gets the text body. Too big to embed and Guild sends the path so the adventurer can `read` it.
 
 **Borrow one skill.** Type `/` in the composer to pick a Workshop skill or subagent without staffing it onto anyone first. `/slug` inside a message applies to that turn only.
@@ -53,7 +57,7 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 - **The unit is a named adventurer:** Soul / Agent / Skill / Position, invoked with `@handle`.
 - Default roster of five: `@infra` `@pm` `@rd` `@design` `@marketing`. A roster, not a sortie — work still goes to one `@handle` at a time.
 - Hire more in Bot Studio (`/studio`). Skills are markdown; you can copy them from a local CLI. On the same form, ask the model to pick up to 8 skills for that seat; with no model wired it falls back to a local match.
-- Models you bring: OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius). Command Code is an optional subscription picker (official Provider API; Go accounts fall back to `/alpha/generate`). Freebuff Chat is an optional chat-role picker (official free session); Guild still runs the tools.
+- Models you bring: OpenCode Free is the default keyless path (`opencode.ai`); you can also bring OpenAI, Anthropic, xAI, Ollama, OpenRouter — API key or OAuth (ChatGPT Codex, Claude Pro/Max, Grok, Copilot, OpenRouter, Kimi Code, Pi Radius). Command Code is an optional subscription picker (official Provider API; Go accounts fall back to `/alpha/generate`). Freebuff Chat is an optional chat-role picker (official free session); Guild still runs the tools.
 
 ![Roster of five named adventurers.](docs/readme-roster-2026-08-29.png)
 
@@ -64,7 +68,7 @@ Open `/library`. One page, three tabs.
 | Tab | What |
 |---|---|
 | **Skills** | Markdown instructions. Staff onto an adventurer. The model must call `skill` to load the body. |
-| **Subagents** | Chat calls `spawn`. The child returns a summary. Cannot nest. No MCP tools. |
+| **Subagents** | Chat calls `spawn` (and `read_spawn` to collect background surveys). The child returns a summary. Cannot nest. No MCP tools. |
 | **MCP** | A stdio tool server, **not a skill**. Do not put it in the skills library. |
 
 ![Workshop: Skills, Subagents, and MCP.](docs/readme-workshop-2026-08-29.png)
@@ -100,7 +104,7 @@ One turn, one process: `@handle` → `chatReply` → `HarnessService.turn` → `
 
 **You stay in it.** A mid-turn reply queues; Cmd/Ctrl+↩ injects it into the live turn and it reaches the model next round as `<user_steer>`. Pause aborts the in-flight `AbortSignal` but keeps the live bubble so you can switch models and Continue (the next round sees thinking and tools so far). Stop aborts that seat's signal and ends the turn. There is no approval step; nothing asks you first.
 
-**The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `full_access` (default) lets everything through, `read_only` keeps `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`, `workspace_write` confines `write` / `run` to the workspace, `/tmp`, and `{GUILD_HOME}/cache`, and refuses MCP and `image_gen`. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
+**The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `full_access` (default) lets everything through, `read_only` keeps `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`, `workspace_write` confines `write` / `run` to the workspace, `/tmp`, and `{GUILD_HOME}/cache`, and refuses MCP, `browser`, and `image_gen`. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
 
 **Why Hermes is named here.** We borrowed one shape, not a codebase. Hermes is the closest published example of a local agent that browses as you without hijacking the browser you are using, so `browser.ts` copies that: never CDP the live Chrome profile (Chrome 136+), snapshot `last_used` into `~/.guild/browser-profile/chrome`, drive the copy. The borrowing stops there. The turn loop is Guild's own (`runAgentLoop` + `gateTool`); the sandbox names are Codex-shaped but this is not the Codex app-server harness; the `Harness` trait in `docs/` was never shipped.
 
@@ -117,9 +121,13 @@ Files: `packages/daemon/src/harness.ts` (loop, gate, policy) · `generate.ts` (s
 
 ## Current limits
 
+**OpenCode Free routes prompts to `opencode.ai` by default when no API key is set.** If you do not configure an API key or OAuth subscription, Guild defaults to OpenCode Free (`https://opencode.ai/zen/v1`). Prompts, system instructions, and chat context leave your machine and are processed by `opencode.ai`. To keep inference local, connect Ollama in `/settings`. Details: [SECURITY.md](./SECURITY.md).
+
 **Freebuff Chat credentials stay local.** Official device login (`~/.config/manicode/credentials.json`) wins; with no login, a `CODEBUFF_API_KEY` from your environment is the fallback. Either way the token only signs SDK requests to Codebuff — the remote agent still cannot read, write, or run anything on your machine.
 
-**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`, unless the bot's POSITION.md has `sandbox:`).** Default cwd for `run` is `$HOME` (`workspace_write` uses `GUILD_WORKSPACE` or this checkout). The gate is not Codex isolation. Details: [SECURITY.md](./SECURITY.md).
+**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`, unless the bot's POSITION.md has `sandbox:`).** Default cwd for `run` is `$HOME` (`workspace_write` uses `GUILD_WORKSPACE` or this checkout). The `workspace_write` gate only filters tool paths and cwd; it is not Seatbelt or Codex isolation. Details: [SECURITY.md](./SECURITY.md).
+
+**Network & /m: loopback by default, no multi-user authentication.** `guildd` binds `127.0.0.1`. If rebound to LAN or Tailscale, `/` and `/m` are accessible by anyone on that network without login, with full ability to trigger turns and tools as you. Details: [SECURITY.md](./SECURITY.md).
 
 **MCP spawns a local process as you** — Guild `mcp.json` **and** host Claude / Cursor / Codex configs, with no import / consent prompt. Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
 

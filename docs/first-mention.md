@@ -6,7 +6,7 @@ Your disk (default `~/.guild`). Your models. The log stays at the hall.
 
 ![A local guild. @mention one adventurer.](demo-hall-en-2026-08-29.gif)
 
-Repo: https://github.com/Jakevin/guild · `v0.2.1`
+Repo: https://github.com/Jakevin/guild · `v0.2.29`
 
 ## You need
 
@@ -14,10 +14,11 @@ A **model first**. Guild cannot think or run tools without one. Then Node ≥ 22
 
 ## 1. Get a model (do this first)
 
-Pick **one**. Do not `@mention` anyone until it is connected.
+Pick **one**. Guild ships with **OpenCode Free** (`opencode.ai`) as the out-of-the-box keyless default, so you can start right away without an API key. To wire your own model or keep inference strictly local, set it up before you `@mention`:
 
 | You have | Do |
 |---|---|
+| No key / Quick start | OpenCode Free (default, routes keyless to `opencode.ai`) |
 | ChatGPT Plus / Pro | Codex OAuth on Models → Subscriptions |
 | Claude Pro / Max | Claude OAuth |
 | Grok / SuperGrok / X Premium | xAI OAuth |
@@ -25,7 +26,7 @@ Pick **one**. Do not `@mention` anyone until it is connected.
 | OpenAI / Anthropic / xAI / OpenRouter API key | paste it on Models → API Key |
 | Ollama | install Ollama, pull a local model |
 
-Without this step, Guild is not usable.
+Without this step (or the default OpenCode Free path), Guild is not usable.
 
 ## 2. Open the hall
 
@@ -91,6 +92,7 @@ Hire a sixth adventurer here. Skills are markdown; you can copy them from a loca
 
 Treat this as a workshop. Do not point it at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on. Details: [SECURITY.md](../SECURITY.md).
 
+- **OpenCode Free routes prompts to `opencode.ai`.** The default zero-key path sends prompts externally to `opencode.ai`. Wire your own API key or local Ollama if you require private/offline inference.
 - **`run` / `write` are your shell.** Default `full_access`. `run` cwd is `$HOME`. Optional Position `sandbox:` / `GUILD_SANDBOX` is a tool gate, not an OS jail.
 - **MCP spawns as you, with no import / consent.** Guild `mcp.json` **and** host Claude / Cursor / Codex configs. Env is inherited. To keep a host server out: remove it from the host file, or set `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml`.
 - **Browser snapshots your Chrome logins by default.** Set `GUILD_BROWSER_REAL_PROFILE=0` for a throwaway empty profile.

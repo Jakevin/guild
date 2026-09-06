@@ -30,7 +30,7 @@ pnpm dev
 
 靜態預覽（無模型、無工具）：[jakevin.github.io/guild](https://jakevin.github.io/guild/)。
 
-1. **模型**（`/settings`）— **第一件事。** 連接訂閱（OAuth）或貼上 API key，再套用主模型。沒有可用模型，Guild 不能想、也不能跑工具。先不要 `@mention`。
+1. **模型**（`/settings`）— **第一件事。** Guild 預設自帶 OpenCode Free 免金鑰通道（提示詞會送往 `opencode.ai`）；你也可以連接自己的訂閱（OAuth）或貼上 API key，再套用主模型。沒有可用模型，Guild 不能想、也不能跑工具。先不要 `@mention`。
 2. 開一個頻道——一張委託。大廳有活就寫 `Channel.md`（委託書）。
 3. `@pm` 收範圍，`@rd` 看程式。`@handle` 要放在**行首**——那才是分派。你回他們時他們也會接；完全沒點名，就由上一個說話的冒險者繼續。`@channel` 會叫整支編制——通常是錯的。
 
@@ -44,6 +44,10 @@ pnpm dev
 
 **輸入框。** 回覆某一則訊息，就是指定那個人，也讓他看到你指的是哪一句。有人在跑的時候，Enter 排隊，Cmd/Ctrl+↩ 插入這輪。暫停停住這輪（可換模型後繼續）；停止把那一名冒險者從這輪拉下來。重問只重問那一題。刪除拿掉那一則訊息與它的軌跡。頻道可在側欄改名。
 
+**分支委託。** 從任一則訊息開出分支，獨立探索支線任務而不污染主委託。子委託繼承編制、`Channel.md` 與最多 20 則近期訊息；結案關閉時可將 `MEMORY.md` 合併回父頻道。
+
+**/m 行動大廳。** 手機瀏覽器開啟 `http://127.0.0.1:7420/m`（或區網／Tailscale 位址）：在輕量行動介面閱讀、回覆、暫停、停止與 steer，不帶桌面端繁重側欄。`/m` 無驗證特徵，同網段能連線到該 port 者皆可直接存取。
+
 **帶上下文。** 檔案拖進輸入框、貼上，或從附件選單挑，一則訊息最多 12 個附件。圖片的懸停預覽只在介面看得到；模型收到的是文字本文。太大嵌不進去時，Guild 改送路徑，讓冒險者自己 `read`。
 
 **只借一招。** 輸入框打 `/`，直接挑工坊的技能或子代理，不必先掛到誰身上。訊息裡的 `/slug` 只在這一回合生效。
@@ -53,7 +57,7 @@ pnpm dev
 - **單位是有名字的冒險者：** Soul / Agent / Skill / Position，用 `@handle` 叫。
 - 預設小隊五席——是編制，不是出征：`@infra` `@pm` `@rd` `@design` `@marketing`。出活仍點名一人。
 - 在 Bot Studio（`/studio`）招人。技能是 markdown；可從本機 CLI 拷進來。同一張表單也能叫模型替這席挑技能，上限 8 項；沒接模型時退回本機比對。
-- 模型自己接：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Command Code 是可選的訂閱分頁（官方 Provider API；Go 帳號落到 `/alpha/generate`）。Freebuff Chat 是可選的 chat-role 分頁（官方免費 session）；工具仍由 Guild 執行。
+- 模型：OpenCode Free 為預設免金鑰通道（`opencode.ai`）；亦可自行接入 OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key 或 OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Command Code 是可選的訂閱分頁（官方 Provider API；Go 帳號落到 `/alpha/generate`）。Freebuff Chat 是可選的 chat-role 分頁（官方免費 session）；工具仍由 Guild 執行。
 
 ![編制：五位有名字的冒險者。](docs/readme-roster-2026-08-29.png)
 
@@ -64,7 +68,7 @@ pnpm dev
 | Tab | 是什麼 |
 |---|---|
 | **技能** | Markdown 說明書。掛到冒險者身上。模型要 call `skill` 才會載入正文。 |
-| **子代理** | 對話裡 call `spawn`。子代理回一份摘要。不能再套一層。沒有 MCP 工具。 |
+| **子代理** | 對話裡 call `spawn`（以 `read_spawn` 收回背景調查結果）。子代理回一份摘要。不能再套一層。沒有 MCP 工具。 |
 | **MCP** | stdio 工具伺服器，**不是技能**。不要放進技能庫。 |
 
 ![工坊：技能、子代理與 MCP。](docs/readme-workshop-2026-08-29.png)
@@ -100,7 +104,7 @@ pnpm dev
 
 **你還在迴圈裡。** 有人在跑的時候回覆，是排隊；Cmd/Ctrl+↩ 把這句插入當前回合，下一輪以 `<user_steer>` 送到模型。暫停 abort 當下的 `AbortSignal`，但留下 live 氣泡，方便換模型後繼續（下一輪會看到目前的 Think 與已跑完的工具）。停止 abort 那一席的 signal 並結束這輪。沒有審批步驟，也不會先問你。
 
-**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`；`workspace_write` 把 `write` / `run` 鎖在 workspace、`/tmp` 與 `{GUILD_HOME}/cache`，MCP 和 `image_gen` 直接拒。這是單一 process 裡、跑在你權限下的 tool gate；它擋不掉什麼，`Current limits` 那段寫得很直。
+**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`；`workspace_write` 把 `write` / `run` 鎖在 workspace、`/tmp` 與 `{GUILD_HOME}/cache`，MCP、`browser` 和 `image_gen` 直接拒。注意 `workspace_write` 只是路徑與 cwd 的工具閘門，並非 OS jail：`run` 仍以你的使用者身分在 shell 跑，指令仍能依你的權限存取系統。細節見現況限制。
 
 **為什麼在這裡提 Hermes。** 我們借的是一個形，不是 codebase。Hermes 是最接近的公開範例：本機 agent 能用你的瀏覽器，又不動你正在跑的 Chrome。`browser.ts` 借的就是這個做法——不 CDP live profile（Chrome 136+），把 `last_used` 快照到 `~/.guild/browser-profile/chrome`，操作那份複本。借到這裡為止。回合迴圈是 Guild 自己的（`runAgentLoop` + `gateTool`）；sandbox 名稱是 Codex 形狀，但這不是 Codex app-server 的 harness；`docs/` 裡那個 `Harness` trait 也沒實作。
 
@@ -117,9 +121,13 @@ pnpm dev
 
 ## 現況限制
 
+**OpenCode Free 在未設 API Key 時預設將提示詞送往 `opencode.ai`。** 若未設定 API key 或 OAuth 訂閱，Guild 預設走 OpenCode Free（`https://opencode.ai/zen/v1`）。提示詞、system 指令與對話上下文會離開本機並由 `opencode.ai` 處理。如需完全本地推論，請在 `/settings` 連接 Ollama。細節：[SECURITY.md](./SECURITY.md)。
+
 **Freebuff Chat 的憑證留在本機。** 官方裝置登入（`~/.config/manicode/credentials.json`）優先；沒有登入時，環境變數 `CODEBUFF_API_KEY` 是備援。無論哪條，token 只用來簽 SDK 對 Codebuff 的請求——遠端 agent 仍不能讀、寫、跑你機器上的任何東西。
 
-**預設：`run` 與 `write` 以你的身分、在你的 shell 執行（`GUILD_SANDBOX` 未設 = `full_access`，除非該 bot 的 POSITION.md 有 `sandbox:`）。** `run` 的預設 cwd 是 `$HOME`（`workspace_write` 用 `GUILD_WORKSPACE` 或本 checkout）。這是 tool gate，不是 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
+**預設：`run` 與 `write` 以你的身分、在你的 shell 執行（`GUILD_SANDBOX` 未設 = `full_access`，除非該 bot 的 POSITION.md 有 `sandbox:`）。** `run` 的預設 cwd 是 `$HOME`（`workspace_write` 用 `GUILD_WORKSPACE` 或本 checkout）。`workspace_write` 僅限制工具路徑與 cwd，不是 Seatbelt 亦非 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
+
+**網路邊界與 /m：預設 loopback，無多使用者驗證。** `guildd` 預設監聽 `127.0.0.1`。若改綁區網或 Tailscale，任何同網段裝置皆可免登入存取 `/` 與 `/m`，並能以你的身分執行回合與工具。細節：[SECURITY.md](./SECURITY.md)。
 
 **MCP 會以你的身分 spawn 本機 process** — Guild 的 `mcp.json` **以及** 本機 Claude / Cursor / Codex 設定，沒有匯入、沒有同意步驟。env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
 

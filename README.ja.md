@@ -30,7 +30,7 @@ pnpm dev
 
 静的プレビュー（モデルなし、ツールなし）：[jakevin.github.io/guild](https://jakevin.github.io/guild/)。
 
-1. **モデル**（`/settings`）— **最初に開く。** サブスク（OAuth）か API key を繋ぎ、既定モデルを適用する。使えるモデルが無いと Guild は考えられず、ツールも走れない。`@mention` はまだしない。
+1. **モデル**（`/settings`）— **最初に開く。** Guild は既定で OpenCode Free キーレス経路を備えています（プロンプトは `opencode.ai` へ送信）。自分のサブスク（OAuth）や API key を繋いで既定モデルを適用することも可能です。使えるモデルが無いと Guild は考えられず、ツールも走れない。`@mention` はまだしない。
 2. チャンネルをひらく——依頼ひとつ。拠点に仕事があるなら `Channel.md`（依頼書）を書く。
 3. `@pm` で範囲を切る。`@rd` にコードを見てもらう。`@handle` は**行頭**に置く——それが指名。返信されたときも返す。まったく指名がなければ、直前に話した冒険者が続ける。`@channel` はロスター全員——大抵まちがい。
 
@@ -44,6 +44,10 @@ pnpm dev
 
 **入力欄。** あるメッセージに返信すると宛先がその人になり、どの発言を指しているかも伝わる。実行中は Enter が次の発言をキューへ、Cmd/Ctrl+↩ が今の回合へ差し込む。一時停止はその回合を保持するのでモデルを切り替えて続行できる。停止はその冒険者だけを回合から外す。再試行はその 1 件だけ。削除はそのメッセージと trajectory を消す。チャンネル名はサイドバーから変更できる。
 
+**クエスト分岐（Branch）。** メッセージからブランチを開き、メインの依頼書を汚さずに脇道の課題を検証できる。子クエストはロスター、`Channel.md`、最大 20 件の直近メッセージを引き継ぐ。クローズ時に `MEMORY.md` を親へマージすることも可能。
+
+**/m モバイル拠点。** スマホのブラウザから `http://127.0.0.1:7420/m`（または LAN / Tailscale アドレス）を開く：軽量なモバイル UI で閲覧・返信・一時停止・停止・steer が可能。`/m` に認証はなく、ポートに届く相手なら誰でも直接アクセスできます。
+
 **文脈を添える。** ファイルはドラッグ＆ペースト、または添付メニューから選ぶ。1 メッセージ 12 個まで。画像のホバープレビューは UI 専用で、モデルには渡らない（渡るのは本文）。大きすぎて埋め込めないときはパスを渡し、冒険者が `read` する。
 
 **1 回合だけ借りる。** 入力欄で `/` をたたくと、Workshop の skill / subagent をそのまま選べる。冒険者に staff しなくてよい。メッセージ内の `/slug` はその回合だけ効く。
@@ -53,7 +57,7 @@ pnpm dev
 - **単位は名のある冒険者：** Soul / Agent / Skill / Position。`@handle` で呼ぶ。
 - 既定の五人はロスター（出撃パーティーではない）：`@infra` `@pm` `@rd` `@design` `@marketing`。仕事はいつも一人の `@handle` へ。
 - Bot Studio（`/studio`）で迎える。スキルは markdown。ローカル CLI からコピーできる。同じフォームで、その席のスキルをモデルに選ばせられる（最大 8 件）。モデル未接続ならローカルの照合に落ちる。
-- モデルは自分で繋ぐ：OpenAI、Anthropic、xAI、Ollama、OpenRouter — API key または OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Command Code は任意のサブスクリプション（公式 Provider API。Go アカウントは `/alpha/generate` に落ちる）。Freebuff Chat は任意の chat-role ピッカー（公式無料 session）。ツールは Guild が実行する。
+- モデル：OpenCode Free が既定のキーレス経路（`opencode.ai`）。自前の OpenAI、Anthropic、xAI、Ollama、OpenRouter も接続可能 — API key または OAuth（ChatGPT Codex、Claude Pro/Max、Grok、Copilot、OpenRouter、Kimi Code、Pi Radius）。Command Code は任意のサブスクリプション（公式 Provider API。Go アカウントは `/alpha/generate` に落ちる）。Freebuff Chat は任意の chat-role ピッカー（公式無料 session）。ツールは Guild が実行する。
 
 ![ロスター：名前のある五人の冒険者。](docs/readme-roster-2026-08-29.png)
 
@@ -64,7 +68,7 @@ pnpm dev
 | タブ | 何か |
 |---|---|
 | **Skills** | Markdown の手順書。冒険者に載せる。モデルは `skill` を呼んで本文を読む。 |
-| **Subagents** | チャットが `spawn` する。子は要約を返す。ネスト不可。MCP ツールは無い。 |
+| **Subagents** | チャットが `spawn`（バックグラウンド調査結果は `read_spawn` で回収）。子は要約を返す。ネスト不可。MCP ツールは無い。 |
 | **MCP** | stdio のツールサーバ。**スキルではない。** スキル庫に入れない。 |
 
 ![工房：Skills、Subagents、MCP。](docs/readme-workshop-2026-08-29.png)
@@ -100,13 +104,13 @@ pnpm dev
 
 **人が割り込める。** 実行中の発話はキュー。Cmd/Ctrl+↩ は今の回合に差し込み、次のラウンドで `<user_steer>` としてモデルに渡る。一時停止は進行中の `AbortSignal` を abort するが live バブルは残す。モデルを切り替えて続行できる（次ラウンドはここまでの Think とツールを見る）。停止はその席の signal を abort して回合を終える。承認ステップは無い。先に聞かない。
 
-**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob` だけ。`workspace_write` は `write` / `run` を workspace・`/tmp`・`{GUILD_HOME}/cache` に閉じ、MCP と `image_gen` は拒否。これはひとつの process 内、あなたの権限で動く tool gate。何を防がないかは `Current limits` にそのまま書いてある。
+**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob` だけ。`workspace_write` は `write` / `run` を workspace・`/tmp`・`{GUILD_HOME}/cache` に閉じ、MCP、`browser`、`image_gen` は拒否。注意として `workspace_write` はパスと cwd のツールゲートであり、OS jail ではありません。`run` はあなたのシェル・権限で動作します。何を防がないかは `Current limits` にそのまま書いてある。
 
 **なぜ Hermes の名前を出すのか。** 借りたのは形ひとつで、codebase ではない。Hermes は「ローカル agent があなたのブラウザを使えて、稼働中の Chrome は触らない」公開例に最も近い。`browser.ts` はその形を踏む——live profile を CDP しない（Chrome 136+）、`last_used` を `~/.guild/browser-profile/chrome` にスナップショットして複製を操作する。ここまで。回合ループは Guild 自身のもの（`runAgentLoop` + `gateTool`）。sandbox の名前は Codex 形だが、Codex app-server のハーネスではない。`docs/` の `Harness` trait は未実装。
 
 ファイル：`packages/daemon/src/harness.ts`（ループ、ゲート、policy）· `generate.ts`（system 組立、`HALL_RULES`）· `tools.ts`（カタログ、steer、ラウンド上限）· `browser.ts`（profile スナップショット）。
 
-## これは何かではない
+## これは何ではない
 
 - Codex ハーネスではない
 - タスクボードではない——チャンネルは結案していない依頼書だ
@@ -117,9 +121,13 @@ pnpm dev
 
 ## いまの限界
 
+**OpenCode Free は API Key 未設定時にプロンプトを `opencode.ai` へ送信します。** API key や OAuth サブスクを設定しない場合、Guild は既定で OpenCode Free（`https://opencode.ai/zen/v1`）を使用します。プロンプト・system 指示・会話コンテキストはマシン外に出て `opencode.ai` で処理されます。完全ローカル運用には `/settings` で Ollama を接続してください。詳細：[SECURITY.md](./SECURITY.md)。
+
 **Freebuff Chat の資格情報はローカルに留まる。** 公式デバイスログイン（`~/.config/manicode/credentials.json`）を優先する。ログインが無ければ環境変数 `CODEBUFF_API_KEY` がフォールバック。どちらでも token は Codebuff への SDK リクエストの署名だけに使い、リモート agent はあなたのマシンを read / write / run できない。
 
-**既定：`run` と `write` はあなたとして、あなたのシェルで実行される（`GUILD_SANDBOX` 未設定 = `full_access`。POSITION.md に `sandbox:` があればそちら）。** `run` の既定 cwd は `$HOME`（`workspace_write` は `GUILD_WORKSPACE` またはこの checkout）。Codex isolation ではない。詳細：[SECURITY.md](./SECURITY.md)。
+**既定：`run` と `write` はあなたとして、あなたのシェルで実行される（`GUILD_SANDBOX` 未設定 = `full_access`。POSITION.md に `sandbox:` があればそちら）。** `run` の既定 cwd は `$HOME`（`workspace_write` は `GUILD_WORKSPACE` またはこの checkout）。`workspace_write` はツールのパスと cwd を絞るだけで、Seatbelt や Codex isolation ではありません。詳細：[SECURITY.md](./SECURITY.md)。
+
+**ネットワーク境界と /m：既定は loopback、マルチユーザー認証なし。** `guildd` は既定で `127.0.0.1` にバインドします。LAN や Tailscale に再バインドした場合、そのネットワーク上の誰でもログインなしで `/` や `/m` を開け、あなたとしてツールを実行できます。詳細：[SECURITY.md](./SECURITY.md)。
 
 **MCP はあなたとしてローカルプロセスを spawn する** — Guild の `mcp.json` **および** ホスト側 Claude / Cursor / Codex の設定。import も同意プロンプトも無い。env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
 
