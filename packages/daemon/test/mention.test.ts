@@ -555,6 +555,11 @@ test("retry keeps optimistic live while POST is in flight", () => {
     html,
     /cut = current && current\.author === "you" \? idx \+ 1 : idx/,
   );
+  assert.match(
+    html,
+    /typeof body === "string" && current && current\.author === "you"/,
+  );
+  assert.match(html, /current\.body = body/);
   assert.match(html, /state\.retryDrop/);
 });
 

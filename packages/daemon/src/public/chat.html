@@ -3367,6 +3367,10 @@
         if (currentRoomBusy()) return;
         state.editingId = null;
         const current = state.messages.find((item) => item.id === id);
+        if (typeof body === "string" && current && current.author === "you") {
+          current.body = body;
+          touchNavTime(state.kind, state.id, current.createdAt, current);
+        }
         const idx = state.messages.findIndex((item) => item.id === id);
         if (idx >= 0) {
           const cut = current && current.author === "you" ? idx + 1 : idx;
