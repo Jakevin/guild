@@ -32,6 +32,7 @@ import {
   formatGuildToolResults,
   parseGuildToolsEnvelope,
   throwIfAborted,
+  allowedFreebuffToolNames,
   withFreebuffToolSystem,
   writeFreebuffState,
   type FreebuffAccessTier,
@@ -64,7 +65,6 @@ import { withFreebuffRequestContext } from "./freebuff-request-context.ts";
 import {
   builtinExecute,
   emitProgress,
-  guildTools,
   roundSignal,
   type ToolContext,
   type ToolOutcome,
@@ -486,7 +486,7 @@ function compileSuffix(
 }
 
 function withAdvertisedTools(ctx: ToolContext): ToolContext {
-  const allowed = new Set(guildTools(ctx.skills ?? [], ctx).map((tool) => tool.name));
+  const allowed = new Set(allowedFreebuffToolNames(ctx));
   const orig = ctx.dispatch;
   return {
     ...ctx,

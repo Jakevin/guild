@@ -35,12 +35,15 @@ test("default catalog seats ship workspace_write", async () => {
   }
 });
 
-test("parseSandbox defaults to full_access", () => {
-  assert.equal(parseSandbox(undefined), "full_access");
-  assert.equal(parseSandbox("nope"), "full_access");
+test("parseSandbox defaults to workspace_write", () => {
+  assert.equal(parseSandbox(undefined), "workspace_write");
+  assert.equal(parseSandbox("nope"), "workspace_write");
   assert.equal(parseSandbox("read_only"), "read_only");
-  assert.equal(policyFromEnv({}).sandbox, "full_access");
-  assert.equal(policyFromEnv({ GUILD_SANDBOX: "workspace_write" }).sandbox, "workspace_write");
+  assert.equal(policyFromEnv({}).sandbox, "workspace_write");
+  assert.equal(policyFromEnv({ GUILD_SANDBOX: "full_access" }).sandbox, "full_access");
+  assert.ok(gateTool("mcp__echo__ping", {}));
+  assert.ok(gateTool("browser", { action: "open", url: "https://example.com" }));
+  assert.equal(gateTool("run", { command: "echo hi" }), null);
 });
 
 test("sandboxFromPosition reads the Tools line", () => {
@@ -448,6 +451,16 @@ test("workspace_write refuses mcp", async () => {
 });
 
 test("full_access is unchanged", async () => {
+  const result = await executeTool(
+    "run",
+    { command: "echo guild-harness" },
+    { sandbox: "full_access" },
+  );
+  assert.equal(result.isError, false);
+  assert.match(result.text, /guild-harness/);
+});
+
+test("unset sandbox still runs inside the workspace", async () => {
   const result = await executeTool("run", { command: "echo guild-harness" });
   assert.equal(result.isError, false);
   assert.match(result.text, /guild-harness/);

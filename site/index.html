@@ -1433,7 +1433,7 @@ html[lang="ja"] h1 { font-family: "YuMincho", "Hiragino Mincho ProN", "Hiragino 
       </div>
     </div>
     <p class="note" data-i18n-html="note.steer">steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.</p>
-    <p class="note" data-i18n-html="note.hermes">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.</p>
+    <p class="note" data-i18n-html="note.hermes">Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>workspace_write</code>. Opt in to <code>full_access</code>.</p>
     <p class="note" data-i18n-html="note.files">Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.</p>
   </section>
 
@@ -1469,7 +1469,7 @@ pnpm dev</pre>
     <table class="limits">
       <thead><tr><th data-i18n="th.limit">Limit</th><th data-i18n="th.fact">Fact</th></tr></thead>
       <tbody>
-        <tr><td><code>run</code> / <code>write</code></td><td data-i18n-html="td.shell">Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.</td></tr>
+        <tr><td><code>run</code> / <code>write</code></td><td data-i18n-html="td.shell">Your shell, gated to the workspace. Unset <code>GUILD_SANDBOX</code> = <code>workspace_write</code>.</td></tr>
         <tr><td>MCP</td><td data-i18n="td.mcp">Host Claude / Cursor / Codex stdio is live with no import step.</td></tr>
         <tr><td>Browser</td><td data-i18n-html="td.browser">Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.</td></tr>
         <tr><td>Origin</td><td data-i18n-html="td.origin">Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.</td></tr>
@@ -1501,7 +1501,7 @@ pnpm dev</pre>
       </details>
       <details class="faq-pair">
         <summary data-i18n-html="faq.q4">What can <code>run</code> and <code>write</code> do?</summary>
-        <p data-i18n-html="faq.a4">Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.</p>
+        <p data-i18n-html="faq.a4">Your shell, gated to the workspace. Unset <code>GUILD_SANDBOX</code> = <code>workspace_write</code>. Read SECURITY.md before you point this at a machine you care about.</p>
       </details>
       <details class="faq-pair">
         <summary data-i18n="faq.q5">Can I schedule a later hall turn?</summary>
@@ -1568,7 +1568,7 @@ pnpm dev</pre>
         "h3.tool": "Tool calls",
         "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → append results → ask again. Bounded. At the bound it asks for a final answer.",
         "note.steer": "steer reaches the model next round as <code>&lt;user_steer&gt;</code>. Stop aborts the turn <code>AbortSignal</code>. Skill catalog is a name + summary; the body loads only when the model calls <code>skill</code>.",
-        "note.hermes": "Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>full_access</code>.",
+        "note.hermes": "Guild borrowed one Hermes shape for the browser snapshot — never the live Chrome profile. The turn loop is Guild’s own. Not a Codex app-server harness. Not an OS jail. Default sandbox is <code>workspace_write</code>. Opt in to <code>full_access</code>.",
         "note.files": "Files: <code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>.",
         "kicker.tonight": "v0.2.32",
         "h2.tonight": "What the hall can do tonight",
@@ -1593,7 +1593,7 @@ pnpm dev</pre>
         "copy.fail": "Select & copy",
         "th.limit": "Limit",
         "th.fact": "Fact",
-        "td.shell": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>.",
+        "td.shell": "Your shell, gated to the workspace. Unset <code>GUILD_SANDBOX</code> = <code>workspace_write</code>.",
         "td.mcp": "Host Claude / Cursor / Codex stdio is live with no import step.",
         "td.browser": "Snapshots <code>last_used</code> Chrome into <code>~/.guild/browser-profile/chrome</code>. Set <code>GUILD_BROWSER_REAL_PROFILE=0</code> for empty.",
         "td.origin": "Foreign <code>Origin</code> is refused. Missing Origin is allowed. Not a login.",
@@ -1627,7 +1627,7 @@ pnpm dev</pre>
         "faq.q3": "Do I need to clone the repo?",
         "faq.a3": "No. Node ≥ 22.19 and <code>npx @kevin5251984/guild web</code> is enough. pnpm is only if you are reading the code.",
         "faq.q4": "What can <code>run</code> and <code>write</code> do?",
-        "faq.a4": "Your shell. Unset <code>GUILD_SANDBOX</code> = <code>full_access</code>. Read SECURITY.md before you point this at a machine you care about.",
+        "faq.a4": "Your shell, gated to the workspace. Unset <code>GUILD_SANDBOX</code> = <code>workspace_write</code>. Read SECURITY.md before you point this at a machine you care about.",
         "faq.q5": "Can I schedule a later hall turn?",
         "faq.a5": "Yes. Ask a seat, or open the sidebar sheet. Times read like speech — every 2h, in 30m, <code>0 9 * * *</code> — and each job gets a sheet with pause, resume, and a test run that returns to that hall. A run cannot schedule another job.",
         "faq.tail": "Free. Open source under the MIT license."
@@ -1666,7 +1666,7 @@ pnpm dev</pre>
         "h3.tool": "有工具呼叫",
         "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 把結果塞回去 → 再問一次。有上限。碰到上限就改要最終回覆。",
         "note.steer": "引導下一輪以 <code>&lt;user_steer&gt;</code> 進模型。Stop 會 abort 這回合的 <code>AbortSignal</code>。技能目錄只有名字與摘要；正文要模型自己 call <code>skill</code> 才載入。",
-        "note.hermes": "Guild 只借 Hermes 一個形做瀏覽器快照 — 不動正在跑的 Chrome。回合迴圈是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。預設 sandbox 是 <code>full_access</code>。",
+        "note.hermes": "Guild 只借 Hermes 一個形做瀏覽器快照 — 不動正在跑的 Chrome。回合迴圈是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。預設 sandbox 是 <code>workspace_write</code>。<code>full_access</code> 要自己開。",
         "note.files": "檔案：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
         "kicker.tonight": "v0.2.32",
         "h2.tonight": "今晚大廳能做的事",
@@ -1691,7 +1691,7 @@ pnpm dev</pre>
         "copy.fail": "選取後複製",
         "th.limit": "限制",
         "th.fact": "事實",
-        "td.shell": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。",
+        "td.shell": "你的 shell，鎖在 workspace。<code>GUILD_SANDBOX</code> 未設 = <code>workspace_write</code>。",
         "td.mcp": "本機 Claude / Cursor / Codex 的 stdio 免匯入、直接可用。",
         "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。設 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
         "td.origin": "外站 <code>Origin</code> 拒絕。沒有 Origin 仍放行。不是登入。",
@@ -1725,7 +1725,7 @@ pnpm dev</pre>
         "faq.q3": "一定要 clone 嗎？",
         "faq.a3": "不用。Node ≥ 22.19 加 <code>npx @kevin5251984/guild web</code> 就夠。要讀程式才用 pnpm checkout。",
         "faq.q4": "<code>run</code> 與 <code>write</code> 會做什麼？",
-        "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未設 = <code>full_access</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
+        "faq.a4": "你的 shell，鎖在 workspace。<code>GUILD_SANDBOX</code> 未設 = <code>workspace_write</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
         "faq.q5": "之後的大廳回合要怎麼排？",
         "faq.a5": "可以。點名一席用 <code>cronjob</code>，或從側欄開一筆。時間照說話寫：每10分鐘、10分鐘後、每天9點、in 30m。每筆有自己的頁——暫停、恢復，測試執行會回到那個大廳。排程執行不能再排新的。",
         "faq.tail": "免費。MIT 開源。"
@@ -1764,7 +1764,7 @@ pnpm dev</pre>
         "h3.tool": "有工具调用",
         "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 把结果塞回去 → 再问一次。有上限。碰到上限就改要最终回复。",
         "note.steer": "引导下一轮以 <code>&lt;user_steer&gt;</code> 进模型。Stop 会 abort 这回合的 <code>AbortSignal</code>。技能目录只有名字与摘要；正文要模型自己 call <code>skill</code> 才载入。",
-        "note.hermes": "Guild 只借 Hermes 一个形做浏览器快照 — 不动正在跑的 Chrome。回合循环是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。默认 sandbox 是 <code>full_access</code>。",
+        "note.hermes": "Guild 只借 Hermes 一个形做浏览器快照 — 不动正在跑的 Chrome。回合循环是 Guild 自己的。不是 Codex app-server harness。不是 OS jail。默认 sandbox 是 <code>workspace_write</code>。<code>full_access</code> 要自己开。",
         "note.files": "文件：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
         "kicker.tonight": "v0.2.32",
         "h2.tonight": "今晚大厅能做的事",
@@ -1789,7 +1789,7 @@ pnpm dev</pre>
         "copy.fail": "选取后复制",
         "th.limit": "限制",
         "th.fact": "事实",
-        "td.shell": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。",
+        "td.shell": "你的 shell，锁在 workspace。<code>GUILD_SANDBOX</code> 未设 = <code>workspace_write</code>。",
         "td.mcp": "本机 Claude / Cursor / Codex 的 stdio 免导入、直接可用。",
         "td.browser": "把 <code>last_used</code> Chrome 快照到 <code>~/.guild/browser-profile/chrome</code>。设 <code>GUILD_BROWSER_REAL_PROFILE=0</code> 才用空的。",
         "td.origin": "外站 <code>Origin</code> 拒绝。没有 Origin 仍放行。不是登录。",
@@ -1823,7 +1823,7 @@ pnpm dev</pre>
         "faq.q3": "一定要 clone 吗？",
         "faq.a3": "不用。Node ≥ 22.19 加 <code>npx @kevin5251984/guild web</code> 就够。要读代码才用 pnpm checkout。",
         "faq.q4": "<code>run</code> 与 <code>write</code> 会做什么？",
-        "faq.a4": "你的 shell。<code>GUILD_SANDBOX</code> 未设 = <code>full_access</code>。对你在意的机器动手之前，先读 SECURITY.md。",
+        "faq.a4": "你的 shell，锁在 workspace。<code>GUILD_SANDBOX</code> 未设 = <code>workspace_write</code>。对你在意的机器动手之前，先读 SECURITY.md。",
         "faq.q5": "之后的大厅回合要怎么排？",
         "faq.a5": "可以。点名一席用 <code>cronjob</code>，或从侧栏开一笔。时间照说话写：每10分钟、10分钟后、每天9点、in 30m。每笔有自己的页——暂停、恢复，测试执行会回到那个大厅。排程执行不能再排新的。",
         "faq.tail": "免费。MIT 开源。"
@@ -1862,7 +1862,7 @@ pnpm dev</pre>
         "h3.tool": "ツール呼び出しあり",
         "p.tool": "<code>gateTool</code> → <code>Promise.all</code> → 結果を戻して、もう一度聞く。上限あり。上限では最終回答を求める。",
         "note.steer": "steer は次ラウンドで <code>&lt;user_steer&gt;</code> としてモデルへ。Stop はこの回合の <code>AbortSignal</code> を abort する。スキルカタログは名前と要約だけ。本文はモデルが <code>skill</code> を呼んでから読む。",
-        "note.hermes": "Guild が Hermes から借りたのはブラウザスナップショットの形ひとつ — 稼働中の Chrome は触らない。回合ループは Guild 自身。Codex app-server のハーネスではない。OS jail ではない。既定の sandbox は <code>full_access</code>。",
+        "note.hermes": "Guild が Hermes から借りたのはブラウザスナップショットの形ひとつ — 稼働中の Chrome は触らない。回合ループは Guild 自身。Codex app-server のハーネスではない。OS jail ではない。既定の sandbox は <code>workspace_write</code>。<code>full_access</code> はオプトイン。",
         "note.files": "ファイル：<code>packages/daemon/src/harness.ts</code> · <code>generate.ts</code> · <code>tools.ts</code> · <code>browser.ts</code>。",
         "kicker.tonight": "v0.2.32",
         "h2.tonight": "今夜、拠点でできること",
@@ -1887,7 +1887,7 @@ pnpm dev</pre>
         "copy.fail": "選択してコピー",
         "th.limit": "制限",
         "th.fact": "事実",
-        "td.shell": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。",
+        "td.shell": "あなたのシェル。workspace に閉じる。<code>GUILD_SANDBOX</code> 未設定 = <code>workspace_write</code>。",
         "td.mcp": "ホスト側 Claude / Cursor / Codex の stdio は import なしで使える。",
         "td.browser": "<code>last_used</code> の Chrome を <code>~/.guild/browser-profile/chrome</code> にスナップショット。空にするなら <code>GUILD_BROWSER_REAL_PROFILE=0</code>。",
         "td.origin": "外部 <code>Origin</code> は拒否。Origin なしは通す。ログインではない。",
@@ -1921,7 +1921,7 @@ pnpm dev</pre>
         "faq.q3": "clone は必要？",
         "faq.a3": "不要。Node ≥ 22.19 と <code>npx @kevin5251984/guild web</code> で足りる。コードを読むときだけ pnpm checkout。",
         "faq.q4": "<code>run</code> と <code>write</code> は何をする？",
-        "faq.a4": "あなたのシェル。<code>GUILD_SANDBOX</code> 未設定 = <code>full_access</code>。大事なマシンに向ける前に SECURITY.md を読む。",
+        "faq.a4": "あなたのシェル。workspace に閉じる。<code>GUILD_SANDBOX</code> 未設定 = <code>workspace_write</code>。大事なマシンに向ける前に SECURITY.md を読む。",
         "faq.q5": "あとから拠点のターンを予約できる？",
         "faq.a5": "できる。席に <code>cronjob</code> を頼むか、サイドバーから。時間は in 30m、every 2h、0 9 * * * のように書ける。ジョブごとにシート——一時停止・再開、テスト実行はその拠点に戻る。cron 実行から cron は作れない。",
         "faq.tail": "無料。MIT のオープンソース。"

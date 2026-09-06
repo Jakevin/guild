@@ -108,7 +108,7 @@ Most important thing: @mention the person you want. Do not start a new feature.
 當工坊用，不要對未信任的 prompt、未信任的 repo，或你丟不起檔案的機器。細節：[SECURITY.md](../SECURITY.md)。
 
 - **OpenCode Free 提示詞送往 `opencode.ai`。** 預設免金鑰通道會將提示詞外送至 `opencode.ai`。若需要隱私或離線推論，請改接自己的 API key 或本機 Ollama。
-- **`run` / `write` 是你的 shell。** 預設 `full_access`。`run` 的 cwd 是 `$HOME`。可選 Position `sandbox:` 或 `GUILD_SANDBOX` 是 tool gate，不是 OS jail。
+- **`run` / `write` 是你的 shell。** 預設 `workspace_write`（workspace + `/tmp` + `{GUILD_HOME}/cache`）。`run` 的 cwd 是 workspace。`full_access` 要自己開。可選 Position `sandbox:` 或 `GUILD_SANDBOX` 是 tool gate，不是 OS jail。
 - **MCP 免匯入、直接 spawn。** Guild 的 `mcp.json`，以及這台機 Claude / Cursor / Codex 已配的 stdio MCP（`~/.claude.json`、`~/.cursor/mcp.json`、`~/.codex/config.toml`）。沒有同意步驟。env 會繼承。不要的 server：從 host 檔拿掉，或把 `packages/daemon/cordis.yml` 的 `id: mcp` 設成 `disabled: true`。
 - **瀏覽器預設帶你的 Chrome 登入。** 設 `GUILD_BROWSER_REAL_PROFILE=0` 才用拋棄式空 profile。
 

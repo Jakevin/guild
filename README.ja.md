@@ -104,7 +104,7 @@ pnpm dev
 
 **人が割り込める。** 実行中の発話はキュー。Cmd/Ctrl+↩ は今の回合に差し込み、次のラウンドで `<user_steer>` としてモデルに渡る。一時停止は進行中の `AbortSignal` を abort するが live バブルは残す。モデルを切り替えて続行できる（次ラウンドはここまでの Think とツールを見る）。停止はその席の signal を abort して回合を終える。承認ステップは無い。先に聞かない。
 
-**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`full_access`（既定）は全部通す。`read_only` は `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob` だけ。`workspace_write` は `write` / `run` を workspace・`/tmp`・`{GUILD_HOME}/cache` に閉じ、MCP、`browser`、`image_gen` は拒否。注意として `workspace_write` はパスと cwd のツールゲートであり、OS jail ではありません。`run` はあなたのシェル・権限で動作します。何を防がないかは `Current limits` にそのまま書いてある。
+**ゲート。** ツール実行の前、`gateTool`（`harness.ts`）が席の sandbox を見る。`workspace_write`（既定）は `write` / `run` を workspace・`/tmp`・`{GUILD_HOME}/cache` に閉じ、MCP、`browser`、`image_gen` は拒否。`read_only` は `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob` だけ。`full_access` はオプトインで全部通す。注意として `workspace_write` はパスと cwd のツールゲートであり、OS jail ではありません。`run` はあなたのシェル・権限で動作します。何を防がないかは `Current limits` にそのまま書いてある。
 
 **なぜ Hermes の名前を出すのか。** 借りたのは形ひとつで、codebase ではない。Hermes は「ローカル agent があなたのブラウザを使えて、稼働中の Chrome は触らない」公開例に最も近い。`browser.ts` はその形を踏む——live profile を CDP しない（Chrome 136+）、`last_used` を `~/.guild/browser-profile/chrome` にスナップショットして複製を操作する。ここまで。回合ループは Guild 自身のもの（`runAgentLoop` + `gateTool`）。sandbox の名前は Codex 形だが、Codex app-server のハーネスではない。`docs/` の `Harness` trait は未実装。
 
@@ -125,11 +125,11 @@ pnpm dev
 
 **Freebuff Chat の資格情報はローカルに留まる。** 公式デバイスログイン（`~/.config/manicode/credentials.json`）を優先する。ログインが無ければ環境変数 `CODEBUFF_API_KEY` がフォールバック。どちらでも token は Codebuff への SDK リクエストの署名だけに使い、リモート agent はあなたのマシンを read / write / run できない。
 
-**既定：`run` と `write` はあなたとして、あなたのシェルで実行される（`GUILD_SANDBOX` 未設定 = `full_access`。POSITION.md に `sandbox:` があればそちら）。** `run` の既定 cwd は `$HOME`（`workspace_write` は `GUILD_WORKSPACE` またはこの checkout）。`workspace_write` はツールのパスと cwd を絞るだけで、Seatbelt や Codex isolation ではありません。詳細：[SECURITY.md](./SECURITY.md)。
+**既定：`workspace_write`（`GUILD_SANDBOX` 未設定。POSITION.md に `sandbox:` があればそちら）。** `run` の cwd は `GUILD_WORKSPACE` またはこの checkout。MCP / `browser` / `image_gen` は拒否。`full_access` はオプトイン（`GUILD_SANDBOX` または Position `sandbox: full_access`）で、そのとき `run` cwd は `$HOME`。ゲートはツールのパスと cwd を絞るだけで、Seatbelt や Codex isolation ではありません。詳細：[SECURITY.md](./SECURITY.md)。
 
 **ネットワーク境界と /m：既定は loopback、マルチユーザー認証なし。** `guildd` は既定で `127.0.0.1` にバインドします。LAN や Tailscale に再バインドした場合、そのネットワーク上の誰でもログインなしで `/` や `/m` を開け、あなたとしてツールを実行できます。詳細：[SECURITY.md](./SECURITY.md)。
 
-**MCP はあなたとしてローカルプロセスを spawn する** — Guild の `mcp.json` **および** ホスト側 Claude / Cursor / Codex の設定。import も同意プロンプトも無い。env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
+**MCP はあなたとしてローカルプロセスを spawn する** — Guild の `mcp.json` **および** ホスト側 Claude / Cursor / Codex の設定。import も同意プロンプトも無い。それらのツールがモデルに渡るのは `full_access` のときだけ。env は継承され、サーバの `env` が上書きされる。blast radius は skill より大きい。ワークショップとして扱うこと。詳細：[SECURITY.md](./SECURITY.md)。
 
 **ブラウザは既定で Chrome のログインをスナップショットする。** `browser` は今使っている Chrome の `last_used` プロファイルを `~/.guild/browser-profile/chrome` にコピーし、その複製を操作する（Hermes と同じ：稼働中のプロファイルは開かない）。捨てる空プロファイルは `GUILD_BROWSER_REAL_PROFILE=0`。詳細：[SECURITY.md](./SECURITY.md)。
 

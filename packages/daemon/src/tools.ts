@@ -67,7 +67,7 @@ export type ToolContext = {
   pullSteers?: () => string[];
   signal?: AbortSignal;
   mcpTools?: McpToolRef[];
-  /** Codex-shaped. Default full_access. */
+  /** Codex-shaped. Default workspace_write. */
   sandbox?: Sandbox;
   /** Root for workspace_write. Relative tool paths resolve here. */
   workspace?: string;

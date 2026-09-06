@@ -35,6 +35,8 @@ import {
 } from "../src/tools.ts";
 import { assembleParts, bodyFromParts } from "../src/chat-parts.ts";
 
+const OPEN = { sandbox: "full_access" as const };
+
 test("run executes on this machine", async () => {
   const result = await executeTool("run", { command: "echo guild-local" });
   assert.equal(result.isError, false);
@@ -50,7 +52,7 @@ test("run nonzero exit is a result, not a tool crash", async () => {
 
 test("run honors workdir", async () => {
   const dir = mkdtempSync(join(tmpdir(), "guild-run-cwd-"));
-  const result = await executeTool("run", { command: "pwd", workdir: dir });
+  const result = await executeTool("run", { command: "pwd", workdir: dir }, OPEN);
   assert.equal(result.isError, false);
   assert.match(result.text, new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
@@ -81,14 +83,14 @@ test("run has no default wall-clock; timeout is optional seconds (Pi bash)", asy
 test("read write list round-trip a temp file", async () => {
   const dir = mkdtempSync(join(tmpdir(), "guild-tools-"));
   const path = join(dir, "note.txt");
-  const wrote = await executeTool("write", { path, content: "hello guild" });
+  const wrote = await executeTool("write", { path, content: "hello guild" }, OPEN);
   assert.equal(wrote.isError, false);
   assert.match(wrote.text, /wrote /);
   assert.equal(readFileSync(path, "utf8"), "hello guild");
-  const read = await executeTool("read", { path });
+  const read = await executeTool("read", { path }, OPEN);
   assert.equal(read.isError, false);
   assert.equal(read.text, "hello guild");
-  const listed = await executeTool("list", { path: dir });
+  const listed = await executeTool("list", { path: dir }, OPEN);
   assert.equal(listed.isError, false);
   assert.match(listed.text, /note\.txt/);
 });
@@ -176,7 +178,7 @@ test("image_gen without credentials fails fast", async () => {
   const result = await executeTool(
     "image_gen",
     { prompt: "a red circle" },
-    { dataDir: dir, env: {} },
+    { ...OPEN, dataDir: dir, env: {} },
   );
   assert.equal(result.isError, true);
   assert.match(result.text, /沒有可用的生圖模型/);
@@ -184,7 +186,7 @@ test("image_gen without credentials fails fast", async () => {
 });
 
 test("image_gen requires a prompt", async () => {
-  const result = await executeTool("image_gen", { prompt: "" });
+  const result = await executeTool("image_gen", { prompt: "" }, OPEN);
   assert.equal(result.isError, true);
   assert.match(result.text, /empty argument/);
 });
@@ -475,7 +477,7 @@ test("read-only subagent cannot write", async () => {
   const result = await executeTool(
     "write",
     { path: join(dir, "x.txt"), content: "nope" },
-    { allowWrite: false },
+    { ...OPEN, allowWrite: false },
   );
   assert.equal(result.isError, true);
   assert.match(result.text, /read-only/);

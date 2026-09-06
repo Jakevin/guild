@@ -19,7 +19,7 @@ import {
 
 test("tts is a builtin tool and workspace_write hides it", () => {
   assert.match(TOOL_SYSTEM, /\btts\b/);
-  assert.ok(guildTools([]).some((tool) => tool.name === "tts"));
+  assert.ok(guildTools([], { sandbox: "full_access" }).some((tool) => tool.name === "tts"));
   const names = guildTools([], {
     sandbox: "workspace_write",
     workspace: tmpdir(),
@@ -44,14 +44,18 @@ test("tts abort is AbortError and does not hit the network", async () => {
   );
   await assert.rejects(
     () =>
-      executeTool("tts", { text: "hi" }, { dataDir: dir, signal: ctrl.signal }),
+      executeTool("tts", { text: "hi" }, {
+        sandbox: "full_access",
+        dataDir: dir,
+        signal: ctrl.signal,
+      }),
     (err: unknown) => err instanceof Error && err.name === "AbortError",
   );
   assert.ok(Date.now() - started < 1_000);
 });
 
 test("tts requires text", async () => {
-  const result = await executeTool("tts", { text: "" });
+  const result = await executeTool("tts", { text: "" }, { sandbox: "full_access" });
   assert.equal(result.isError, true);
   assert.match(result.text, /empty argument/);
 });

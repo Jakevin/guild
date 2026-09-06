@@ -93,7 +93,7 @@ Hire a sixth adventurer here. Skills are markdown; you can copy them from a loca
 Treat this as a workshop. Do not point it at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on. Details: [SECURITY.md](../SECURITY.md).
 
 - **OpenCode Free routes prompts to `opencode.ai`.** The default zero-key path sends prompts externally to `opencode.ai`. Wire your own API key or local Ollama if you require private/offline inference.
-- **`run` / `write` are your shell.** Default `full_access`. `run` cwd is `$HOME`. Optional Position `sandbox:` / `GUILD_SANDBOX` is a tool gate, not an OS jail.
+- **`run` / `write` are your shell.** Default `workspace_write` (workspace + `/tmp` + `{GUILD_HOME}/cache`). `run` cwd is the workspace. `full_access` is opt-in. Optional Position `sandbox:` / `GUILD_SANDBOX` is a tool gate, not an OS jail.
 - **MCP spawns as you, with no import / consent.** Guild `mcp.json` **and** host Claude / Cursor / Codex configs. Env is inherited. To keep a host server out: remove it from the host file, or set `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml`.
 - **Browser snapshots your Chrome logins by default.** Set `GUILD_BROWSER_REAL_PROFILE=0` for a throwaway empty profile.
 

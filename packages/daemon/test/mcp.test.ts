@@ -56,7 +56,7 @@ test("stdio MCP lists tools and echoes", async () => {
   const viaTools = await executeTool(
     refs[0].callName,
     { text: "via-tool" },
-    { dataDir: dir, mcpTools: refs },
+    { sandbox: "full_access", dataDir: dir, mcpTools: refs },
   );
   assert.equal(viaTools.isError, false);
   assert.match(viaTools.text, /via-tool/);

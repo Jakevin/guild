@@ -61,7 +61,14 @@ export type FreebuffToolParse =
   | { ok: false; code: "freebuff_tool_parse" };
 
 export function allowedFreebuffToolNames(ctx: ToolContext = {}): string[] {
-  const names = guildTools(ctx.skills ?? [], ctx).map((tool) => tool.name);
+  // Fence lists builtins even under workspace_write; gateTool still refuses them.
+  const mcpOk = ctx.sandbox === undefined || ctx.sandbox === "full_access";
+  const advertised = {
+    ...ctx,
+    sandbox: "full_access" as const,
+    mcpTools: mcpOk ? ctx.mcpTools : undefined,
+  };
+  const names = guildTools(ctx.skills ?? [], advertised).map((tool) => tool.name);
   return names.length ? names : [...DEFAULT_FREEBUFF_TOOL_NAMES];
 }
 

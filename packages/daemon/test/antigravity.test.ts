@@ -168,6 +168,7 @@ test("agy mode follows Guild sandbox: plan only for read_only", () => {
     skipPermissions: true,
     terminalSandbox: false,
   });
+  assert.deepEqual(agyModeForSandbox(undefined), agyModeForSandbox("workspace_write"));
 });
 
 test("buildAgyChatPrompt keeps system then turns", () => {

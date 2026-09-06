@@ -106,7 +106,7 @@ pnpm dev
 
 **你還在迴圈裡。** 有人在跑的時候回覆，是排隊；Cmd/Ctrl+↩ 把這句插入當前回合，下一輪以 `<user_steer>` 送到模型。暫停 abort 當下的 `AbortSignal`，但留下 live 氣泡，方便換模型後繼續（下一輪會看到目前的 Think 與已跑完的工具）。停止 abort 那一席的 signal 並結束這輪。沒有審批步驟，也不會先問你。
 
-**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`full_access`（預設）全放；`read_only` 只留 `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`；`workspace_write` 把 `write` / `run` 鎖在 workspace、`/tmp` 與 `{GUILD_HOME}/cache`，MCP、`browser` 和 `image_gen` 直接拒。注意 `workspace_write` 只是路徑與 cwd 的工具閘門，並非 OS jail：`run` 仍以你的使用者身分在 shell 跑，指令仍能依你的權限存取系統。細節見現況限制。
+**閘門。** 工具跑之前，`gateTool`（`harness.ts`）先看這席的 sandbox：`workspace_write`（預設）把 `write` / `run` 鎖在 workspace、`/tmp` 與 `{GUILD_HOME}/cache`，MCP、`browser` 和 `image_gen` 直接拒；`read_only` 只留 `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`；`full_access` 要自己開才全放。注意 `workspace_write` 只是路徑與 cwd 的工具閘門，並非 OS jail：`run` 仍以你的使用者身分在 shell 跑，指令仍能依你的權限存取系統。細節見現況限制。
 
 **為什麼在這裡提 Hermes。** 我們借的是一個形，不是 codebase。Hermes 是最接近的公開範例：本機 agent 能用你的瀏覽器，又不動你正在跑的 Chrome。`browser.ts` 借的就是這個做法——不 CDP live profile（Chrome 136+），把 `last_used` 快照到 `~/.guild/browser-profile/chrome`，操作那份複本。借到這裡為止。回合迴圈是 Guild 自己的（`runAgentLoop` + `gateTool`）；sandbox 名稱是 Codex 形狀，但這不是 Codex app-server 的 harness；`docs/` 裡那個 `Harness` trait 也沒實作。
 
@@ -127,11 +127,11 @@ pnpm dev
 
 **Freebuff Chat 的憑證留在本機。** 官方裝置登入（`~/.config/manicode/credentials.json`）優先；沒有登入時，環境變數 `CODEBUFF_API_KEY` 是備援。無論哪條，token 只用來簽 SDK 對 Codebuff 的請求——遠端 agent 仍不能讀、寫、跑你機器上的任何東西。
 
-**預設：`run` 與 `write` 以你的身分、在你的 shell 執行（`GUILD_SANDBOX` 未設 = `full_access`，除非該 bot 的 POSITION.md 有 `sandbox:`）。** `run` 的預設 cwd 是 `$HOME`（`workspace_write` 用 `GUILD_WORKSPACE` 或本 checkout）。`workspace_write` 僅限制工具路徑與 cwd，不是 Seatbelt 亦非 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
+**預設：`workspace_write`（`GUILD_SANDBOX` 未設，除非該 bot 的 POSITION.md 有 `sandbox:`）。** `run` 的 cwd 是 `GUILD_WORKSPACE` 或本 checkout。MCP / `browser` / `image_gen` 會被拒。`full_access` 要自己開（`GUILD_SANDBOX` 或 Position `sandbox: full_access`），那時 `run` cwd 才是 `$HOME`。閘門只濾工具路徑與 cwd，不是 Seatbelt 亦非 Codex isolation。細節：[SECURITY.md](./SECURITY.md)。
 
 **網路邊界與 /m：預設 loopback，無多使用者驗證。** `guildd` 預設監聽 `127.0.0.1`。若改綁區網或 Tailscale，任何同網段裝置皆可免登入存取 `/` 與 `/m`，並能以你的身分執行回合與工具。細節：[SECURITY.md](./SECURITY.md)。
 
-**MCP 會以你的身分 spawn 本機 process** — Guild 的 `mcp.json` **以及** 本機 Claude / Cursor / Codex 設定，沒有匯入、沒有同意步驟。env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
+**MCP 會以你的身分 spawn 本機 process** — Guild 的 `mcp.json` **以及** 本機 Claude / Cursor / Codex 設定，沒有匯入、沒有同意步驟。這些工具只有 `full_access` 才會進模型目錄。env 會繼承，再疊上該 server 的 `env`。殺傷半徑比 skill 大。把這當工作坊。細節：[SECURITY.md](./SECURITY.md)。
 
 **瀏覽器預設帶你的 Chrome 登入。** `browser` 把你**正在用的** Chrome profile（`last_used`）快照到 `~/.guild/browser-profile/chrome` 再操作那份複本（對齊 Hermes：不開你正在跑的那個）。設 `GUILD_BROWSER_REAL_PROFILE=0` 才用拋棄式空 profile。細節：[SECURITY.md](./SECURITY.md)。
 

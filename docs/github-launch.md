@@ -170,7 +170,7 @@ Has
 - Workshop: skills, spawn subagents, stdio MCP
 - Host Claude / Cursor / Codex MCP live in chat — no import step
 - Local tools: run, read, write, list, skill, spawn, browser, image_gen
-- Optional Position sandbox: / GUILD_SANDBOX tool gate (unset = full_access)
+- Optional Position sandbox: / GUILD_SANDBOX tool gate (unset = workspace_write; full_access is opt-in)
 - SQLite for rooms, messages, trajectory
 - Models you wire: OpenAI, Anthropic, xAI, Ollama, OpenRouter (key or OAuth)
 - Cordis 4 daemon (guildd)
@@ -183,7 +183,7 @@ Does not have
 - HTTP MCP
 
 Security
-run and write execute as you unless you set GUILD_SANDBOX or a Position sandbox: line. Default cwd for run is $HOME. Host MCP spawns as you with no import / consent prompt. Read SECURITY.md before you point this at a machine you care about.
+Default sandbox is workspace_write: run / write stay in the workspace. full_access is opt-in (GUILD_SANDBOX or Position sandbox: full_access) and then cwd is $HOME. Host MCP spawns as you with no import / consent prompt, and reaches the model only under full_access. Read SECURITY.md before you point this at a machine you care about.
 
 Quick start
 pnpm i && pnpm test && pnpm dev
@@ -209,7 +209,7 @@ Shipped (this repo, v0.2.0)
 - @mention one adventurer; unnamed follow-up goes to the last speaker; @all is parallel
 - Channel.md / DM
 - Tools: run, read, write, list, skill, spawn, browser, image_gen
-- Optional Position sandbox: / GUILD_SANDBOX (unset = full_access — still your shell)
+- Optional Position sandbox: / GUILD_SANDBOX (unset = workspace_write; full_access is opt-in)
 - stdio MCP (mcp.json + host Claude/Cursor/Codex, no import)
 - Data in ~/.guild (`guild.sqlite` for rooms/messages/trajectory; markdown for library)
 

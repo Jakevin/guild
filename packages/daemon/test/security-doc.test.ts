@@ -15,6 +15,7 @@ test("SECURITY.md states restart, /host scope, and workspace_write is not a jail
   assert.match(md, /not a chroot/);
   assert.match(md, /mcp\.json/);
   assert.match(md, /cross-origin refused/);
+  assert.match(md, /Default sandbox is `workspace_write`/);
   assert.match(md, /workspace_write` is a Guild tool gate, not a shell jail/);
   assert.match(md, /plus `\/tmp` and `\{GUILD_HOME\}\/cache`/);
   assert.match(md, /execFile\(\$SHELL, \["-lc", command\]\)/);

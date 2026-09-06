@@ -106,7 +106,7 @@ One turn, one process: `@handle` → `chatReply` → `HarnessService.turn` → `
 
 **You stay in it.** A mid-turn reply queues; Cmd/Ctrl+↩ injects it into the live turn and it reaches the model next round as `<user_steer>`. Pause aborts the in-flight `AbortSignal` but keeps the live bubble so you can switch models and Continue (the next round sees thinking and tools so far). Stop aborts that seat's signal and ends the turn. There is no approval step; nothing asks you first.
 
-**The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `full_access` (default) lets everything through, `read_only` keeps `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`, `workspace_write` confines `write` / `run` to the workspace, `/tmp`, and `{GUILD_HOME}/cache`, and refuses MCP, `browser`, and `image_gen`. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
+**The gate.** Before a tool runs, `gateTool` (`harness.ts`) reads the seat's sandbox: `workspace_write` (default) confines `write` / `run` to the workspace, `/tmp`, and `{GUILD_HOME}/cache`, and refuses MCP, `browser`, and `image_gen`. `read_only` keeps `read` / `list` / `skill` / `spawn` / `read_spawn` / `cronjob`. `full_access` is opt-in and lets everything through. It is a tool gate in one process running as you — what it does not protect you from is spelled out in Current limits.
 
 **Why Hermes is named here.** We borrowed one shape, not a codebase. Hermes is the closest published example of a local agent that browses as you without hijacking the browser you are using, so `browser.ts` copies that: never CDP the live Chrome profile (Chrome 136+), snapshot `last_used` into `~/.guild/browser-profile/chrome`, drive the copy. The borrowing stops there. The turn loop is Guild's own (`runAgentLoop` + `gateTool`); the sandbox names are Codex-shaped but this is not the Codex app-server harness; the `Harness` trait in `docs/` was never shipped.
 
@@ -127,11 +127,11 @@ Files: `packages/daemon/src/harness.ts` (loop, gate, policy) · `generate.ts` (s
 
 **Freebuff Chat credentials stay local.** Official device login (`~/.config/manicode/credentials.json`) wins; with no login, a `CODEBUFF_API_KEY` from your environment is the fallback. Either way the token only signs SDK requests to Codebuff — the remote agent still cannot read, write, or run anything on your machine.
 
-**Default: `run` and `write` execute as you, in your shell (`GUILD_SANDBOX` unset = `full_access`, unless the bot's POSITION.md has `sandbox:`).** Default cwd for `run` is `$HOME` (`workspace_write` uses `GUILD_WORKSPACE` or this checkout). The `workspace_write` gate only filters tool paths and cwd; it is not Seatbelt or Codex isolation. Details: [SECURITY.md](./SECURITY.md).
+**Default: `workspace_write` (`GUILD_SANDBOX` unset, unless the bot's POSITION.md has `sandbox:`).** `run` cwd is `GUILD_WORKSPACE` or this checkout. MCP / `browser` / `image_gen` are refused. `full_access` is opt-in (`GUILD_SANDBOX` or Position `sandbox: full_access`) and uses `$HOME` as `run` cwd. The gate only filters tool paths and cwd; it is not Seatbelt or Codex isolation. Details: [SECURITY.md](./SECURITY.md).
 
 **Network & /m: loopback by default, no multi-user authentication.** `guildd` binds `127.0.0.1`. If rebound to LAN or Tailscale, `/` and `/m` are accessible by anyone on that network without login, with full ability to trigger turns and tools as you. Details: [SECURITY.md](./SECURITY.md).
 
-**MCP spawns a local process as you** — Guild `mcp.json` **and** host Claude / Cursor / Codex configs, with no import / consent prompt. Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
+**MCP spawns a local process as you** — Guild `mcp.json` **and** host Claude / Cursor / Codex configs, with no import / consent prompt. Those tools reach the model only under `full_access`. Env is inherited, then overlayed with the server's `env`. Blast radius is larger than a skill. Treat this as a workshop. Details: [SECURITY.md](./SECURITY.md).
 
 **Browser snapshots your Chrome logins by default.** `browser` copies the **active** Chrome profile (`last_used`) into `~/.guild/browser-profile/chrome` and drives that copy (Hermes-shaped — never the live profile). Set `GUILD_BROWSER_REAL_PROFILE=0` for a throwaway empty profile. Details: [SECURITY.md](./SECURITY.md).
 

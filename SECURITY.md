@@ -1,6 +1,6 @@
 # Security
 
-**Default sandbox is `full_access`: `run` / `write` use your user shell.** Treat Guild as a workshop / experiment, not as something you point at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on.
+**Default sandbox is `workspace_write`:** `run` / `write` stay in the workspace (plus `/tmp` and `{GUILD_HOME}/cache`). MCP, `browser`, `image_gen`, and `tts` are refused. It is still a tool gate, not an OS jail — a `run` whose cwd is inside the workspace can `cat ~/.npmrc`. Opt in to `full_access` (`GUILD_SANDBOX` or Position `sandbox: full_access`) for the unsandboxed shell. Treat Guild as a workshop / experiment, not as something you point at untrusted prompts, untrusted repos, or a machine you cannot afford to lose files on.
 
 ## What ships today
 
@@ -8,7 +8,7 @@ Guild bots can call local tools. The process is `guildd` running as **you**.
 
 | Tool | What it actually does |
 |---|---|
-| `run` | `execFile($SHELL, ["-lc", command])`. Default cwd is `$HOME`. No default wall-clock (Pi bash: optional `timeout` in seconds). User Stop aborts. |
+| `run` | `execFile($SHELL, ["-lc", command])`. Default cwd is the workspace (`GUILD_WORKSPACE` or this checkout). `full_access` uses `$HOME`. No default wall-clock (Pi bash: optional `timeout` in seconds). User Stop aborts. |
 | `write` | Writes any path the process can write. Creates parent folders. |
 | `read` / `list` | Read any path the process can read. |
 | `skill` / `spawn` / `image_gen` | In-process. `spawn` cannot nest. Read-only subagents cannot `write`. |
@@ -17,21 +17,21 @@ Guild bots can call local tools. The process is `guildd` running as **you**.
 
 The only hard refusals in `run` are a narrow `rm -rf /` pattern and `mkfs`. That is not an OS jail.
 
-MCP blast radius is larger than a skill: it is another process with your uid, your env, and whatever the server binary does. **Host MCP is live without importing** — anything already wired for Claude / Cursor / Codex is spawned on bot turns. To keep a host server out of Guild, remove it from the host file. Setting `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml` unloads Guild MCP entirely (`GET /mcp/servers` is empty; mutating routes 503), including `mcp.json`. It does **not** sandbox `run` / `write`.
+MCP blast radius is larger than a skill: it is another process with your uid, your env, and whatever the server binary does. **Host MCP is live without importing** — anything already wired for Claude / Cursor / Codex is listed, and spawned on bot turns under `full_access`. The default `workspace_write` seat does not get those tools. To keep a host server out of Guild, remove it from the host file. Setting `id: mcp` to `disabled: true` in `packages/daemon/cordis.yml` unloads Guild MCP entirely (`GET /mcp/servers` is empty; mutating routes 503), including `mcp.json`. It does **not** sandbox `run` / `write`.
 
 ### Optional sandbox (`GUILD_SANDBOX`)
 
-Names match Codex: `read_only` | `workspace_write` | `full_access`. Unset = `full_access`, unless the bot's POSITION.md has a `sandbox:` line (`GUILD_SANDBOX` still wins).
+Names match Codex: `read_only` | `workspace_write` | `full_access`. Unset = `workspace_write`, unless the bot's POSITION.md has a `sandbox:` line (`GUILD_SANDBOX` still wins).
 
-| Mode | `run` / `write` | MCP / `image_gen` |
+| Mode | `run` / `write` | MCP / `image_gen` / `browser` / `tts` |
 |---|---|---|
-| `full_access` (default) | Any path the process can touch. `run` cwd defaults to `$HOME`. | Allowed |
-| `workspace_write` | `GUILD_WORKSPACE` (else the Guild checkout), plus `/tmp` and `{GUILD_HOME}/cache`. Relative paths resolve in the workspace. | Refused (child is unsandboxed) |
+| `workspace_write` (default) | `GUILD_WORKSPACE` (else the Guild checkout), plus `/tmp` and `{GUILD_HOME}/cache`. Relative paths resolve in the workspace. `run` cwd defaults to that workspace. | Refused (child is unsandboxed) |
+| `full_access` | Any path the process can touch. `run` cwd defaults to `$HOME`. | Allowed |
 | `read_only` | Refused | Refused |
 
 This is a Guild gate around `executeTool`, not Codex `app-server` isolation and not a kernel sandbox. `spawn` inherits the same mode.
 
-**Position markdown** may include `sandbox: read_only` or `sandbox: workspace_write`. That is the per-bot default when `GUILD_SANDBOX` is unset. `GUILD_SANDBOX` still wins. Position files do **not** change OS permissions. There is no approval prompt.
+**Position markdown** may include `sandbox: read_only`, `sandbox: workspace_write`, or `sandbox: full_access`. That is the per-bot default when `GUILD_SANDBOX` is unset. Missing line = `workspace_write`. `GUILD_SANDBOX` still wins. Position files do **not** change OS permissions. There is no approval prompt.
 
 Data lives under `GUILD_HOME` (default `~/.guild`): `guild.sqlite` (rooms, messages, trajectory; WAL), plus bots / library markdown, `models.json`, `oauth.json` (mode `0600`), optional `browser-profile/` (copied Chrome logins when real-profile browsing is on), optional `freebuff.json` / `freebuff-scratch/` when Freebuff Chat is used, and optional `commandcode.json` when Command Code is used. API keys may be env vars (`$OPENAI_API_KEY`, `$COMMAND_CODE_API_KEY`, …) or literals in `models.json`. Do not commit `~/.guild`.
 

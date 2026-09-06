@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { ToolContext, ToolOutcome, ToolTrace } from "./tools.ts";
 
 /**
- * Codex-shaped sandbox names. Default is full_access (today's unsandboxed tools).
- * This is the first Harness cut: a gate around executeTool, not Codex app-server.
+ * Codex-shaped sandbox names. Default is workspace_write (Codex workspace-write).
+ * full_access is opt-in. This is a gate around executeTool, not Codex app-server.
  */
 export const SANDBOX_MODES = [
   "read_only",
@@ -15,6 +15,9 @@ export const SANDBOX_MODES = [
 ] as const;
 
 export type Sandbox = (typeof SANDBOX_MODES)[number];
+
+/** Floor when env / Position / caller omit a mode. */
+export const DEFAULT_SANDBOX: Sandbox = "workspace_write";
 
 export type HarnessPolicy = {
   sandbox: Sandbox;
@@ -36,10 +39,10 @@ export function parseSandbox(raw: unknown): Sandbox {
   if (raw === "read_only" || raw === "workspace_write" || raw === "full_access") {
     return raw;
   }
-  return "full_access";
+  return DEFAULT_SANDBOX;
 }
 
-/** Set `GUILD_SANDBOX` wins. Unset is undefined, not full_access. */
+/** Set `GUILD_SANDBOX` wins. Unset is undefined, not a mode. */
 export function envSandbox(env: NodeJS.ProcessEnv = process.env): Sandbox | undefined {
   const raw = env.GUILD_SANDBOX;
   if (raw === "read_only" || raw === "workspace_write" || raw === "full_access") {
@@ -49,7 +52,7 @@ export function envSandbox(env: NodeJS.ProcessEnv = process.env): Sandbox | unde
 }
 
 export function sandboxFromEnv(env: NodeJS.ProcessEnv = process.env): Sandbox {
-  return envSandbox(env) ?? "full_access";
+  return envSandbox(env) ?? DEFAULT_SANDBOX;
 }
 
 /**
@@ -98,7 +101,7 @@ export function policyFor(
     envSandbox(env) ??
     input.sandbox ??
     sandboxFromPosition(input.position ?? "") ??
-    "full_access";
+    DEFAULT_SANDBOX;
   return {
     sandbox,
     workspace: workspaceFromEnv(env, input.workspace),
@@ -264,11 +267,13 @@ export function gateTool(
     };
   }
 
-  // browser (CDP into the user's Chrome profile) and anything unnamed: refuse.
-  return {
-    text: `sandbox=workspace_write refused ${name}; use full_access`,
-    isError: true,
-  };
+  if (name === "browser") {
+    return {
+      text: "sandbox=workspace_write refused browser; use full_access",
+      isError: true,
+    };
+  }
+  return null;
 }
 
 export type LoopCall = {
@@ -391,9 +396,9 @@ export async function runAgentLoop(input: {
       thinkingChunks.push(asked.thinking.trim());
       progress();
     }
-    pushText(asked.text);
     const thinking = thinkingOf();
     if (phase === "wrap") {
+      pushText(asked.text);
       takeSteers(input.toolCtx);
       return finish(emptyAfterTools, true);
     }
@@ -403,11 +408,13 @@ export async function runAgentLoop(input: {
         input.onRetry?.(late);
         continue;
       }
+      pushText(asked.text);
       if (draftOf()) return finish("");
       if (traces.length) return finish(emptyAfterTools, true);
       if (input.nullIfNoTraces) return null;
       return finish(emptyAfterTools);
     }
+    pushText(asked.text);
     const before = traces.length;
     const outcomes = await Promise.all(
       asked.calls.map((call) =>

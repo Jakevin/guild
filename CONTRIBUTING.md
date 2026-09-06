@@ -26,7 +26,7 @@ Attachments, `@mention`, and retry are enough. New composer toys, extra room typ
 
 ## Next product cut
 
-Harness: `runAgentLoop` in `src/harness.ts` (OpenAI / Anthropic / OAuth all call it). Tools go through `ctx.tools`. Default sandbox is `full_access` unless POSITION.md has `sandbox:` or `GUILD_SANDBOX` is set. Next is still **not** Codex app-server / task board / Tauri. Target docs: `docs/2026-08-23-guild-design.md` and `docs/2026-08-23-codex-harness-addendum.md`.
+Harness: `runAgentLoop` in `src/harness.ts` (OpenAI / Anthropic / OAuth all call it). Tools go through `ctx.tools`. Default sandbox is `workspace_write` unless POSITION.md has `sandbox:` or `GUILD_SANDBOX` is set. `full_access` is opt-in. Next is still **not** Codex app-server / task board / Tauri. Target docs: `docs/2026-08-23-guild-design.md` and `docs/2026-08-23-codex-harness-addendum.md`.
 
 ## Release
 
