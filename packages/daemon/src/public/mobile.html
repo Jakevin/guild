@@ -248,6 +248,7 @@
               startedAt: row.startedAt || "",
               paused: Boolean(row.paused),
               messageId: row.messageId ? String(row.messageId) : "",
+              draft: row.draft ? String(row.draft) : "",
             }));
         }
         function isBusy() {
@@ -476,6 +477,11 @@
                     "</button>"
                   : "") +
                 "</div>" +
+                (live.draft
+                  ? '<div class="bubble"><div class="assistant-text">' +
+                    formatBody(live.draft) +
+                    "</div></div>"
+                  : "") +
                 liveStepsHtml(live.steps) +
                 '<div class="turn-actions">' +
                 (live.paused

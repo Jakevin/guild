@@ -69,6 +69,8 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /payload\.mentions/);
   assert.match(html, /deepDiving/);
   assert.match(html, /live.messageId/);
+  assert.match(html, /draft: row\.draft \? String\(row\.draft\) : ""/);
+  assert.match(html, /live\.draft/);
   assert.match(html, /data-copy-stat/);
   assert.match(html, /live\.stop/);
   assert.match(html, /summonedBotIds|botsFromSend/);
@@ -96,7 +98,9 @@ test("away page shares the hall's enamel tokens and press language", () => {
   const css = readFileSync(MOBILE_CSS, "utf8");
   assert.match(css, /--enamel:/);
   assert.match(css, /--paper:/);
-  assert.match(css, /--bubble:/);
+  assert.match(css, /--bubble:\s*#222222/);
+  assert.match(css, /--code:\s*#DF4F5E/i);
+  assert.match(css, /--code-bg:\s*#543639/i);
   assert.match(css, /--danger:/);
   assert.match(css, /--press:\s*0\.97/);
   assert.match(css, /--ease-out:\s*cubic-bezier\(0\.23, 1, 0\.32, 1\)/);

@@ -112,6 +112,8 @@ export type LiveTurn = {
   messageId?: string;
   /** 1:1 交辦 room when this live turn is a bot→bot hop. */
   peerId?: string;
+  /** Mid-turn recap shown as a bubble while tools still run. */
+  draft?: string;
 };
 
 export class GuildStore {

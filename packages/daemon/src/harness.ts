@@ -283,10 +283,17 @@ export type LoopAsk = {
   thinking?: string;
 };
 
+/** One model recap and/or the tool round that followed it. */
+export type LoopBeat = {
+  text?: string;
+  traces?: ToolTrace[];
+};
+
 export type AgentLoopResult = {
   text: string;
   traces: ToolTrace[];
   thinking: string;
+  beats: LoopBeat[];
 };
 
 /**
@@ -326,10 +333,30 @@ export async function runAgentLoop(input: {
   const exhausted = input.exhausted ?? TOOL_LOOP_EXHAUSTED;
   const emptyAfterTools = input.emptyAfterTools ?? EMPTY_AFTER_TOOLS;
   const thinkingOf = () => thinkingChunks.join("\n\n");
+  const beats: LoopBeat[] = [];
+  const draftOf = () =>
+    beats
+      .map((beat) => beat.text?.trim())
+      .filter(Boolean)
+      .join("\n\n");
   const rounds: import("./tools.ts").ToolTrace[][] = [];
-  const finish = (text: string, abortKids = false): AgentLoopResult => {
+  const progress = () =>
+    emitProgress(input.toolCtx, traces, thinkingOf(), draftOf());
+  const pushText = (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    const last = beats[beats.length - 1];
+    if (last?.text && !last.traces) {
+      last.text = `${last.text}\n\n${text}`;
+    } else {
+      beats.push({ text });
+    }
+    progress();
+  };
+  const finish = (fallback: string, abortKids = false): AgentLoopResult => {
     if (abortKids) abortBackgroundSpawns(input.toolCtx);
-    return { text, traces, thinking: thinkingOf() };
+    const text = draftOf() || fallback;
+    return { text, traces, thinking: thinkingOf(), beats };
   };
 
   for (let round = 0; ; round++) {
@@ -343,7 +370,7 @@ export async function runAgentLoop(input: {
       if (!traces.length && input.nullIfNoTraces) return null;
       return finish(exhausted, true);
     }
-    emitProgress(input.toolCtx, traces, thinkingOf());
+    progress();
     const wrapPrompt =
       phase === "wrap"
         ? stalled
@@ -362,13 +389,13 @@ export async function runAgentLoop(input: {
     }
     if (asked.thinking?.trim()) {
       thinkingChunks.push(asked.thinking.trim());
-      emitProgress(input.toolCtx, traces, thinkingOf());
+      progress();
     }
+    pushText(asked.text);
     const thinking = thinkingOf();
     if (phase === "wrap") {
       takeSteers(input.toolCtx);
-      const text = asked.text.trim();
-      return finish(text || emptyAfterTools, true);
+      return finish(emptyAfterTools, true);
     }
     if (!asked.calls.length) {
       const late = takeSteers(input.toolCtx);
@@ -376,8 +403,7 @@ export async function runAgentLoop(input: {
         input.onRetry?.(late);
         continue;
       }
-      const text = asked.text.trim();
-      if (text) return finish(text);
+      if (draftOf()) return finish("");
       if (traces.length) return finish(emptyAfterTools, true);
       if (input.nullIfNoTraces) return null;
       return finish(emptyAfterTools);
@@ -394,7 +420,10 @@ export async function runAgentLoop(input: {
         ),
       ),
     );
-    rounds.push(traces.slice(before));
+    const batch = traces.slice(before);
+    rounds.push(batch);
+    beats.push({ traces: batch });
+    progress();
     input.onTools?.(asked.calls, outcomes);
   }
 }

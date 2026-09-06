@@ -9,15 +9,9 @@ export function stripModelDump(text: string): string {
     .trim();
 }
 
-export function assembleParts(input: {
-  thinking?: string;
-  traces?: ToolTrace[];
-  text?: string;
-}): ChatPart[] {
+function traceParts(traces: ToolTrace[]): ChatPart[] {
   const parts: ChatPart[] = [];
-  const thinking = input.thinking?.trim();
-  if (thinking) parts.push({ type: "thinking", text: thinking });
-  for (const trace of input.traces ?? []) {
+  for (const trace of traces) {
     if (trace.name === "skill") {
       parts.push({
         type: "skill",
@@ -58,8 +52,33 @@ export function assembleParts(input: {
       ...(label ? { label } : {}),
     });
   }
-  const text = stripModelDump(input.text ?? "");
-  if (text) parts.push({ type: "text", text });
+  return parts;
+}
+
+export function assembleParts(input: {
+  thinking?: string;
+  traces?: ToolTrace[];
+  text?: string;
+  /** Recap / tool / recap order from the loop. Falls back to traces-then-text. */
+  beats?: Array<{ text?: string; traces?: ToolTrace[] }>;
+}): ChatPart[] {
+  const parts: ChatPart[] = [];
+  const thinking = input.thinking?.trim();
+  if (thinking) parts.push({ type: "thinking", text: thinking });
+  const pushText = (raw?: string) => {
+    const text = stripModelDump(raw ?? "");
+    if (text) parts.push({ type: "text", text });
+  };
+  if (input.beats?.length) {
+    for (const beat of input.beats) {
+      pushText(beat.text);
+      if (beat.traces?.length) parts.push(...traceParts(beat.traces));
+    }
+    if (!parts.some((part) => part.type === "text")) pushText(input.text);
+  } else {
+    parts.push(...traceParts(input.traces ?? []));
+    pushText(input.text);
+  }
   return parts;
 }
 

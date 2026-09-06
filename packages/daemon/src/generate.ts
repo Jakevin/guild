@@ -365,7 +365,7 @@ When work belongs to someone else, put @handle at the start of a line with a wri
 Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that spec into a 1:1 交辦 so the next seat works from the brief, not the whole quest log; the public reply still lands on this quest. Do not wait for the human to press a button.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster with 加入 (max ${CHANNEL_ROSTER_CAP} on a quest). @handle never adds a seat.
 You may @handle any staffed teammate whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
-Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.
+Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
 - Memory: Channel.md is the task. MEMORY.md is standing notes. The compact log is working memory — do not recap the whole thread.
@@ -378,7 +378,7 @@ export const WHISPER_RULES = `# Whisper
 This is a 1:1 whisper with the human. Only you speak here.
 Do not @handle other bots. Do not hand off, recruit, or start another seat in this thread.
 If the work belongs to another adventurer, say so in prose and ask the human to take it to that quest or that bot's whisper. Do not write a line-start @handle spec here.
-Stay quiet: no status theater, no "I'll start now." Speak when you finish, block, or need a decision. Money, sends, and destructive actions wait for the human.
+Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
 - Memory: MEMORY.md is standing notes. There is no Channel.md in a whisper. Do not recap the whole thread.
@@ -718,6 +718,7 @@ async function tryChatLlm(
     thinking: result.thinking,
     traces: result.traces,
     text: result.text,
+    beats: result.beats,
   });
   return {
     body: bodyFromParts(parts, result.text),

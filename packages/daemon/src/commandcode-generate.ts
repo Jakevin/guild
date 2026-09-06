@@ -34,6 +34,7 @@ export type CommandCodeGenerateResult = {
   text: string;
   traces: ToolTrace[];
   thinking: string;
+  beats?: import("./harness.ts").LoopBeat[];
   usage?: ChatUsage;
 };
 
@@ -275,11 +276,12 @@ export async function completeCommandCodeGenerate(input: {
       thinking: thinkingChunks.join("\n\n"),
     };
   }
-  emitProgress(input.ctx, traces, looped.thinking);
+  emitProgress(input.ctx, traces, looped.thinking, looped.text);
   return {
     text: looped.text,
     traces: looped.traces,
     thinking: looped.thinking,
+    beats: looped.beats,
     usage: withDuration(usage, started),
   };
 }

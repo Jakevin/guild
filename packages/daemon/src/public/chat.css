@@ -7,11 +7,12 @@
   --bg: #0B0E12;
   --panel: #10141A;
   --lift: #161C24;
-  --bubble: #1A222C;
+  --bubble: #222222;
   --you: #B6D4C4;
   --you-text: #1A2420;
   --assistant: #ececec;
-  --code: #00ccff;
+  --code: #DF4F5E;
+  --code-bg: #543639;
   --text: #E8E4DC;
   --muted: #8B8F96;
   --line: #1C222C;
@@ -1618,17 +1619,17 @@ a.invite-btn:hover { text-decoration: none; }
   font-weight: 500;
   padding: 0.12em 0.4em;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--code-bg);
   color: var(--code);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--code-bg);
   line-height: inherit;
   white-space: break-spaces;
   word-break: break-word;
 }
 .assistant-text code.md-file {
   color: var(--code);
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--code-bg);
+  border-color: var(--code-bg);
 }
 .assistant-text .md-fence {
   margin: 0.25rem 0 0.75rem;

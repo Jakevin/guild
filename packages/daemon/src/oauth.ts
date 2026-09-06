@@ -1335,12 +1335,16 @@ export async function completeOAuth(input: {
   usage.provider = input.pickerId;
   usage.model = modelId;
   const started = Date.now();
-  const finish = (text: string) => ({
+  const finish = (
+    text: string,
+    beats?: import("./harness.ts").LoopBeat[],
+  ) => ({
     text,
     provider: input.pickerId,
     model: modelId,
     traces,
     thinking: thinkingChunks.join("\n\n"),
+    ...(beats ? { beats } : {}),
     usage: withDuration(usage, started),
   });
   const toolCtx: ToolContext = input.toolCtx ?? {
@@ -1501,7 +1505,7 @@ export async function completeOAuth(input: {
     },
   });
   if (!looped) return finish(TOOL_LOOP_EXHAUSTED);
-  return finish(looped.text);
+  return finish(looped.text, looped.beats);
 }
 
 function stubAssistant(

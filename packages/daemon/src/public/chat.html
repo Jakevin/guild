@@ -2217,6 +2217,7 @@
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
             messageId: row.messageId ? String(row.messageId) : "",
+            draft: row.draft ? String(row.draft) : "",
           }));
       }
       function rebuildBusyBots() {
@@ -2247,6 +2248,7 @@
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
             messageId: row.messageId ? String(row.messageId) : "",
+            draft: row.draft ? String(row.draft) : "",
             room: { kind: r.kind, id: r.id },
           }));
         state.lives = others.concat(tagged);
@@ -2362,7 +2364,14 @@
                 "</button>") +
             "</div>"
           : "";
+        const draft = live && live.draft ? String(live.draft).trim() : "";
+        const draftHtml = draft
+          ? '<div class="bubble"><div class="assistant-text md">' +
+            formatInline(draft) +
+            "</div></div>"
+          : "";
         return (
+          draftHtml +
           '<div class="turn-live">' +
           '<div class="turn-head">' +
           '<div class="turn-status">' +

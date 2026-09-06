@@ -166,6 +166,15 @@ test("toLiveTurn omits Think when the model has not thought", () => {
   assert.equal(live.thinking, "");
 });
 
+test("toLiveTurn surfaces a mid-turn recap as draft", () => {
+  const live = toLiveTurn("bot-1", {
+    thinking: "",
+    traces: [],
+    draft: "先對 Title。",
+  });
+  assert.equal(live.draft, "先對 Title。");
+});
+
 test("live turn pins Think and keeps at most 5 rows", () => {
   const traces = Array.from({ length: 8 }, (_, i) => ({
     name: "read",

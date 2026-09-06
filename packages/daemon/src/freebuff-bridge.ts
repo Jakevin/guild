@@ -727,6 +727,7 @@ async function runLockedTurn(input: {
   model: string;
   traces: ToolTrace[];
   thinking: string;
+  beats?: import("./harness.ts").LoopBeat[];
   usage: { provider: string; model: string };
 }> {
   const route = resolveFreebuffOfficialRoute(input.target.model);
@@ -842,6 +843,7 @@ async function runLockedTurn(input: {
     model,
     traces: looped?.traces ?? traces,
     thinking: looped?.thinking ?? "",
+    ...(looped?.beats ? { beats: looped.beats } : {}),
     usage: { provider: input.target.providerId, model },
   };
 }
@@ -860,6 +862,7 @@ export async function runFreebuffChatComplete(input: {
   model: string;
   traces: ToolTrace[];
   thinking: string;
+  beats?: import("./harness.ts").LoopBeat[];
   usage: { provider: string; model: string };
 }> {
   const signal = input.signal ?? input.toolCtx?.signal;

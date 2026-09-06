@@ -48,6 +48,8 @@ export type ToolTrace = {
 export type ToolProgress = {
   thinking: string;
   traces: ToolTrace[];
+  /** Visible recap so far (text that arrived with tool calls). */
+  draft?: string;
 };
 
 export type ToolOutcome = { text: string; isError: boolean };
@@ -702,8 +704,13 @@ export function emitProgress(
   ctx: ToolContext,
   traces: ToolTrace[],
   thinking = "",
+  draft = "",
 ): void {
-  ctx.onProgress?.({ traces, thinking });
+  ctx.onProgress?.({
+    traces,
+    thinking,
+    ...(draft ? { draft } : {}),
+  });
 }
 
 export function throwIfAborted(ctx: ToolContext): void {

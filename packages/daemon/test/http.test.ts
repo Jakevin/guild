@@ -654,6 +654,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /id="prompt-rail"/);
   assert.match(home, /function showToast/);
   assert.match(home, /function liveTurnsFrom/);
+  assert.match(home, /draft: row\.draft \? String\(row\.draft\) : ""/);
   assert.match(home, /function liveMessageIdHtml/);
   assert.match(home, /live.messageId/);
   assert.match(home, /turn-head/);
@@ -690,7 +691,10 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /body\.nav-open \.sidebar/);
   assert.match(chatCss, /max-width: 760px/);
   assert.match(chatCss, /--bg:\s*#0B0E12/);
+  assert.match(chatCss, /--bubble:\s*#222222/);
   assert.match(chatCss, /--you-text:\s*#1A2420/);
+  assert.match(chatCss, /--code:\s*#DF4F5E/i);
+  assert.match(chatCss, /--code-bg:\s*#543639/i);
   assert.match(
     chatCss,
     /\.msg\.you\.steer \.bubble \{[\s\S]*?color:\s*var\(--text\)/,

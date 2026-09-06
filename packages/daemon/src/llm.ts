@@ -688,6 +688,7 @@ export async function llmComplete(input: {
   model: string;
   traces: ToolTrace[];
   thinking: string;
+  beats?: import("./harness.ts").LoopBeat[];
   usage?: ChatUsage;
 } | null> {
   const env = input.env ?? process.env;
@@ -782,6 +783,7 @@ export async function llmComplete(input: {
       model: target.model,
       traces: done.traces,
       thinking: done.thinking,
+      ...(done.beats ? { beats: done.beats } : {}),
       usage: {
         ...(done.usage ?? {}),
         provider: target.providerId,
@@ -810,6 +812,7 @@ type DispatchResult = {
   text: string;
   traces: ToolTrace[];
   thinking: string;
+  beats?: import("./harness.ts").LoopBeat[];
   usage?: ChatUsage;
 };
 
@@ -1064,6 +1067,7 @@ async function completeOpenAiTools(
     text: looped.text,
     traces: looped.traces,
     thinking: looped.thinking,
+    beats: looped.beats,
     usage: withDuration(usage, started),
   };
 }
@@ -1197,6 +1201,7 @@ async function completeAnthropicTools(
     text: looped.text,
     traces: looped.traces,
     thinking: looped.thinking,
+    beats: looped.beats,
     usage: withDuration(usage, started),
   };
 }
@@ -1424,6 +1429,7 @@ async function completeZenResponsesTools(
     text: looped.text,
     traces: looped.traces,
     thinking: looped.thinking,
+    beats: looped.beats,
     usage: withDuration(usage, started),
   };
 }

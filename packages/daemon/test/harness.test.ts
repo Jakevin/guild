@@ -85,6 +85,51 @@ test("read_only refuses run/write/mcp and allows read", async () => {
   assert.equal(gateTool("cronjob", { action: "list" }, ctx), null);
 });
 
+test("mid-loop recap is kept and joined with the final reply", async () => {
+  const drafts: string[] = [];
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+      onProgress: (update) => {
+        if (update.draft) drafts.push(update.draft);
+      },
+    },
+    ask: async ({ round }) => {
+      if (round === 0) {
+        return {
+          calls: [{ id: "1", name: "read", args: { path: "a" } }],
+          text: "先對 Title。",
+        };
+      }
+      return { calls: [], text: "四城都對了。" };
+    },
+  });
+  assert.equal(result?.text, "先對 Title。\n\n四城都對了。");
+  assert.equal(result?.beats.length, 3);
+  assert.equal(result?.beats[0]?.text, "先對 Title。");
+  assert.equal(result?.beats[1]?.traces?.length, 1);
+  assert.equal(result?.beats[2]?.text, "四城都對了。");
+  assert.ok(drafts.includes("先對 Title。"));
+  assert.ok(drafts.includes("先對 Title。\n\n四城都對了。"));
+});
+
+test("empty wrap keeps an earlier recap instead of emptyAfterTools", async () => {
+  const same = { id: "1", name: "read", args: { path: "/tmp/a" } };
+  const result = await runAgentLoop({
+    toolCtx: {
+      dispatch: async () => ({ text: "ok", isError: false }),
+    },
+    ask: async ({ round, wrap }) => {
+      if (wrap) return { calls: [same], text: "" };
+      if (round === 0) {
+        return { calls: [{ ...same, id: "0" }], text: "改完上線了。" };
+      }
+      return { calls: [{ ...same, id: String(round) }], text: "" };
+    },
+  });
+  assert.equal(result?.text, "改完上線了。");
+});
+
 test("runAgentLoop runs a round's tools in parallel", async () => {
   const started: number[] = [];
   const result = await runAgentLoop({

@@ -289,6 +289,8 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /written spec/);
   assert.match(system, /start of a line/);
   assert.match(system, /Stay quiet/);
+  assert.match(system, /short recap before more tools/);
+  assert.match(system, /End with what changed/);
   assert.match(system, /Do not @all/);
   assert.match(system, /even if the human only named you this turn/);
   assert.match(system, /Channel.md is the task/);
@@ -518,6 +520,37 @@ test("assembleParts orders Think, tools, Skill, text", () => {
   assert.equal(parts[2]?.type, "tool");
   assert.equal(parts[3]?.type, "text");
   assert.equal(bodyFromParts(parts), "32 GB.");
+});
+
+test("assembleParts interleaves recap text with the tool round that followed", () => {
+  const parts = assembleParts({
+    thinking: "plan",
+    beats: [
+      { text: "先對 Title。" },
+      {
+        traces: [
+          {
+            name: "read",
+            args: { path: "index.html" },
+            text: "ok",
+            isError: false,
+          },
+        ],
+      },
+      { text: "四城都對了。" },
+    ],
+    traces: [
+      {
+        name: "read",
+        args: { path: "index.html" },
+        text: "ok",
+        isError: false,
+      },
+    ],
+    text: "先對 Title。\n\n四城都對了。",
+  });
+  assert.equal(parts.map((part) => part.type).join(","), "thinking,text,tool,text");
+  assert.equal(bodyFromParts(parts), "先對 Title。\n\n四城都對了。");
 });
 
 test("assembleParts strips leaked skill XML from the visible reply", () => {

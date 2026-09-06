@@ -1110,6 +1110,7 @@ function publicLiveTurn(live: LiveTurn): LiveTurn {
     startedAt: live.startedAt,
     ...(live.paused ? { paused: true } : {}),
     ...(live.messageId ? { messageId: live.messageId } : {}),
+    ...(live.draft ? { draft: live.draft } : {}),
   };
 }
 
@@ -1128,7 +1129,14 @@ export function toLiveTurn(botId: string, update: ToolProgress): LiveTurn {
     });
   }
   steps.push(...tools.slice(thinking ? -4 : -5));
-  return { botId, thinking, steps, traces: clipLiveTraces(update.traces) };
+  const draft = (update.draft || "").trim();
+  return {
+    botId,
+    thinking,
+    steps,
+    traces: clipLiveTraces(update.traces),
+    ...(draft ? { draft } : {}),
+  };
 }
 
 function liveTrajectoryForRoom(
@@ -1457,6 +1465,7 @@ async function generateReplies(
             paused: false,
             messageId: prev?.messageId || turnMessageId,
             peerId: prev?.peerId || peerId,
+            draft: next.draft || prev?.draft,
             steps: [...(handoff ? [handoff] : []), ...keptSteer, ...rest].slice(0, 5),
           });
         },
