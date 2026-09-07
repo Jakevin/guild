@@ -306,6 +306,31 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(HALL_RULES, /派工 list/);
   assert.match(HALL_RULES, /1:1 交辦/);
   assert.match(HALL_RULES, /Do not wait for the human to press a button/);
+  assert.match(HALL_RULES, /on this quest's roster/);
+});
+
+test("hall system lists this quest's roster and forbids off-roster @handle", () => {
+  const system = buildChatSystem({
+    botName: "Infra",
+    handle: "infra",
+    soul: "# Soul",
+    agent: "# Agent",
+    position: "# Position",
+    rosterHandles: ["pm", "infra", "design", "marketing"],
+  });
+  assert.match(system, /This quest's roster: @pm @infra @design @marketing/);
+  assert.match(system, /Only these seats may be @handle'd/);
+  assert.doesNotMatch(system, /@rd\b/);
+  const whisper = buildChatSystem({
+    botName: "Infra",
+    handle: "infra",
+    soul: "# Soul",
+    agent: "# Agent",
+    position: "# Position",
+    rosterHandles: ["pm", "infra"],
+    whisper: true,
+  });
+  assert.doesNotMatch(whisper, /This quest's roster/);
 });
 
 test("whisper system does not hand off to other seats", () => {

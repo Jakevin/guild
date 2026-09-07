@@ -364,7 +364,7 @@ When work belongs to someone else, put @handle at the start of a line with a wri
 - Files or evidence
 Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that spec into a 1:1 交辦 so the next seat works from the brief, not the whole quest log; the public reply still lands on this quest. Do not wait for the human to press a button.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster with 加入 (max ${CHANNEL_ROSTER_CAP} on a quest). @handle never adds a seat.
-You may @handle any staffed teammate whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
+You may @handle any teammate on this quest's roster whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
 Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
@@ -386,6 +386,24 @@ Harness this turn (Memory → Plan → Skills → Act):
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
 - Act: you may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
 
+/** Live member handles for this quest. Empty in whispers. */
+export function questRosterBlock(handles: string[] | undefined): string {
+  const tags = [
+    ...new Set(
+      (handles || [])
+        .map((handle) => String(handle || "").trim().replace(/^@/, ""))
+        .filter(Boolean),
+    ),
+  ].map((handle) => `@${handle}`);
+  if (!tags.length) return "";
+  return `This quest's roster: ${tags.join(" ")}. Only these seats may be @handle'd. Anyone not listed is not on this quest — say so in prose; do not write a line-start @handle spec for them.`;
+}
+
+function hallRulesFor(handles?: string[]): string {
+  const roster = questRosterBlock(handles);
+  return roster ? `${HALL_RULES}\n\n${roster}` : HALL_RULES;
+}
+
 export function buildChatSystem(input: {
   botName: string;
   handle: string;
@@ -399,6 +417,7 @@ export function buildChatSystem(input: {
   botMemory?: string;
   channelMemory?: string;
   whisper?: boolean;
+  rosterHandles?: string[];
 }): string {
   const skills = input.skills ?? [];
   const subagents = input.subagents ?? [];
@@ -489,7 +508,7 @@ export function buildChatSystem(input: {
   return [
     `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
     "Reply in the user's language. Be brief. Stay in character.",
-    input.whisper ? WHISPER_RULES : HALL_RULES,
+    input.whisper ? WHISPER_RULES : hallRulesFor(input.rosterHandles),
     hostContext(),
     TOOL_SYSTEM,
     skillLine,
@@ -523,6 +542,7 @@ export async function chatReply(input: {
   botMemory?: string;
   channelMemory?: string;
   whisper?: boolean;
+  rosterHandles?: string[];
   compact?: CompactCheckpoint | null;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
@@ -550,6 +570,7 @@ export async function chatReply(input: {
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
     whisper: input.whisper,
+    rosterHandles: input.rosterHandles,
   });
   const llm = input.dataDir
     ? await tryChatLlm(input, env, input.dataDir, input.model, input.skills ?? [])
@@ -605,6 +626,7 @@ async function tryChatLlm(
     botId?: string;
     cronRun?: boolean;
     dispatch?: ToolContext["dispatch"];
+    rosterHandles?: string[];
   },
   env: NodeJS.ProcessEnv,
   dataDir: string,
@@ -626,6 +648,7 @@ async function tryChatLlm(
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
     whisper: input.whisper,
+    rosterHandles: input.rosterHandles,
   });
   const peek = resolveLlm(dataDir, env, "chat", prefer);
   if (peek) {
@@ -681,7 +704,9 @@ async function tryChatLlm(
     botMemory: input.botMemory ?? "",
     channelMemory: input.channelMemory ?? "",
     userMessage: input.userMessage,
-    hallRules: input.whisper ? WHISPER_RULES : HALL_RULES,
+    hallRules: input.whisper
+      ? WHISPER_RULES
+      : hallRulesFor(input.rosterHandles),
   };
   const result = await llmComplete({
     dataDir,

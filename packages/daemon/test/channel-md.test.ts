@@ -124,15 +124,67 @@ test("channel @ turn includes that Channel.md; the same bot's DM does not", asyn
       "@rd 請依 Channel.md 回",
     );
     assert.equal(channelTurn.channelMd, MARKER);
+    assert.deepEqual([...channelTurn.rosterHandles].sort(), ["pm", "rd"]);
     assert.match(chatTurnSystem(store, channelId, rd.id), new RegExp(MARKER));
+    assert.match(chatTurnSystem(store, channelId, rd.id), /This quest's roster:/);
+    assert.match(chatTurnSystem(store, channelId, rd.id), /@rd/);
 
     const dm = store.openDm(rd.id);
     const dmTurn = chatTurnForBot(store, dm.id, rd.id, [], "請依 Channel.md 回");
     assert.equal(dmTurn.channelMd, "");
     assert.equal(dmTurn.whisper, true);
+    assert.deepEqual(dmTurn.rosterHandles, []);
     assert.doesNotMatch(chatTurnSystem(store, dm.id, rd.id), new RegExp(MARKER));
     assert.match(chatTurnSystem(store, dm.id, rd.id), /# Whisper/);
     assert.doesNotMatch(chatTurnSystem(store, dm.id, rd.id), /# Hall/);
+    assert.doesNotMatch(chatTurnSystem(store, dm.id, rd.id), /This quest's roster:/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("hall system lists live members and omits off-roster seats", async () => {
+  const dataDir = tempHome();
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir, {});
+  try {
+    const created = await json(origin, "/channels", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "bot-team-project" }),
+    });
+    const channelId = created.body.id as string;
+    const store = new GuildStore(dataDir);
+    const staffed = ["pm", "marketing", "infra", "design"].map((handle) => {
+      const bot = store.listBots().find((item) => item.handle === handle);
+      assert.ok(bot, handle);
+      return bot;
+    });
+    const rd = store.listBots().find((bot) => bot.handle === "rd");
+    assert.ok(rd);
+    for (const bot of staffed) {
+      const added = await json(origin, `/channels/${channelId}/members`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ botId: bot.id }),
+      });
+      assert.equal(added.status, 200);
+    }
+    const infra = staffed.find((bot) => bot.handle === "infra");
+    assert.ok(infra);
+    const turn = chatTurnForBot(store, channelId, infra.id);
+    assert.deepEqual(
+      [...turn.rosterHandles].sort(),
+      ["design", "infra", "marketing", "pm"],
+    );
+    assert.ok(!turn.rosterHandles.includes("rd"));
+    const system = chatTurnSystem(store, channelId, infra.id);
+    assert.match(
+      system,
+      /This quest's roster: @pm @marketing @infra @design/,
+    );
+    assert.match(system, /Only these seats may be @handle'd/);
+    assert.doesNotMatch(system, /@rd\b/);
   } finally {
     await closeServer(server);
   }

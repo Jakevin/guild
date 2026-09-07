@@ -1050,6 +1050,18 @@ export function chatTurnForBot(
       ? questRoomId
       : roomId;
   const mdRoom = store.getRoom(mdRoomId);
+  const rosterRoom =
+    mdRoom?.kind === "channel" || mdRoom?.kind === "cron" ? mdRoom : room;
+  const rosterHandles =
+    rosterRoom && rosterRoom.kind !== "dm"
+      ? [
+          ...new Set(
+            rosterRoom.memberIds
+              .map((id) => store.getBot(id)?.handle?.trim())
+              .filter((handle): handle is string => Boolean(handle)),
+          ),
+        ]
+      : [];
   return {
     botName: detail.name,
     handle: detail.handle,
@@ -1075,6 +1087,7 @@ export function chatTurnForBot(
         ? store.readChannelMemory(mdRoomId)
         : "",
     whisper: room?.kind === "dm",
+    rosterHandles,
     compact: store.readCompact(roomId),
     onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),
   };
