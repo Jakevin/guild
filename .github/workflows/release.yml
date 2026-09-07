@@ -59,7 +59,16 @@ jobs:
 
       - name: Publish @kevin5251984/guild
         working-directory: packages/daemon
-        run: npm publish --access public
+        run: |
+          set -euo pipefail
+          WANT=$(node -p "require('./package.json').version")
+          TGZ="kevin5251984-guild-${WANT}.tgz"
+          npm pack
+          test -f "$TGZ"
+          PROTO=$(tar -xOf "$TGZ" package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).dependencies['@guild/protocol']")
+          echo "packed @guild/protocol=$PROTO"
+          test "$PROTO" = "file:./vendor/protocol"
+          npm publish "$TGZ" --access public
 
       - name: Registry has this version as latest
         env:
@@ -71,14 +80,15 @@ jobs:
           for i in $(seq 1 30); do
             GOT=$(npm view "@kevin5251984/guild@${WANT}" version 2>/dev/null || true)
             LATEST=$(npm view @kevin5251984/guild version 2>/dev/null || true)
+            PROTO=$(npm view "@kevin5251984/guild@${WANT}" dependencies.@guild/protocol 2>/dev/null || true)
             CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$TAR" || true)
-            echo "try $i view=${GOT:-none} latest=${LATEST:-none} tarball=$CODE"
-            if [ "$GOT" = "$WANT" ] && [ "$LATEST" = "$WANT" ] && [ "$CODE" = "200" ]; then
+            echo "try $i view=${GOT:-none} latest=${LATEST:-none} protocol=${PROTO:-none} tarball=$CODE"
+            if [ "$GOT" = "$WANT" ] && [ "$LATEST" = "$WANT" ] && [ "$CODE" = "200" ] && [ "$PROTO" = "file:./vendor/protocol" ]; then
               exit 0
             fi
             sleep 15
           done
-          echo "npm publish returned ok but registry does not serve $WANT (latest=$LATEST tarball=$CODE)" >&2
+          echo "npm publish returned ok but registry does not serve $WANT with file:./vendor/protocol (latest=$LATEST protocol=$PROTO tarball=$CODE)" >&2
           echo "bump the version and tag again; do not reuse $WANT" >&2
           exit 1
 
