@@ -46,6 +46,7 @@ html, body { margin: 0; height: 100%; }
 .primary,
 .model-btn,
 .dialog-actions button,
+.memory-tidy-row button,
 .cron-sheet-back,
 .cron-sheet-acts button,
 .queue-chip button,
@@ -84,6 +85,7 @@ html, body { margin: 0; height: 100%; }
 .primary:active:not(:disabled),
 .model-btn:active:not(:disabled),
 .dialog-actions button:active:not(:disabled),
+.memory-tidy-row button:active:not(:disabled),
 .cron-sheet-back:active:not(:disabled),
 .cron-sheet-acts button:active:not(:disabled),
 .queue-chip button:active:not(:disabled),
@@ -118,6 +120,7 @@ html, body { margin: 0; height: 100%; }
   .primary,
   .model-btn,
   .dialog-actions button,
+  .memory-tidy-row button,
   .queue-chip button,
   .attach-chip-x,
   .attach-item,
@@ -149,6 +152,7 @@ html, body { margin: 0; height: 100%; }
   .primary:active:not(:disabled),
   .model-btn:active:not(:disabled),
   .dialog-actions button:active:not(:disabled),
+  .memory-tidy-row button:active:not(:disabled),
   .queue-chip button:active:not(:disabled),
   .attach-chip-x:active:not(:disabled),
   .attach-item:active:not(:disabled),
@@ -3165,23 +3169,24 @@ dialog p { margin: 0 0 0.8rem; color: var(--muted); font-size: 0.9rem; }
   font: inherit;
   font-size: 0.82rem;
 }
-.memory-tidy button.ghost {
+.memory-tidy-row button {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0.3rem 0.75rem;
-  border: 1px solid var(--line);
+  padding: 0.4rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--steel) 40%, var(--line));
   border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
+  background: var(--lift);
+  color: var(--text);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
+  font-weight: 600;
   cursor: pointer;
 }
-.memory-tidy button.ghost:hover:not(:disabled) {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--steel) 45%, var(--line));
+.memory-tidy-row button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lift) 70%, var(--steel));
+  border-color: color-mix(in srgb, var(--steel) 65%, var(--line));
 }
-.memory-tidy button.ghost:disabled { opacity: 0.55; cursor: wait; }
+.memory-tidy-row button:disabled { opacity: 0.55; cursor: wait; }
 .memory-proposal {
   width: 100%;
   margin: 0;

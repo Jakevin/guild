@@ -908,7 +908,7 @@ export async function tidyBotMemory(
   input: { body?: string; ask?: string; env?: NodeJS.ProcessEnv } = {},
 ) {
   if (!store.getBot(botId)) throw new StoreError(404, "bot not found");
-  return tidyMemory({
+  const result = await tidyMemory({
     store,
     scope: "bot",
     current: input.body ?? store.readBotMemory(botId),
@@ -916,6 +916,7 @@ export async function tidyBotMemory(
     env: input.env,
     prefer: store.getBot(botId)?.model ?? null,
   });
+  return { ...result, ...setBotMemory(store, botId, result.body) };
 }
 
 export async function tidyChannelMemory(
@@ -928,7 +929,7 @@ export async function tidyChannelMemory(
     env?: NodeJS.ProcessEnv;
   } = {},
 ) {
-  return tidyMemory({
+  const result = await tidyMemory({
     store,
     scope: "channel",
     current: input.body ?? store.readChannelMemory(roomId),
@@ -936,6 +937,7 @@ export async function tidyChannelMemory(
     ask: input.ask,
     env: input.env,
   });
+  return { ...result, ...setChannelMemory(store, roomId, result.body) };
 }
 
 export function setChannelMd(

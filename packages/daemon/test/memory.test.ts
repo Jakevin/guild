@@ -211,4 +211,5 @@ test("chat page edits Channel MEMORY.md and bot MEMORY.md", () => {
   assert.match(html, /bot-memory-ask/);
   assert.match(html, /memory\.md\/tidy/);
   assert.match(html, /runMemoryTidy/);
+  assert.match(html, /memory\.tidySaved/);
 });
