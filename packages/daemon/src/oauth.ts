@@ -30,7 +30,8 @@ import {
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
-import { estimateSendTokens, fitSendMessages } from "./send-budget.ts";
+import { estimateSendTokens, fitSendWithUsage } from "./send-budget.ts";
+import { noteProviderUsage } from "./usage-anchor.ts";
 import { runAgentLoop } from "./harness.ts";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { defaultDataDir, StoreError } from "./store.ts";
@@ -1379,7 +1380,10 @@ export async function completeOAuth(input: {
         estimateSendTokens(input.system) +
         estimateSendTokens(JSON.stringify(useTools ? tools : [])) +
         2048;
-      const fitted = fitSendMessages(transcript, extra, { compact: !wrap });
+      const fitted = fitSendWithUsage(transcript, extra, {
+        wrap,
+        roomId: toolCtx.roomId,
+      });
       if (fitted.length !== transcript.length || fitted[0] !== transcript[0]) {
         transcript.splice(0, transcript.length, ...fitted);
       }
@@ -1459,6 +1463,7 @@ export async function completeOAuth(input: {
         );
       }
       addUsage(usage, fromPiUsage(result.usage));
+      noteProviderUsage(toolCtx.roomId, transcript, usage);
       lastResult = result;
       const think = thinkingText(result);
       const calls =

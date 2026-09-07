@@ -664,6 +664,7 @@ async function tryChatLlm(
     checkpoint: input.compact,
     tokenLimit: DEFAULT_AUTO_COMPACT_TOKENS,
     selfAuthor: input.botId,
+    roomId: input.roomId,
     onCompact: input.onCompact,
     onProgress: input.onProgress,
     signal: input.signal,

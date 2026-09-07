@@ -26,6 +26,7 @@ import { DEFAULT_BOTS } from "./catalog/default-bots.ts";
 import { CATALOG_SKILLS } from "./catalog/skills.ts";
 import { CATALOG_SUBAGENTS } from "./catalog/subagents.ts";
 import { parseAgentFile } from "./agent-file.ts";
+import { parseUsageAnchor, type UsageAnchor } from "./usage-anchor.ts";
 import {
   dismissAssign,
   mergeAssign,
@@ -1454,9 +1455,20 @@ export class GuildStore {
     summary: string;
     updatedAt: string;
     messageCount: number;
+    usageAnchor?: UsageAnchor | null;
   } | null {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
-    return this.db.readCompact(roomId);
+    const row = this.db.readCompact(roomId);
+    if (!row) return null;
+    let usageAnchor: UsageAnchor | null = null;
+    if (row.usageAnchor) {
+      try {
+        usageAnchor = parseUsageAnchor(JSON.parse(row.usageAnchor));
+      } catch {
+        usageAnchor = null;
+      }
+    }
+    return { ...row, usageAnchor };
   }
 
   writeCompact(
@@ -1466,10 +1478,19 @@ export class GuildStore {
       summary: string;
       updatedAt: string;
       messageCount: number;
+      usageAnchor?: UsageAnchor | null;
     },
   ): void {
     if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
-    this.db.writeCompact(roomId, compact);
+    this.db.writeCompact(roomId, {
+      throughId: compact.throughId,
+      summary: compact.summary,
+      updatedAt: compact.updatedAt,
+      messageCount: compact.messageCount,
+      usageAnchor: compact.usageAnchor
+        ? JSON.stringify(compact.usageAnchor)
+        : null,
+    });
   }
 
   listCronJobs(roomId?: string) {

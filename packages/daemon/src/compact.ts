@@ -1,11 +1,22 @@
 import type { ChatPart, ModelRef } from "@guild/protocol";
 import { llmComplete } from "./llm.ts";
 import type { ToolProgress } from "./tools.ts";
+import {
+  COMPACT_THRESHOLD_TOKENS,
+  markCompactDeferred,
+  markCompacted,
+  peekRoomUsage,
+  restoreUsageAnchor,
+  resolvePressure,
+  shouldCompress,
+  shouldDeferToRealUsage,
+  type UsageAnchor,
+} from "./usage-anchor.ts";
 
 /** Cheap char/4 estimate, same ballpark Codex uses before a real tokenizer. */
 export const CHARS_PER_TOKEN = 4;
-/** Default working window minus output/tool reserve. */
-export const DEFAULT_AUTO_COMPACT_TOKENS = 88_000;
+/** Default working window minus output/tool reserve. Hermes: % of model context. */
+export const DEFAULT_AUTO_COMPACT_TOKENS = COMPACT_THRESHOLD_TOKENS;
 const KEEP_RECENT_MIN = 6;
 const KEEP_RECENT_FLOOR = 2;
 const HISTORY_BODY_CAP = 12_000;
@@ -15,13 +26,14 @@ const MAX_TOOL_PARTS = 8;
 const THINK_CAP = 400;
 const SUMMARY_CAP = 4_000;
 
-import { compactPrefix } from "./send-budget.ts";
+import { SEND_TOKEN_BUDGET, compactPrefix } from "./send-budget.ts";
 
 export {
   SEND_TOKEN_BUDGET,
   compactPrefix,
   estimateSendTokens,
   fitSendMessages,
+  fitSendWithUsage,
   trimSendMessages,
 } from "./send-budget.ts";
 
@@ -37,6 +49,7 @@ export type CompactCheckpoint = {
   summary: string;
   updatedAt: string;
   messageCount: number;
+  usageAnchor?: UsageAnchor | null;
 };
 
 export type PackedHistory = {
@@ -195,13 +208,36 @@ export function planCompact(input: {
   userMessage: string;
   tokenLimit?: number;
   selfAuthor?: string;
+  roomId?: string;
 }): { mode: "full" | "compact"; old: HistoryItem[]; recent: HistoryItem[] } {
   const limit = input.tokenLimit ?? DEFAULT_AUTO_COMPACT_TOKENS;
   const mapped = input.history.map((item) => toModelMessage(item, input.selfAuthor));
   const user = { role: "user" as const, content: input.userMessage };
-  const fullCost =
+  const rough =
     estimateTokens(input.system) + messagesTokens([...mapped, user]);
-  if (fullCost <= limit) {
+  const state = input.roomId ? peekRoomUsage(input.roomId) : undefined;
+  const pressure = resolvePressure({
+    rough,
+    lastPromptTokens: state?.lastPromptTokens,
+    lastCompletionTokens: state?.lastCompletionTokens,
+    extraSince: estimateTokens(input.userMessage),
+    awaitingAfterCompact: state?.awaitingAfterCompact,
+  });
+  if (
+    input.roomId &&
+    shouldDeferToRealUsage({
+      source: pressure.source,
+      tokens: pressure.tokens,
+      threshold: limit,
+      window: SEND_TOKEN_BUDGET,
+      alreadyWaited: Boolean(state?.waitedOnce),
+    })
+  ) {
+    markCompactDeferred(input.roomId);
+    return { mode: "full", old: [], recent: input.history };
+  }
+  const fullCost = pressure.source === "rough" ? rough : pressure.tokens;
+  if (!shouldCompress(fullCost, limit)) {
     return { mode: "full", old: [], recent: input.history };
   }
   if (input.history.length <= 1) {
@@ -311,10 +347,12 @@ export async function packHistory(input: {
   /** Local summary skips the compression LLM. Omit onCompact to skip persisting a checkpoint. */
   summarize?: "llm" | "local";
   selfAuthor?: string;
+  roomId?: string;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
   signal?: AbortSignal;
 }): Promise<PackedHistory> {
+  restoreUsageAnchor(input.roomId, input.checkpoint?.usageAnchor);
   const user = { role: "user" as const, content: input.userMessage };
   const history = input.history.map(clipHistoryItem);
   const plan = planCompact({
@@ -323,6 +361,7 @@ export async function packHistory(input: {
     userMessage: input.userMessage,
     tokenLimit: input.tokenLimit,
     selfAuthor: input.selfAuthor,
+    roomId: input.roomId,
   });
   if (plan.mode === "full") {
     return {
@@ -367,9 +406,11 @@ export async function packHistory(input: {
       summary,
       updatedAt: new Date().toISOString(),
       messageCount: plan.old.length,
+      usageAnchor: peekRoomUsage(input.roomId || "")?.anchor ?? null,
     };
   }
 
+  markCompacted(input.roomId);
   input.onCompact?.(checkpoint);
   return {
     messages: [

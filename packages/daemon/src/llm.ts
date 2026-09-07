@@ -9,7 +9,8 @@ import type {
   ProviderEntry,
 } from "@guild/protocol";
 import { StoreError } from "./store.ts";
-import { estimateSendTokens, fitSendMessages } from "./send-budget.ts";
+import { estimateSendTokens, fitSendWithUsage } from "./send-budget.ts";
+import { noteProviderUsage } from "./usage-anchor.ts";
 import {
   completeOAuth,
   formatOAuthError,
@@ -978,7 +979,10 @@ async function completeOpenAiTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(catalog)) +
         2048;
-      const fitted = fitSendMessages(msgs, extra, { compact: !wrap });
+      const fitted = fitSendWithUsage(msgs, extra, {
+        wrap,
+        roomId: ctx.roomId,
+      });
       if (fitted.length !== msgs.length || fitted[0] !== msgs[0]) {
         msgs.splice(0, msgs.length, ...fitted);
       }
@@ -1032,6 +1036,7 @@ async function completeOpenAiTools(
       const message = data.choices?.[0]?.message;
       if (!message) return null;
       addUsage(usage, fromOpenAiUsage(data.usage));
+      noteProviderUsage(ctx.roomId, msgs, usage);
       lastAssistant = message;
       const truncated = data.choices?.[0]?.finish_reason === "length";
       const rawCalls = message.tool_calls ?? [];
@@ -1108,7 +1113,10 @@ async function completeAnthropicTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(tools)) +
         2048;
-      const fitted = fitSendMessages(msgs, extra, { compact: !wrap });
+      const fitted = fitSendWithUsage(msgs, extra, {
+        wrap,
+        roomId: ctx.roomId,
+      });
       if (fitted.length !== msgs.length || fitted[0] !== msgs[0]) {
         msgs.splice(0, msgs.length, ...fitted);
       }
@@ -1162,6 +1170,7 @@ async function completeAnthropicTools(
       const parts = data.content ?? [];
       lastParts = parts;
       addUsage(usage, fromAnthropicUsage(data.usage));
+      noteProviderUsage(ctx.roomId, msgs, usage);
       const truncated = data.stop_reason === "max_tokens";
       const uses = parts.filter(
         (part): part is Extract<Part, { type: "tool_use" }> =>
@@ -1307,7 +1316,10 @@ async function completeZenResponsesTools(
         estimateSendTokens(system) +
         estimateSendTokens(JSON.stringify(tools)) +
         2048;
-      const fitted = fitSendMessages(input, extra, { compact: !wrap });
+      const fitted = fitSendWithUsage(input, extra, {
+        wrap,
+        roomId: ctx.roomId,
+      });
       if (fitted.length !== input.length || fitted[0] !== input[0]) {
         input.splice(0, input.length, ...fitted);
       }
@@ -1366,6 +1378,7 @@ async function completeZenResponsesTools(
           },
         }),
       );
+      noteProviderUsage(ctx.roomId, input, usage);
       lastCalls = [];
       const truncated =
         data.status === "incomplete" ||

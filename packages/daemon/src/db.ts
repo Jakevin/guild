@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS compact (
   through_id TEXT NOT NULL,
   summary TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  message_count INTEGER NOT NULL DEFAULT 0
+  message_count INTEGER NOT NULL DEFAULT 0,
+  usage_anchor TEXT
 );
 
 CREATE TABLE IF NOT EXISTS cron_jobs (
@@ -140,6 +141,7 @@ type CompactRow = {
   summary: string;
   updatedAt: string;
   messageCount: number;
+  usageAnchor?: string | null;
 };
 
 export type CronScope = "channel" | "bot";
@@ -501,6 +503,11 @@ export class GuildDb {
     } catch {
       /* column already exists on fresh schema */
     }
+    try {
+      this.sqlite.exec("ALTER TABLE compact ADD COLUMN usage_anchor TEXT");
+    } catch {
+      /* column already exists on fresh schema */
+    }
     for (const column of [
       "ALTER TABLE cron_jobs ADD COLUMN scope TEXT NOT NULL DEFAULT 'channel'",
       "ALTER TABLE cron_jobs ADD COLUMN delivery TEXT NOT NULL DEFAULT 'hall'",
@@ -738,19 +745,21 @@ export class GuildDb {
       summary,
       updatedAt: asString(row.updated_at),
       messageCount: asNumber(row.message_count),
+      usageAnchor: asString(row.usage_anchor) || null,
     };
   }
 
   writeCompact(roomId: string, compact: CompactRow): void {
     this.sqlite
       .prepare(
-        `INSERT INTO compact (room_id, through_id, summary, updated_at, message_count)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO compact (room_id, through_id, summary, updated_at, message_count, usage_anchor)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(room_id) DO UPDATE SET
            through_id = excluded.through_id,
            summary = excluded.summary,
            updated_at = excluded.updated_at,
-           message_count = excluded.message_count`,
+           message_count = excluded.message_count,
+           usage_anchor = excluded.usage_anchor`,
       )
       .run(
         roomId,
@@ -758,6 +767,7 @@ export class GuildDb {
         compact.summary,
         compact.updatedAt,
         compact.messageCount,
+        compact.usageAnchor ?? null,
       );
   }
 

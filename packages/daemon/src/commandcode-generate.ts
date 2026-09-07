@@ -27,7 +27,8 @@ import {
   type ToolContext,
   type ToolTrace,
 } from "./tools.ts";
-import { estimateSendTokens, fitSendMessages } from "./send-budget.ts";
+import { estimateSendTokens, fitSendWithUsage } from "./send-budget.ts";
+import { noteProviderUsage } from "./usage-anchor.ts";
 import { addUsage, blankUsage, withDuration } from "./usage.ts";
 
 export type CommandCodeGenerateResult = {
@@ -189,7 +190,10 @@ export async function completeCommandCodeGenerate(input: {
       if (wrapPrompt) ccMessages.push({ role: "user", content: wrapPrompt });
       if (steer) ccMessages.push({ role: "user", content: steer });
       const extra = estimateSendTokens(input.system) + 2048;
-      const fitted = fitSendMessages(ccMessages, extra, { compact: !wrap });
+      const fitted = fitSendWithUsage(ccMessages, extra, {
+        wrap,
+        roomId: input.ctx.roomId,
+      });
       if (fitted.length !== ccMessages.length || fitted[0] !== ccMessages[0]) {
         ccMessages.length = 0;
         ccMessages.push(...fitted);

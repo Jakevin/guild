@@ -1,3 +1,14 @@
+import {
+  COMPACT_THRESHOLD_TOKENS,
+  anchoredContextTokens,
+  markCompactDeferred,
+  markCompacted,
+  peekRoomUsage,
+  resolvePressure,
+  shouldCompress,
+  shouldDeferToRealUsage,
+} from "./usage-anchor.ts";
+
 /** Grok 4.6 is 500k. Stay under, and count CJK/code denser than char/4. */
 export const SEND_TOKEN_BUDGET = 400_000;
 const SEND_CHARS_PER_TOKEN = 1.5;
@@ -21,7 +32,11 @@ function payloadChars(message: unknown): number {
     }
   }
   try {
-    return JSON.stringify(message).length;
+    const copy = { ...(message as Record<string, unknown>) };
+    delete copy.reasoning;
+    delete copy.reasoning_content;
+    delete copy.codex_reasoning_items;
+    return JSON.stringify(copy).length;
   } catch {
     return 0;
   }
@@ -166,6 +181,59 @@ export function trimSendMessages<T>(
   budget = SEND_TOKEN_BUDGET,
 ): T[] {
   return fitSendMessages(messages, extraTokens, { budget, compact: false });
+}
+
+/**
+ * Hermes post-tool / pre-API gate on the send list: real usage first, rough
+ * estimate waits one request, then compact at the working-window threshold.
+ */
+export function fitSendWithUsage<T>(
+  messages: T[],
+  extraTokens = 0,
+  opts?: { wrap?: boolean; roomId?: string },
+): T[] {
+  const wrap = Boolean(opts?.wrap);
+  const roomId = opts?.roomId;
+  const state = roomId ? peekRoomUsage(roomId) : undefined;
+  const rough =
+    extraTokens + messages.reduce((sum, row) => sum + tokenCost(row), 0);
+  const anchored = state?.anchor
+    ? anchoredContextTokens(messages, state.anchor, (delta) =>
+        delta.reduce((sum, row) => sum + tokenCost(row), 0),
+      )
+    : null;
+  const pressure = resolvePressure({
+    rough,
+    lastPromptTokens: state?.lastPromptTokens,
+    lastCompletionTokens: state?.lastCompletionTokens,
+    awaitingAfterCompact: state?.awaitingAfterCompact,
+    anchored,
+  });
+  if (
+    shouldDeferToRealUsage({
+      source: pressure.source,
+      tokens: pressure.tokens,
+      threshold: COMPACT_THRESHOLD_TOKENS,
+      window: SEND_TOKEN_BUDGET,
+      alreadyWaited: Boolean(state?.waitedOnce),
+    })
+  ) {
+    markCompactDeferred(roomId);
+    return fitSendMessages(messages, extraTokens, {
+      budget: SEND_TOKEN_BUDGET,
+      compact: false,
+    });
+  }
+  const compact =
+    !wrap &&
+    shouldCompress(pressure.tokens, COMPACT_THRESHOLD_TOKENS) &&
+    !state?.awaitingAfterCompact;
+  const fitted = fitSendMessages(messages, extraTokens, {
+    budget: compact ? COMPACT_THRESHOLD_TOKENS : SEND_TOKEN_BUDGET,
+    compact,
+  });
+  if (compact && fitted.length < messages.length) markCompacted(roomId);
+  return fitted;
 }
 
 /**
