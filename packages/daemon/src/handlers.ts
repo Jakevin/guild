@@ -40,6 +40,11 @@ import {
   type LiveStep,
   type LiveTurn,
 } from "./store.ts";
+import {
+  answerComputerGrant,
+  pendingComputerGrant,
+  waitComputerGrant,
+} from "./computer-grant.ts";
 import { listSpawnRefs } from "./subagent.ts";
 import {
   importHostMcp,
@@ -559,6 +564,7 @@ export function workspace(store: GuildStore) {
         thinking: turn.thinking,
         steps: turn.steps,
         ...(turn.paused ? { paused: true } : {}),
+        ...(turn.grant ? { grant: turn.grant } : {}),
         ...(turn.messageId ? { messageId: turn.messageId } : {}),
       },
     ];
@@ -1164,6 +1170,7 @@ function publicLiveTurn(live: LiveTurn): LiveTurn {
     ...(live.paused ? { paused: true } : {}),
     ...(live.messageId ? { messageId: live.messageId } : {}),
     ...(live.draft ? { draft: live.draft } : {}),
+    ...(live.grant ? { grant: live.grant } : {}),
   };
 }
 
@@ -1264,6 +1271,26 @@ export function abortLiveTurn(
   const had = store.abortTurn(roomId, botId);
   if (!live && !had) throw new StoreError(409, "no live turn");
   return { ok: true };
+}
+
+export function answerComputerUse(
+  store: GuildStore,
+  roomId: string,
+  botId: string,
+  allow: boolean,
+) {
+  if (!store.getRoom(roomId)) throw new StoreError(404, "room not found");
+  if (!botId.trim()) throw new StoreError(400, "botId is required");
+  const ok = answerComputerGrant(roomId, botId, allow, store.dataDir);
+  if (!ok) throw new StoreError(409, "no computer grant pending");
+  const live = store.getLiveBotTurn(roomId, botId);
+  if (live) {
+    store.setLiveTurn(roomId, {
+      ...live,
+      grant: pendingComputerGrant(roomId, botId) ? "computer" : undefined,
+    });
+  }
+  return { ok: true, allowed: allow };
 }
 
 export function pauseLiveTurn(
@@ -1490,6 +1517,22 @@ async function generateReplies(
         signal: botSignal,
         mcpTools,
         ...(extras.cronRun ? { cronRun: true } : {}),
+        ...(extras.cronRun
+          ? {}
+          : {
+              askComputer: () =>
+                waitComputerGrant({
+                  dataDir: store.dataDir,
+                  roomId,
+                  botId,
+                  signal: botSignal,
+                  onWait: () => {
+                    const prev = store.getLiveBotTurn(roomId, botId);
+                    if (!prev) return;
+                    store.setLiveTurn(roomId, { ...prev, grant: "computer" });
+                  },
+                }),
+            }),
         onProgress: (update) => {
           const prev = store.getLiveBotTurn(roomId, botId);
           if (prev?.paused) return;
@@ -1515,6 +1558,7 @@ async function generateReplies(
             messageId: prev?.messageId || turnMessageId,
             peerId: prev?.peerId || peerId,
             draft: next.draft || prev?.draft,
+            grant: pendingComputerGrant(roomId, botId) ? "computer" : undefined,
             steps: [...(handoff ? [handoff] : []), ...keptSteer, ...rest].slice(0, 5),
           });
         },

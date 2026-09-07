@@ -85,6 +85,8 @@ export type ToolContext = {
   botId?: string;
   /** Hermes: cron child sessions cannot manage cron. */
   cronRun?: boolean;
+  /** Pause the live row until the user allows computer use. */
+  askComputer?: () => Promise<boolean>;
 };
 
 export type SpawnHandle = {
@@ -232,6 +234,39 @@ const BASE_TOOLS: Tool[] = [
       ),
     }),
   },
+  {
+    name: "computer",
+    description:
+      "Drive macOS GUI apps that are not a web browser. First use asks the human to allow; allow is remembered in GUILD_HOME. Chrome/Safari/Edge/Arc: use browser instead. Do not click pay, delete, publish, TCC, or bank UI. Actions: windows, shot, see (shot+AX), idle, open, op, ax, axset, hud, cdp. op needs window + x + y in window-local points; optional text types after click. Default writes post to the target pid without stealing focus; focus=true borrows the front app and flashes a HUD. ax dumps the accessibility tree (e1…); axset writes a value by ref. Writes refuse if the window is on another Space or the user is at the keyboard.",
+    parameters: Type.Object({
+      action: Type.String({
+        description: "windows | shot | see | idle | open | op | ax | axset | hud | cdp",
+      }),
+      query: Type.Optional(Type.String({ description: "Filter for windows, or app name for open" })),
+      window: Type.Optional(
+        Type.String({ description: "Window id or owner substring" }),
+      ),
+      app: Type.Optional(Type.String({ description: "App name or .app path for open" })),
+      x: Type.Optional(Type.Number({ description: "Window-local x for op" })),
+      y: Type.Optional(Type.Number({ description: "Window-local y for op" })),
+      text: Type.Optional(Type.String({ description: "Text to type after op, or cdp insert" })),
+      port: Type.Optional(
+        Type.Number({ description: "CDP port for open --cdp or action=cdp" }),
+      ),
+      cdp: Type.Optional(
+        Type.String({ description: "snapshot | click | type | shot when action=cdp" }),
+      ),
+      ref: Type.Optional(
+        Type.String({ description: "AX eN or CDP snapshot ref like e1" }),
+      ),
+      focus: Type.Optional(
+        Type.Boolean({
+          description: "Borrow frontmost focus for op/click/type (flashes HUD). Default posts to pid.",
+        }),
+      ),
+      ms: Type.Optional(Type.Number({ description: "HUD duration in ms" })),
+    }),
+  },
 ];
 
 export function guildTools(
@@ -256,6 +291,9 @@ export function guildTools(
         tool.name !== "tts" &&
         tool.name !== "browser",
     );
+  }
+  if (process.platform !== "darwin") {
+    tools = tools.filter((tool) => tool.name !== "computer");
   }
   if (!ctx.cronRun) {
     tools.push({
@@ -576,6 +614,7 @@ export const BUILTIN_TOOL_NAMES = [
   "image_gen",
   "tts",
   "browser",
+  "computer",
   "cronjob",
 ] as const;
 
@@ -684,6 +723,10 @@ export async function builtinExecute(
         env: ctx.env,
         signal: ctx.signal,
       });
+    }
+    if (name === "computer") {
+      const { runComputer } = await import("./computer.ts");
+      return runComputer(args, ctx);
     }
     if (name.startsWith("mcp__")) {
       const { callMcpTool } = await import("./mcp.ts");
@@ -1017,13 +1060,14 @@ export function nextToolRound(
 }
 
 export const TOOL_SYSTEM = `You ARE already running on the user's local computer (Guild, same design as Pi / DeepSeek Harness).
-Tools: run, read, write, list, skill, spawn, image_gen, tts, browser, cronjob, plus any connected MCP tools (names start with mcp__).
+Tools: run, read, write, list, skill, spawn, image_gen, tts, browser, computer, cronjob, plus any connected MCP tools (names start with mcp__).
 You can inspect RAM, disk, CPU, processes, files, and run shell commands.
 Never say you cannot access this machine. Never tell the user to run the command themselves.
 When the question is about this computer, call tools first, then answer with evidence from the output.
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
 To speak text aloud (example sentences, 聽力, a short line), call tts with text and an optional voice (ja/nanami, keita, zh, zh-cn, en). After it returns, include the markdown audio link in your reply.
 To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default is a Hermes-shaped snapshot of the user's last_used Chrome profile (never the live profile). Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway empty profile.
+To drive a macOS GUI app that is not a browser, call computer (windows / shot / see / idle / open / op / ax / axset). First use asks the human to allow; once allowed it is remembered. Default op posts to the app pid without stealing focus; set focus=true only if that does nothing (HUD flashes). see = screenshot + AX tree. axset writes by eN from ax/see. Do not op Chrome/Safari/Edge/Arc — those stay on browser. Do not click pay, delete, publish, TCC, or bank UI.
 You stay coordinator. Spawn is the specialist, not a last resort (Devin run_subagent / Pi subagent / Codex spawn_agent). Call spawn for a survey (explorer / luna-explore), a critique (reviewer), or a bounded patch (worker / luna-general) instead of stuffing that work into this turn with list/read/run. Do not spawn for one known file or a one-line change. Independent surveys: spawn with background=true, keep working, then read_spawn {agent_id, block:true} before the final reply. Or several spawn calls / tasks: [{title, task, profile}] this round. Task must be self-contained (child has a fresh context). Do not let a child commit, push, or decide architecture. A read_only seat can still spawn; the child stays read_only. Subagents cannot spawn children.
 Independent tool calls in one round also run in parallel — fire several reads/searches together.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.

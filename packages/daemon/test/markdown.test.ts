@@ -24,6 +24,13 @@ test("renderMarkdown turns headings lists code and bold into HTML", () => {
     "# Title\n\n**32 GB** of RAM.\n\n- one\n- two\n\n`hw.memsize`\n\n```\necho hi\n```\n\n[docs](https://example.com)",
   );
   assert.match(html, /<h1>Title<\/h1>/);
+  const deep = renderMarkdown(
+    "#### 1. Gemini 系列\n\n##### nested\n\n###### smallest",
+  );
+  assert.match(deep, /<h4>1. Gemini 系列<\/h4>/);
+  assert.match(deep, /<h5>nested<\/h5>/);
+  assert.match(deep, /<h6>smallest<\/h6>/);
+  assert.doesNotMatch(deep, /#### 1/);
   assert.match(html, /<strong>32 GB<\/strong>/);
   assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/);
   assert.match(html, /<code>hw.memsize<\/code>/);

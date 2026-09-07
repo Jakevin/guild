@@ -381,6 +381,7 @@ export async function spawnSubagent(input: {
       dispatch: input.ctx.dispatch,
       signal: input.ctx.signal,
       onProgress: input.ctx.onProgress,
+      askComputer: input.ctx.askComputer,
     },
   });
   if (!result) {

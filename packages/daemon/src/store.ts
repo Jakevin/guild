@@ -27,6 +27,7 @@ import { CATALOG_SKILLS } from "./catalog/skills.ts";
 import { CATALOG_SUBAGENTS } from "./catalog/subagents.ts";
 import { parseAgentFile } from "./agent-file.ts";
 import { parseUsageAnchor, type UsageAnchor } from "./usage-anchor.ts";
+import { abortComputerGrant } from "./computer-grant.ts";
 import {
   dismissAssign,
   mergeAssign,
@@ -115,6 +116,8 @@ export type LiveTurn = {
   peerId?: string;
   /** Mid-turn recap shown as a bubble while tools still run. */
   draft?: string;
+  /** Waiting for the human to allow computer use. */
+  grant?: "computer";
 };
 
 export class GuildStore {
@@ -430,6 +433,7 @@ export class GuildStore {
   }
 
   abortTurn(roomId: string, botId?: string): boolean {
+    abortComputerGrant(roomId, botId);
     if (botId) {
       const controller = this.botAborts.get(roomId)?.get(botId);
       const hadLive = this.dropBotLive(roomId, botId);

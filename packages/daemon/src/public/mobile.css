@@ -341,9 +341,9 @@ textarea:focus-visible {
   font-size: 0.86em;
   padding: 0.1em 0.35em;
   border-radius: 6px;
-  background: var(--code-bg);
+  background: transparent;
   color: var(--code);
-  border: 1px solid var(--code-bg);
+  border: 1px solid transparent;
 }
 .assistant-text .md-fence {
   margin: 0.35rem 0 0.7rem;

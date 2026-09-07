@@ -555,6 +555,7 @@ export async function chatReply(input: {
   botId?: string;
   cronRun?: boolean;
   dispatch?: ToolContext["dispatch"];
+  askComputer?: () => Promise<boolean>;
 }): Promise<ChatReply> {
   const env = input.env ?? process.env;
   const system = buildChatSystem({
@@ -627,6 +628,7 @@ async function tryChatLlm(
     cronRun?: boolean;
     dispatch?: ToolContext["dispatch"];
     rosterHandles?: string[];
+    askComputer?: () => Promise<boolean>;
   },
   env: NodeJS.ProcessEnv,
   dataDir: string,
@@ -737,6 +739,7 @@ async function tryChatLlm(
       ...(input.cronRun ? { cronRun: true } : {}),
       ...policy,
       ...(input.dispatch ? { dispatch: input.dispatch } : {}),
+      ...(input.askComputer ? { askComputer: input.askComputer } : {}),
     },
   });
   if (!result) return null;

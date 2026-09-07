@@ -9,9 +9,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=liveid" />
-    <script src="/i18n.js?v=liveid"></script>
-    <script src="/md.js?v=tts"></script>
+    <link rel="stylesheet" href="/mobile.css?v=code-plain" />
+    <script src="/i18n.js?v=computer-grant"></script>
+    <script src="/md.js?v=heading-h4"></script>
   </head>
   <body class="m-away" data-i18n-page="mobile">
     <section class="screen" id="screen-list">
@@ -162,6 +162,13 @@
             ? "/dms/" + encodeURIComponent(r.id) + "/continue"
             : "/channels/" + encodeURIComponent(r.id) + "/continue";
         }
+        function computerUrl() {
+          const r = currentRoomRef();
+          if (!r) return "";
+          return r.kind === "dm"
+            ? "/dms/" + encodeURIComponent(r.id) + "/computer"
+            : "/channels/" + encodeURIComponent(r.id) + "/computer";
+        }
         function steerUrl() {
           const r = currentRoomRef();
           if (!r) return "";
@@ -247,6 +254,7 @@
               steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
               startedAt: row.startedAt || "",
               paused: Boolean(row.paused),
+              grant: row.grant === "computer" ? "computer" : "",
               messageId: row.messageId ? String(row.messageId) : "",
               draft: row.draft ? String(row.draft) : "",
             }));
@@ -401,6 +409,7 @@
           return "";
         }
         function liveStatusLabel(live) {
+          if (live && live.grant === "computer") return t("live.computer");
           if (live && live.paused) return t("live.paused");
           const mapped = liveFreebuffCopy(live && live.thinking);
           if (mapped) return mapped;
@@ -484,7 +493,18 @@
                   : "") +
                 liveStepsHtml(live.steps) +
                 '<div class="turn-actions">' +
-                (live.paused
+                (live.grant === "computer"
+                  ? '<button type="button" class="turn-allow" data-live-computer-allow="' +
+                    escapeHtml(bot.id) +
+                    '">' +
+                    t("live.allow") +
+                    "</button>" +
+                    '<button type="button" class="turn-deny" data-live-computer-deny="' +
+                    escapeHtml(bot.id) +
+                    '">' +
+                    t("live.deny") +
+                    "</button>"
+                  : live.paused
                   ? '<button type="button" class="turn-continue" data-live-continue="' +
                     escapeHtml(bot.id) +
                     '">' +
@@ -500,7 +520,7 @@
                 '">' +
                 t("live.stop") +
                 "</button>" +
-                (live.paused
+                (live.paused || live.grant === "computer"
                   ? ""
                   : '<button type="button" class="turn-steer" data-live-steer="' +
                     escapeHtml(bot.id) +
@@ -907,6 +927,18 @@
           renderThread();
           await pollLive().catch(() => {});
         }
+        async function answerComputer(botId, allow) {
+          await fetch(computerUrl(), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ botId: botId, allow: allow }),
+          });
+          (state.lives || []).forEach((row) => {
+            if (row.botId === botId) row.grant = "";
+          });
+          renderThread();
+          await pollLive().catch(() => {});
+        }
         async function continueTurn(botId) {
           (state.lives || []).forEach((row) => {
             if (row.botId === botId) row.paused = false;
@@ -1121,6 +1153,22 @@
           if (pause) {
             event.preventDefault();
             pauseTurn(pause.getAttribute("data-live-pause"));
+            return;
+          }
+          const allow = event.target.closest("[data-live-computer-allow]");
+          if (allow) {
+            event.preventDefault();
+            answerComputer(allow.getAttribute("data-live-computer-allow"), true).catch(
+              (err) => toast(err.message || String(err)),
+            );
+            return;
+          }
+          const deny = event.target.closest("[data-live-computer-deny]");
+          if (deny) {
+            event.preventDefault();
+            answerComputer(deny.getAttribute("data-live-computer-deny"), false).catch(
+              (err) => toast(err.message || String(err)),
+            );
             return;
           }
           const cont = event.target.closest("[data-live-continue]");

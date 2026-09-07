@@ -1585,7 +1585,10 @@ a.invite-btn:hover { text-decoration: none; }
 .assistant-text p:last-child { margin-bottom: 0; }
 .assistant-text h1,
 .assistant-text h2,
-.assistant-text h3 {
+.assistant-text h3,
+.assistant-text h4,
+.assistant-text h5,
+.assistant-text h6 {
   margin: 1.35rem 0 0.5rem;
   color: #f5f5f5;
   font-weight: 650;
@@ -1594,10 +1597,16 @@ a.invite-btn:hover { text-decoration: none; }
 }
 .assistant-text h1:first-child,
 .assistant-text h2:first-child,
-.assistant-text h3:first-child { margin-top: 0.1rem; }
+.assistant-text h3:first-child,
+.assistant-text h4:first-child,
+.assistant-text h5:first-child,
+.assistant-text h6:first-child { margin-top: 0.1rem; }
 .assistant-text h1 { font-size: 1.22rem; }
 .assistant-text h2 { font-size: 1.08rem; }
 .assistant-text h3 { font-size: 1rem; }
+.assistant-text h4 { font-size: 0.95rem; }
+.assistant-text h5 { font-size: 0.9rem; }
+.assistant-text h6 { font-size: 0.85rem; font-weight: 600; }
 .assistant-text ul,
 .assistant-text ol {
   margin: 0.15rem 0 1.05rem;
@@ -1636,17 +1645,17 @@ a.invite-btn:hover { text-decoration: none; }
   font-weight: 500;
   padding: 0.12em 0.4em;
   border-radius: 6px;
-  background: var(--code-bg);
+  background: transparent;
   color: var(--code);
-  border: 1px solid var(--code-bg);
+  border: 1px solid transparent;
   line-height: inherit;
   white-space: break-spaces;
   word-break: break-word;
 }
 .assistant-text code.md-file {
   color: var(--code);
-  background: var(--code-bg);
-  border-color: var(--code-bg);
+  background: transparent;
+  border-color: transparent;
 }
 .assistant-text .md-fence {
   margin: 0.25rem 0 0.75rem;
@@ -2107,6 +2116,12 @@ a.invite-btn:hover { text-decoration: none; }
 .turn-actions .turn-steer {
   color: #b4c8e8;
 }
+.turn-actions .turn-allow {
+  color: var(--steel);
+}
+.turn-actions .turn-deny {
+  color: var(--danger);
+}
 body.grok .turn-actions button {
   border-color: #3a3228;
   background: #1c1814;
@@ -2120,6 +2135,8 @@ body.grok .turn-actions .turn-stop { color: #d4a090; }
 body.grok .turn-actions .turn-pause,
 body.grok .turn-actions .turn-continue { color: #c4b090; }
 body.grok .turn-actions .turn-steer { color: #c4b090; }
+body.grok .turn-actions .turn-allow { color: #c4b090; }
+body.grok .turn-actions .turn-deny { color: #d4a090; }
 .turn-status .clock {
   margin-left: 8px;
   font-size: 13px;

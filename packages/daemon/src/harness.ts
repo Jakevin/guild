@@ -161,6 +161,7 @@ export function mutatingTool(name: string): boolean {
     name === "image_gen" ||
     name === "tts" ||
     name === "browser" ||
+    name === "computer" ||
     name.startsWith("mcp__")
   );
 }

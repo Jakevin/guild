@@ -123,6 +123,8 @@ test("takeSteers wraps mid-turn user text once", () => {
 
 test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /local computer/i);
+  assert.match(TOOL_SYSTEM, /\bcomputer\b/);
+  assert.match(TOOL_SYSTEM, /axset/);
   assert.match(TOOL_SYSTEM, /Never say you cannot access/);
   assert.match(TOOL_SYSTEM, /exit code/);
   assert.match(TOOL_SYSTEM, /image_gen/);

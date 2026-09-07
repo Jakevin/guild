@@ -8,9 +8,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=memory-tidy-fill" />
-    <script src="/i18n.js?v=memory-write"></script>
-    <script src="/md.js?v=tts"></script>
+    <link rel="stylesheet" href="/chat.css?v=code-plain" />
+    <script src="/i18n.js?v=computer-grant"></script>
+    <script src="/md.js?v=heading-h4"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
     <div class="nav-scrim" id="nav-scrim" hidden></div>
@@ -2164,6 +2164,7 @@
         return "";
       }
       function liveStatusLabel(live) {
+        if (live && live.grant === "computer") return t("live.computer");
         if (live && live.paused) return t("live.paused");
         const mapped = liveFreebuffCopy(live && live.thinking);
         if (mapped) return mapped;
@@ -2232,6 +2233,7 @@
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
+            grant: row.grant === "computer" ? "computer" : "",
             messageId: row.messageId ? String(row.messageId) : "",
             draft: row.draft ? String(row.draft) : "",
           }));
@@ -2263,6 +2265,7 @@
             steps: Array.isArray(row.steps) ? row.steps.slice(-5) : [],
             startedAt: row.startedAt || "",
             paused: Boolean(row.paused),
+            grant: row.grant === "computer" ? "computer" : "",
             messageId: row.messageId ? String(row.messageId) : "",
             draft: row.draft ? String(row.draft) : "",
             room: { kind: r.kind, id: r.id },
@@ -2353,9 +2356,21 @@
         const clock = clockHtml(liveStartedMs(live));
         const botId = live && live.botId ? live.botId : "";
         const paused = Boolean(live && live.paused);
+        const grant = live && live.grant === "computer";
         const actions = botId
           ? '<div class="turn-actions">' +
-            (paused
+            (grant
+              ? '<button type="button" class="turn-allow" data-live-computer-allow="' +
+                escapeHtml(botId) +
+                '">' +
+                t("live.allow") +
+                "</button>" +
+                '<button type="button" class="turn-deny" data-live-computer-deny="' +
+                escapeHtml(botId) +
+                '">' +
+                t("live.deny") +
+                "</button>"
+              : paused
               ? '<button type="button" class="turn-continue" data-live-continue="' +
                 escapeHtml(botId) +
                 '">' +
@@ -2371,7 +2386,7 @@
             '">' +
             t("live.stop") +
             "</button>" +
-            (paused
+            (paused || grant
               ? ""
               : '<button type="button" class="turn-steer" data-live-steer="' +
                 escapeHtml(botId) +
@@ -2416,6 +2431,7 @@
               escapeHtml(bot.id) +
               '"' +
               (live.paused ? ' data-paused="1"' : "") +
+              (live.grant === "computer" ? ' data-grant="computer"' : "") +
               ' role="status">' +
               actor.av +
               '<div class="msg-main">' +
@@ -2454,7 +2470,12 @@
           if (!block) return;
           const status = block.querySelector(".turn-status");
           const paused = Boolean(live.paused);
+          const grant = live.grant === "computer";
           if ((article.getAttribute("data-paused") === "1") !== paused) {
+            renderThread();
+            return;
+          }
+          if ((article.getAttribute("data-grant") === "computer") !== grant) {
             renderThread();
             return;
           }
@@ -2945,6 +2966,12 @@
           ? "/dms/" + encodeURIComponent(r.id) + "/pause"
           : "/channels/" + encodeURIComponent(r.id) + "/pause";
       }
+      function computerUrl(room) {
+        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        return r.kind === "dm"
+          ? "/dms/" + encodeURIComponent(r.id) + "/computer"
+          : "/channels/" + encodeURIComponent(r.id) + "/computer";
+      }
       function continueUrl(room) {
         const r = room || state.busyRoom || { kind: state.kind, id: state.id };
         return r.kind === "dm"
@@ -2989,6 +3016,19 @@
         if (state.live && (!botId || state.live.botId === botId)) {
           state.live.paused = true;
         }
+        renderThread();
+      }
+      async function answerComputer(botId, allow) {
+        const room = currentRoomRef();
+        await fetch(computerUrl(room), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ botId: botId, allow: allow }),
+        });
+        (state.lives || []).forEach((row) => {
+          if (row.botId === botId) row.grant = "";
+        });
+        if (state.live && state.live.botId === botId) state.live.grant = "";
         renderThread();
       }
       async function continueTurn(botId) {
@@ -3574,6 +3614,24 @@
             pauseTurn(livePause.getAttribute("data-live-pause"));
             return;
           }
+          const liveAllow = event.target.closest("[data-live-computer-allow]");
+          if (liveAllow) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            answerComputer(liveAllow.getAttribute("data-live-computer-allow"), true).catch(
+              (err) => alert(err.message),
+            );
+            return;
+          }
+          const liveDeny = event.target.closest("[data-live-computer-deny]");
+          if (liveDeny) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            answerComputer(liveDeny.getAttribute("data-live-computer-deny"), false).catch(
+              (err) => alert(err.message),
+            );
+            return;
+          }
           const liveContinue = event.target.closest("[data-live-continue]");
           if (liveContinue) {
             event.preventDefault();
@@ -3935,7 +3993,7 @@
       document.getElementById("thread").addEventListener("click", (event) => {
         if (
           event.target.closest(
-            "[data-live-stop], [data-live-pause], [data-live-continue], [data-live-steer]",
+            "[data-live-stop], [data-live-pause], [data-live-continue], [data-live-steer], [data-live-computer-allow], [data-live-computer-deny]",
           )
         )
           return;

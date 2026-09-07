@@ -359,7 +359,7 @@ function renderMarkdown(raw) {
       i += 1;
       continue;
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       const level = heading[1].length;
       html.push("<h" + level + ">" + inlineMd(heading[2]) + "</h" + level + ">");
@@ -414,7 +414,7 @@ function renderMarkdown(raw) {
     while (
       i < lines.length &&
       !/^\s*$/.test(lines[i]) &&
-      !/^#{1,3}\s+/.test(lines[i]) &&
+      !/^#{1,6}\s+/.test(lines[i]) &&
       !/^[-*]\s+/.test(lines[i]) &&
       !/^\d+\.\s+/.test(lines[i]) &&
       !/^>\s?/.test(lines[i]) &&

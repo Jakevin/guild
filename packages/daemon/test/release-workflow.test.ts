@@ -51,4 +51,5 @@ test("daemon build is a launcher syntax check, not tsc", () => {
   assert.doesNotMatch(pkg.scripts.build, /\btsc\b/);
   assert.ok(pkg.files.includes("src"));
   assert.ok(pkg.files.includes("bin"));
+  assert.ok(pkg.files.includes("native"));
 });

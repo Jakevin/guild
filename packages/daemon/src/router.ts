@@ -29,6 +29,7 @@ import {
   getLiveTurn,
   abortLiveTurn,
   pauseLiveTurn,
+  answerComputerUse,
   continueLiveTurn,
   healthPayload,
   importSkills,
@@ -964,6 +965,33 @@ export async function handleRequest(
         res,
         200,
         pauseLiveTurn(store, room.id, str(body, "botId") || undefined),
+      );
+      return;
+    }
+
+    const channelComputer = path.match(/^\/channels\/([^/]+)\/computer$/);
+    if (channelComputer && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        answerComputerUse(
+          store,
+          decodeURIComponent(channelComputer[1]),
+          str(body, "botId"),
+          body.allow === true,
+        ),
+      );
+      return;
+    }
+    const dmComputer = path.match(/^\/dms\/([^/]+)\/computer$/);
+    if (dmComputer && method === "POST") {
+      const room = resolveDm(store, decodeURIComponent(dmComputer[1]));
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        answerComputerUse(store, room.id, str(body, "botId"), body.allow === true),
       );
       return;
     }

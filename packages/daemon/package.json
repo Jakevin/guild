@@ -14,6 +14,7 @@
   "files": [
     "bin",
     "src",
+    "native",
     "cordis.yml",
     "vendor"
   ],

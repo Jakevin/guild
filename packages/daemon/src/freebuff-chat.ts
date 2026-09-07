@@ -45,6 +45,7 @@ const DEFAULT_FREEBUFF_TOOL_NAMES = [
   "spawn",
   "read_spawn",
   "browser",
+  "computer",
   "cronjob",
   "image_gen",
   "tts",
