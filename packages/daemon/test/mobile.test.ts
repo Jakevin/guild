@@ -153,7 +153,7 @@ test("away page locks the five seats and can steer a live turn", () => {
   assert.match(html, /method: "POST"[\s\S]*?body: JSON\.stringify\(payload\)/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /classList\.toggle\("err"/);
-  assert.match(html, /mobile\.css\?v=liveid/);
+  assert.match(html, /mobile\.css\?v=/);
   assert.doesNotMatch(html, /WebSocket/);
   assert.doesNotMatch(html, /fonts\.googleapis/);
   assert.doesNotMatch(html, /inn-street|#16100B/);

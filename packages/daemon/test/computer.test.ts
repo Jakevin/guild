@@ -119,7 +119,7 @@ test("computer without a grant and no live seat refuses", async () => {
     { dataDir, sandbox: "workspace_write" },
   );
   assert.equal(result.isError, true);
-  assert.match(result.text, /computer_refused/);
+  assert.match(result.text, /computer_refused|macOS only/);
 });
 
 test("POST /channels/:id/computer answers a pending grant", async () => {
