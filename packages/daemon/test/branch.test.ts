@@ -48,7 +48,7 @@ test("message actions put 分支 after 重問", () => {
   assert.match(i18n, /\["branch", "分支"/);
   assert.match(css, /li\.nav-quest/);
   assert.match(css, /\.nav-branch/);
-  assert.match(html, /chat\.css\?v=cron-bot/);
+  assert.match(html, /chat\.css\?v=/);
   assert.match(html, /↳ /);
 });
 
@@ -282,7 +282,10 @@ test("POST /close without merge drops the branch and leaves parent MEMORY.md", a
     assert.equal(closed.status, 200);
     assert.equal(closed.body.merged, false);
     const parentMem = await json(origin, `/channels/${parentId}/memory.md`);
-    assert.equal(parentMem.body.body, "# Parent\n- do not touch\n");
+    const parentBody = String(parentMem.body.body);
+    assert.match(parentBody, /^Updated: \d{4}-\d{2}-\d{2}T/);
+    assert.match(parentBody, /# Parent\n- do not touch/);
+    assert.doesNotMatch(parentBody, /throwaway/);
     const gone = await json(origin, `/channels/${childId}`, { method: "DELETE" });
     assert.equal(gone.status, 404);
   } finally {

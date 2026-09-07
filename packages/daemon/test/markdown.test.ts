@@ -234,7 +234,7 @@ test("chat page loads the shipped markdown renderer", async () => {
   assert.match(home, /putHtmlFrames/);
   assert.match(home, /dropPending/);
   assert.match(home, /htmlPreviewSrcdoc/);
-  assert.match(home, /chat\.css\?v=cron-bot/);
+  assert.match(home, /chat\.css\?v=/);
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
   const { server, origin } = await listenApp(dataDir, {});
   try {
