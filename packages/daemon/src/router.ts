@@ -17,8 +17,10 @@ import {
   setChannelMd,
   getBotMemory,
   setBotMemory,
+  tidyBotMemory,
   getChannelMemory,
   setChannelMemory,
+  tidyChannelMemory,
   generateKind,
   draftListing,
   pickBotSkills,
@@ -739,6 +741,21 @@ export async function handleRequest(
       throw new StoreError(400, "Channel.md is only for channels");
     }
 
+    const botMemoryTidy = path.match(/^\/bots\/([^/]+)\/memory\.md\/tidy$/);
+    if (botMemoryTidy && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        await tidyBotMemory(store, decodeURIComponent(botMemoryTidy[1]), {
+          body: typeof body.body === "string" ? body.body : undefined,
+          ask: typeof body.ask === "string" ? body.ask : undefined,
+          env,
+        }),
+      );
+      return;
+    }
+
     const botMemory = path.match(/^\/bots\/([^/]+)\/memory\.md$/);
     if (botMemory && method === "GET") {
       json(res, 200, getBotMemory(store, decodeURIComponent(botMemory[1])));
@@ -753,6 +770,29 @@ export async function handleRequest(
           store,
           decodeURIComponent(botMemory[1]),
           typeof body.body === "string" ? body.body : "",
+        ),
+      );
+      return;
+    }
+
+    const channelMemoryTidy = path.match(
+      /^\/channels\/([^/]+)\/memory\.md\/tidy$/,
+    );
+    if (channelMemoryTidy && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        await tidyChannelMemory(
+          store,
+          decodeURIComponent(channelMemoryTidy[1]),
+          {
+            body: typeof body.body === "string" ? body.body : undefined,
+            channelMd:
+              typeof body.channelMd === "string" ? body.channelMd : undefined,
+            ask: typeof body.ask === "string" ? body.ask : undefined,
+            env,
+          },
         ),
       );
       return;

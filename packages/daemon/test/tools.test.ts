@@ -296,6 +296,7 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /Do not @all/);
   assert.match(system, /even if the human only named you this turn/);
   assert.match(system, /Channel.md is the task/);
+  assert.match(system, /dated standing notes, not the live task/);
   assert.match(system, /catalog is availability/);
   assert.match(system, /<available_subagents>/);
   assert.match(system, /`explorer`/);

@@ -6,7 +6,7 @@ import {
   type CompactCheckpoint,
   type HistoryItem,
 } from "./compact.ts";
-import { MEMORY_INJECT_CAP } from "./memory.ts";
+import { MEMORY_INJECT_CAP, MEMORY_LIVE_TASK_NOTE } from "./memory.ts";
 import { isWebBridgeTarget, llmComplete, resolveLlm } from "./llm.ts";
 import {
   withFreebuffToolSystem,
@@ -79,7 +79,7 @@ export function localGenerate(
     return {
       name,
       source: "local",
-      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- Channel.md is the task. MEMORY.md is standing notes. Do not recap the whole thread.\n\n## Plan\n- One local directive: goal + done when + a short checklist. Revise it when evidence changes.\n\n## Act\n- Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
+      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- Channel.md is the task. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.\n\n## Plan\n- One local directive: goal + done when + a short checklist. Revise it when evidence changes.\n\n## Act\n- Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
     };
   }
   if (kind === "skill") {
@@ -144,7 +144,7 @@ async function tryLlmGenerate(
       ? "body must be Codex-style TOML with name, description, and developer_instructions."
       : kind === "agent"
         ? `body must be Markdown with sections:
-## Memory — Channel.md is the task; MEMORY.md is standing notes; do not recap the whole thread
+## Memory — Channel.md is the task; MEMORY.md is dated standing notes, not the live task; do not recap the whole thread
 ## Plan — one local directive: goal, done when, short checklist
 ## Act — inspect, smallest change, verify, stop; hand off other seats with a line-start @handle spec
 ## Skills — catalog is availability, not a todo; call skill only when this turn matches`
@@ -368,7 +368,7 @@ You may @handle any staffed teammate whose job is the next step, even if the hum
 Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
-- Memory: Channel.md is the task. MEMORY.md is standing notes. The compact log is working memory — do not recap the whole thread.
+- Memory: Channel.md is the task. MEMORY.md is dated standing notes, not the live task — Closed bullets stay closed. The compact log is working memory — do not recap the whole thread.
 - Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
 - Act: you coordinate this seat. Spawn first when the work is a repo survey (\`explorer\` / luna-explore), a critique (\`reviewer\`), or a bounded isolated patch (\`worker\` / luna-general); then verify the child's evidence and decide. Independent surveys: spawn background=true, keep working, then read_spawn before you answer. Sequential: background=false and wait. Do not spawn for one known file, a one-line change, or a question that needs no repo. Do not let children commit, push, or make the architecture call. Do not skip spawn just because you can do the work yourself. Do not spawn to do another staffed bot's job — @handle them instead.`;
@@ -381,7 +381,7 @@ If the work belongs to another adventurer, say so in prose and ask the human to 
 Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
 
 Harness this turn (Memory → Plan → Skills → Act):
-- Memory: MEMORY.md is standing notes. There is no Channel.md in a whisper. Do not recap the whole thread.
+- Memory: MEMORY.md is dated standing notes, not the live task. There is no Channel.md in a whisper. Do not recap the whole thread.
 - Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
 - Act: you may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
@@ -480,11 +480,11 @@ export function buildChatSystem(input: {
     : "";
   const botMem = (input.botMemory ?? "").trim();
   const botMemBlock = botMem
-    ? `# MEMORY.md\nStanding notes this bot has learned. Auto-updated after useful turns. Not a transcript.\n\n${botMem.slice(0, MEMORY_INJECT_CAP)}`
+    ? `# MEMORY.md\nStanding notes this bot has learned. Auto-updated after useful turns. ${MEMORY_LIVE_TASK_NOTE}\n\n${botMem.slice(0, MEMORY_INJECT_CAP)}`
     : "";
   const roomMem = (input.channelMemory ?? "").trim();
   const roomMemBlock = roomMem
-    ? `# Channel MEMORY.md\nStanding notes for this channel, shared by everyone here. Auto-updated.\n\n${roomMem.slice(0, MEMORY_INJECT_CAP)}`
+    ? `# Channel MEMORY.md\nStanding notes for this channel, shared by everyone here. Auto-updated. ${MEMORY_LIVE_TASK_NOTE}\n\n${roomMem.slice(0, MEMORY_INJECT_CAP)}`
     : "";
   return [
     `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,

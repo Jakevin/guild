@@ -308,7 +308,7 @@ export function draftFromListingHtml(
     oneLiner,
     identity,
     "## Guild",
-    "- Channel.md is the task. MEMORY.md is standing notes. Do not recap the whole thread.",
+    "- Channel.md is the task. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.",
     `- ${note}`,
   ]);
 
@@ -316,7 +316,7 @@ export function draftFromListingHtml(
     `# ${name}`,
     job,
     "## Memory",
-    "- Channel.md is the task. MEMORY.md is standing notes. Do not recap the whole thread.",
+    "- Channel.md is the task. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.",
     buckets.prefs.length
       ? `- First run: fill prefs that are still unset.\n\n${joinBlocks(buckets.prefs)}`
       : "",

@@ -29,6 +29,8 @@ import {
   harvestBotMemory,
   harvestChannelMemory,
   mergeQuestMemory,
+  stampMemoryUpdated,
+  tidyMemory,
 } from "./memory.ts";
 import { listHostSkills, type HostSkill } from "./host-skills.ts";
 import {
@@ -885,7 +887,7 @@ export function getBotMemory(store: GuildStore, botId: string) {
 }
 
 export function setBotMemory(store: GuildStore, botId: string, body: string) {
-  return { body: store.writeBotMemory(botId, body) };
+  return { body: store.writeBotMemory(botId, stampMemoryUpdated(body)) };
 }
 
 export function getChannelMemory(store: GuildStore, roomId: string) {
@@ -897,7 +899,43 @@ export function setChannelMemory(
   roomId: string,
   body: string,
 ) {
-  return { body: store.writeChannelMemory(roomId, body) };
+  return { body: store.writeChannelMemory(roomId, stampMemoryUpdated(body)) };
+}
+
+export async function tidyBotMemory(
+  store: GuildStore,
+  botId: string,
+  input: { body?: string; ask?: string; env?: NodeJS.ProcessEnv } = {},
+) {
+  if (!store.getBot(botId)) throw new StoreError(404, "bot not found");
+  return tidyMemory({
+    store,
+    scope: "bot",
+    current: input.body ?? store.readBotMemory(botId),
+    ask: input.ask,
+    env: input.env,
+    prefer: store.getBot(botId)?.model ?? null,
+  });
+}
+
+export async function tidyChannelMemory(
+  store: GuildStore,
+  roomId: string,
+  input: {
+    body?: string;
+    channelMd?: string;
+    ask?: string;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  return tidyMemory({
+    store,
+    scope: "channel",
+    current: input.body ?? store.readChannelMemory(roomId),
+    channelMd: input.channelMd ?? channelMarkdownForRoom(store, roomId),
+    ask: input.ask,
+    env: input.env,
+  });
 }
 
 export function setChannelMd(

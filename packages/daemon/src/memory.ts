@@ -1,9 +1,13 @@
 import type { ModelRef } from "@guild/protocol";
 import { llmComplete } from "./llm.ts";
-import type { GuildStore } from "./store.ts";
+import { StoreError, type GuildStore } from "./store.ts";
 
 export const MEMORY_FILE_CAP = 8_000;
 export const MEMORY_INJECT_CAP = 3_500;
+export const MEMORY_LIVE_TASK_NOTE =
+  "Dated standing notes (Updated / YYYY-MM-DD). Not the live task. Channel.md and the latest user message outrank this file. Do not revive Closed or contradicted bullets as this-turn Goal.";
+
+const UPDATED_LINE = /^Updated:\s*\S+[^\n]*\n*/;
 
 const GREETING =
   /^(hi|hello|hey|yo|sup|早安|午安|晚安|大家好|哈囉|嗨|你好)[\s!！。.~…]*$/i;
@@ -12,6 +16,18 @@ export function clipMemory(text: string, cap = MEMORY_FILE_CAP): string {
   const raw = String(text || "").replace(/\r\n/g, "\n").trim();
   if (raw.length <= cap) return raw;
   return raw.slice(0, cap - 1).trimEnd() + "…";
+}
+
+export function memoryTimestamp(now = new Date()): string {
+  return now.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+export function stampMemoryUpdated(text: string, now = new Date()): string {
+  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return "";
+  const stripped = raw.replace(UPDATED_LINE, "").trim();
+  if (!stripped) return `Updated: ${memoryTimestamp(now)}\n`;
+  return `Updated: ${memoryTimestamp(now)}\n\n${stripped}`;
 }
 
 export function redactSecrets(text: string): string {
@@ -59,9 +75,14 @@ function extractPrompt(scope: "bot" | "channel", current: string, turn: string):
     scope === "bot"
       ? "this bot and the user"
       : "this channel (shared by everyone in the room)";
+  const today = memoryTimestamp().slice(0, 10);
   return `You maintain MEMORY.md for ${who}.
 Standing notes only: names, preferences, decisions, recurring work, conventions, ownership, tech.
-Do not record greetings, the current date/time, one-off questions, secrets, passwords, or API keys.
+Today (UTC) is ${today}. Start the file with one line: Updated: <ISO-8601 UTC>.
+Prefix fact bullets with YYYY-MM-DD (keep existing dates; new or changed facts use ${today}).
+Put cancelled, shipped, or do-not-revive items under ## Closed. Closed is not this-turn Goal.
+Channel.md and the latest user message outrank these notes. Do not treat Closed or contradicted bullets as the live task.
+Do not record greetings, one-off questions, secrets, passwords, or API keys.
 Keep useful old bullets. Drop stale or contradicted ones. Max 80 lines.
 
 Current MEMORY.md:
@@ -124,7 +145,10 @@ export async function harvestBotMemory(input: {
   });
   const next = applyMemoryUpdate(current, extracted);
   if (next == null) return { updated: false, body: current };
-  return { updated: true, body: input.store.writeBotMemory(input.botId, next) };
+  return {
+    updated: true,
+    body: input.store.writeBotMemory(input.botId, stampMemoryUpdated(next)),
+  };
 }
 
 export function localMergeQuestMemory(
@@ -142,8 +166,12 @@ export function localMergeQuestMemory(
 }
 
 function mergeQuestPrompt(parent: string, child: string, questName: string): string {
+  const today = memoryTimestamp().slice(0, 10);
   return `You merge a closed side quest's MEMORY.md into the parent channel MEMORY.md.
 Standing notes only: names, preferences, decisions, recurring work, conventions, ownership, tech.
+Today (UTC) is ${today}. Start the file with one line: Updated: <ISO-8601 UTC>.
+Prefix fact bullets with YYYY-MM-DD (keep existing dates; new facts use ${today}).
+Put cancelled, shipped, or do-not-revive items under ## Closed. Closed is not this-turn Goal.
 Keep useful bullets from both. Drop stale, duplicated, or contradicted ones. Max 80 lines.
 Do not copy the whole transcript. Do not mention this merge.
 
@@ -192,7 +220,10 @@ export async function mergeQuestMemory(input: {
   if (next == null) return { updated: false, body: parent };
   return {
     updated: true,
-    body: input.store.writeChannelMemory(input.parentId, next),
+    body: input.store.writeChannelMemory(
+      input.parentId,
+      stampMemoryUpdated(next),
+    ),
   };
 }
 
@@ -223,6 +254,172 @@ export async function harvestChannelMemory(input: {
   if (next == null) return { updated: false, body: current };
   return {
     updated: true,
-    body: input.store.writeChannelMemory(input.roomId, next),
+    body: input.store.writeChannelMemory(
+      input.roomId,
+      stampMemoryUpdated(next),
+    ),
   };
+}
+
+export type TidyMemoryResult = {
+  body: string;
+  plan: string;
+  needs: string[];
+  dropped: string[];
+  proposal: string;
+};
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
+function stripFence(text: string): string {
+  const raw = String(text || "").trim();
+  const fenced = raw.match(/^```(?:json|markdown|md)?\s*([\s\S]*?)```$/i);
+  return fenced ? fenced[1].trim() : raw;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const raw = stripFence(text);
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const value = JSON.parse(raw.slice(start, end + 1)) as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export function formatTidyProposal(input: {
+  plan?: string;
+  needs?: string[];
+  dropped?: string[];
+}): string {
+  const plan = String(input.plan || "").trim();
+  const needs = (input.needs || []).filter(Boolean);
+  const dropped = (input.dropped || []).filter(Boolean);
+  const lines: string[] = [];
+  if (plan) lines.push(plan);
+  if (needs.length) lines.push(`Needs:\n- ${needs.join("\n- ")}`);
+  if (dropped.length) lines.push(`Dropped:\n- ${dropped.join("\n- ")}`);
+  return lines.join("\n\n");
+}
+
+export function parseTidyMemory(
+  text: string,
+  now = new Date(),
+): TidyMemoryResult | null {
+  const rec = parseJsonObject(text);
+  const bodyRaw = rec && typeof rec.body === "string" ? rec.body : rec ? "" : text;
+  const body = stampMemoryUpdated(stripFence(bodyRaw), now);
+  if (body.length < 8) return null;
+  const plan = rec && typeof rec.plan === "string" ? rec.plan.trim() : "";
+  const needs = rec ? stringList(rec.needs) : [];
+  const dropped = rec ? stringList(rec.dropped) : [];
+  return {
+    body,
+    plan,
+    needs,
+    dropped,
+    proposal: formatTidyProposal({ plan, needs, dropped }),
+  };
+}
+
+export const TIDY_ASK_CAP = 500;
+
+export function clipTidyAsk(raw: string): string {
+  return String(raw || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, TIDY_ASK_CAP);
+}
+
+export function buildTidyPrompt(input: {
+  scope: "bot" | "channel";
+  current: string;
+  channelMd?: string;
+  ask?: string;
+}): string {
+  const who =
+    input.scope === "bot"
+      ? "this bot and the user"
+      : "this channel (shared by everyone in the room)";
+  const channel = String(input.channelMd || "").trim();
+  const today = memoryTimestamp().slice(0, 10);
+  const ask = clipTidyAsk(input.ask || "");
+  const channelBlock = channel
+    ? `Channel.md (outranks MEMORY.md; do not copy it into MEMORY.md):\n<<<\n${channel.slice(0, 4000)}\n>>>\n\n`
+    : "";
+  const askBlock = ask
+    ? `Live task (human ask — this is the Plan directive; do it):\n<<<\n${ask}\n>>>\n\n`
+    : "";
+  const plan = ask
+    ? `Plan: one local directive. Goal: ${ask}. Also date remaining notes and keep Closed from looking like the live Goal. Done when the ask is reflected in MEMORY.md.`
+    : "Plan: one local directive. Goal: keep current standing facts, drop stale/duplicated/contradicted bullets, date what remains. Done when the file is short, dated, and Closed items cannot be mistaken for the live Goal.";
+  return `Tidy MEMORY.md for ${who}. Follow the Guild harness this turn.
+Today (UTC) is ${today}.
+
+Memory: Channel.md is the task when present. MEMORY.md is dated standing notes, not the live task. Do not recap a transcript. Closed bullets stay closed.
+
+${plan}
+
+Skills: none. Do not call tools. Do not inspect the repo. Do not commit, push, or tag.
+
+Act: rewrite MEMORY.md. Then list remaining needs (open questions that still need a human or a seat) — propose them, do not execute.
+
+Rules:
+- First line: Updated: <ISO-8601 UTC>
+- Fact bullets start with YYYY-MM-DD (keep old dates; new or changed facts use ${today})
+- Sections: Current, Closed, Conventions (omit empty)
+- Closed = cancelled, shipped-and-done, do-not-revive. Never phrase Closed as a Goal.
+- Drop status theater, PID trivia, and repeated void-rituals of old versions once recorded as Closed.
+- If the live task asks to delete or drop a topic, remove it from Current. Do not leave it as a Goal. A one-line Closed note is enough if the fact still matters (shipped / do not revive).
+- Max 80 lines. Language: follow the current file.
+
+${askBlock}${channelBlock}Current MEMORY.md:
+<<<
+${input.current.trim()}
+>>>
+
+Return JSON only:
+{"plan":"goal + done when","needs":["still open…"],"dropped":["removed or moved to Closed…"],"body":"<full MEMORY.md>"}`;
+}
+
+export async function tidyMemory(input: {
+  store: GuildStore;
+  scope: "bot" | "channel";
+  current: string;
+  channelMd?: string;
+  ask?: string;
+  env?: NodeJS.ProcessEnv;
+  prefer?: ModelRef | null;
+}): Promise<TidyMemoryResult> {
+  const current = String(input.current || "").replace(/\r\n/g, "\n").trim();
+  if (!current) throw new StoreError(400, "memory is empty");
+  const result = await llmComplete({
+    dataDir: input.store.dataDir,
+    env: input.env,
+    role: "compression",
+    prefer: input.prefer,
+    tools: false,
+    temperature: 0.1,
+    system:
+      "You tidy MEMORY.md with the Guild harness (Memory → Plan → Skills → Act). Output JSON only. No preamble.",
+    messages: [{ role: "user", content: buildTidyPrompt({ ...input, current }) }],
+  });
+  if (!result?.text?.trim()) {
+    throw new StoreError(400, "no model connected");
+  }
+  if (looksLikeError(result.text)) throw new StoreError(400, "tidy failed");
+  const parsed = parseTidyMemory(result.text);
+  if (!parsed) throw new StoreError(400, "tidy failed");
+  return parsed;
 }

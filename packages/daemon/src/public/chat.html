@@ -8,8 +8,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=cron-bot" />
-    <script src="/i18n.js?v=cron-bot"></script>
+    <link rel="stylesheet" href="/chat.css?v=memory-ask" />
+    <script src="/i18n.js?v=memory-ask"></script>
     <script src="/md.js?v=tts"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
@@ -322,8 +322,16 @@
       <p data-i18n="channel.mdHelp">這張委託的任務說明。用 @handle 叫冒險者時會讀到。密談沒有委託書。</p>
       <textarea id="channel-md-body" rows="8" placeholder="# Channel.md"></textarea>
       <h2 data-i18n="memory.channel">委託 MEMORY.md</h2>
-      <p data-i18n="memory.channelHelp">這張委託共享的站立筆記。有用的回合後會自動更新。人寫的委託書優先。</p>
+      <p data-i18n="memory.channelHelp">這張委託共享的站立筆記。有用的回合後會自動更新，並標上日期。人寫的委託書與最新一句話優先。</p>
       <textarea id="channel-memory-body" rows="8" placeholder="# MEMORY.md"></textarea>
+      <div class="memory-tidy">
+        <div class="memory-tidy-row">
+          <label class="memory-tidy-ask-label" for="channel-memory-ask" data-i18n="memory.ask">需求</label>
+          <input id="channel-memory-ask" type="text" maxlength="500" autocomplete="off" placeholder="刪除 v0.2.26 降版的記憶" data-i18n-placeholder="memory.askPh" />
+          <button type="button" class="ghost" id="channel-memory-tidy" data-i18n="memory.tidy" data-i18n-title="memory.tidyHelp" title="請模型依 Memory → Plan → Act 整理筆記、標上日期，並提出還缺什麼。不會自動存檔。">整理記憶</button>
+        </div>
+        <p class="memory-proposal" id="channel-memory-proposal" hidden></p>
+      </div>
       <div class="dialog-actions">
         <button type="button" class="ghost danger" id="channel-md-del" data-i18n="channel.delete">刪除委託</button>
         <button type="button" class="ghost" id="channel-md-cancel" data-i18n="cancel">取消</button>
@@ -359,8 +367,16 @@
     </dialog>
     <dialog id="bot-memory">
       <h2 data-i18n="memory.bot">MEMORY.md</h2>
-      <p data-i18n="memory.botHelp">這名冒險者學會的站立筆記。有用的回合後會自動更新。</p>
+      <p data-i18n="memory.botHelp">這名冒險者學會的站立筆記。有用的回合後會自動更新，並標上日期。人寫的委託書與最新一句話優先。</p>
       <textarea id="bot-memory-body" rows="12" placeholder="# MEMORY.md"></textarea>
+      <div class="memory-tidy">
+        <div class="memory-tidy-row">
+          <label class="memory-tidy-ask-label" for="bot-memory-ask" data-i18n="memory.ask">需求</label>
+          <input id="bot-memory-ask" type="text" maxlength="500" autocomplete="off" placeholder="刪除 v0.2.26 降版的記憶" data-i18n-placeholder="memory.askPh" />
+          <button type="button" class="ghost" id="bot-memory-tidy" data-i18n="memory.tidy" data-i18n-title="memory.tidyHelp" title="請模型依 Memory → Plan → Act 整理筆記、標上日期，並提出還缺什麼。不會自動存檔。">整理記憶</button>
+        </div>
+        <p class="memory-proposal" id="bot-memory-proposal" hidden></p>
+      </div>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="bot-memory-cancel" data-i18n="cancel">取消</button>
         <button type="button" id="bot-memory-save" data-i18n="save">儲存</button>
@@ -3785,6 +3801,10 @@
           notes && typeof notes.body === "string" ? notes.body : "";
         document.getElementById("channel-memory-body").value =
           memory && typeof memory.body === "string" ? memory.body : "";
+        const channelProposal = document.getElementById("channel-memory-proposal");
+        channelProposal.hidden = true;
+        channelProposal.textContent = "";
+        document.getElementById("channel-memory-ask").value = "";
         const ch = currentChannel();
         const locked = Boolean(
           ch && (ch.id === "channel-general" || ch.name === "general"),
@@ -3809,8 +3829,64 @@
         ).then((r) => r.json());
         document.getElementById("bot-memory-body").value =
           payload && typeof payload.body === "string" ? payload.body : "";
+        const botProposal = document.getElementById("bot-memory-proposal");
+        botProposal.hidden = true;
+        botProposal.textContent = "";
+        document.getElementById("bot-memory-ask").value = "";
         hideBotCard();
         botMemoryDialog.showModal();
+      }
+      async function runMemoryTidy(opts) {
+        const textarea = document.getElementById(opts.textareaId);
+        const button = document.getElementById(opts.buttonId);
+        const proposal = document.getElementById(opts.proposalId);
+        const askEl = document.getElementById(opts.askId);
+        const draft = textarea.value;
+        const ask = askEl ? askEl.value : "";
+        if (!String(draft).trim()) {
+          showToast(t("memory.tidyEmpty"), 2200);
+          return;
+        }
+        button.disabled = true;
+        button.textContent = t("memory.tidying");
+        if (askEl) askEl.disabled = true;
+        try {
+          const res = await fetch(opts.url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(opts.body(draft, ask)),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showToast(payload.error || t("memory.tidyFailed"), 3200);
+            return;
+          }
+          if (typeof payload.body === "string") textarea.value = payload.body;
+          const bits = [];
+          if (payload.plan) bits.push(payload.plan);
+          if (Array.isArray(payload.needs) && payload.needs.length) {
+            bits.push(t("memory.needs") + "\n- " + payload.needs.join("\n- "));
+          }
+          if (Array.isArray(payload.dropped) && payload.dropped.length) {
+            bits.push(t("memory.dropped") + "\n- " + payload.dropped.join("\n- "));
+          }
+          if (!bits.length && typeof payload.proposal === "string" && payload.proposal.trim()) {
+            bits.push(payload.proposal.trim());
+          }
+          if (bits.length) {
+            proposal.hidden = false;
+            proposal.textContent = bits.join("\n\n");
+          } else {
+            proposal.hidden = true;
+            proposal.textContent = "";
+          }
+        } catch (err) {
+          showToast(t("memory.tidyFailed"), 3200);
+        } finally {
+          button.disabled = false;
+          button.textContent = t("memory.tidy");
+          if (askEl) askEl.disabled = false;
+        }
       }
       const botCard = document.getElementById("bot-card");
       function hideBotCard() {
@@ -4154,6 +4230,44 @@
         }
         await renderCronList();
         loadNavCron().catch(() => {});
+      });
+      function startChannelMemoryTidy() {
+        if (state.kind !== "channel") return;
+        runMemoryTidy({
+          url: "/channels/" + encodeURIComponent(state.id) + "/memory.md/tidy",
+          textareaId: "channel-memory-body",
+          buttonId: "channel-memory-tidy",
+          proposalId: "channel-memory-proposal",
+          askId: "channel-memory-ask",
+          body: (draft, ask) => ({
+            body: draft,
+            ask,
+            channelMd: document.getElementById("channel-md-body").value,
+          }),
+        });
+      }
+      function startBotMemoryTidy() {
+        if (!memoryBotId) return;
+        runMemoryTidy({
+          url: "/bots/" + encodeURIComponent(memoryBotId) + "/memory.md/tidy",
+          textareaId: "bot-memory-body",
+          buttonId: "bot-memory-tidy",
+          proposalId: "bot-memory-proposal",
+          askId: "bot-memory-ask",
+          body: (draft, ask) => ({ body: draft, ask }),
+        });
+      }
+      document.getElementById("channel-memory-tidy").addEventListener("click", startChannelMemoryTidy);
+      document.getElementById("bot-memory-tidy").addEventListener("click", startBotMemoryTidy);
+      document.getElementById("channel-memory-ask").addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        startChannelMemoryTidy();
+      });
+      document.getElementById("bot-memory-ask").addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        startBotMemoryTidy();
       });
       document.getElementById("bot-memory-cancel").addEventListener("click", () => {
         botMemoryDialog.close();

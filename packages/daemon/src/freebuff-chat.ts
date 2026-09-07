@@ -265,7 +265,10 @@ export function formatStandingNotes(botMemory?: string, channelMemory?: string):
   const bot = String(botMemory ?? "").trim().slice(0, MEMORY_HASH_CAP);
   const channel = String(channelMemory ?? "").trim().slice(0, MEMORY_HASH_CAP);
   if (!bot && !channel) return null;
-  const lines = ["<guild_standing_notes>"];
+  const lines = [
+    "<guild_standing_notes>",
+    "Dated standing notes. Not the live task. Closed bullets stay closed.",
+  ];
   if (bot) lines.push("# MEMORY.md", bot);
   if (channel) lines.push("# Channel MEMORY.md", channel);
   lines.push("</guild_standing_notes>");
