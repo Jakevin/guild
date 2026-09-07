@@ -51,7 +51,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - run: pnpm i --frozen-lockfile
+      - run: pnpm i
       - run: pnpm test
 
       - name: npm CLI for trusted publishing
