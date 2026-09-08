@@ -104,6 +104,62 @@ html, body { margin: 0; height: 100%; }
 .assistant-text .md-fence-tab:active:not(:disabled) {
   transform: scale(var(--press));
 }
+button:disabled,
+button[disabled],
+[aria-disabled="true"],
+.icon-btn:disabled,
+.add-ch:disabled,
+.bot-card-btn:disabled,
+.create-row button:disabled,
+.traj-btn:disabled,
+.members-btn:disabled,
+.invite-btn:disabled,
+.jump-bottom:disabled,
+.turn-actions button:disabled,
+.msg-actions button:disabled,
+.composer-add:disabled,
+.composer-reply-clear:disabled,
+.primary:disabled,
+.model-btn:disabled,
+.dialog-actions button:disabled,
+.memory-tidy-row button:disabled,
+.cron-sheet-back:disabled,
+.cron-sheet-acts button:disabled,
+.queue-chip button:disabled,
+.attach-chip-x:disabled,
+.attach-item:disabled,
+.attach-back:disabled,
+.attach-row:disabled,
+.attach-term button:disabled,
+.assign-list button:disabled,
+.mention-item:disabled,
+.model-row:disabled,
+.model-choice:disabled,
+.stats-ico:disabled,
+.html-zoom-close:disabled,
+.assistant-text .md-fence-btn:disabled,
+.assistant-text .md-fence-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+button.loading,
+button[aria-busy="true"],
+button.busy,
+button[data-loading],
+.primary.loading,
+.icon-btn.loading,
+.add-ch.loading,
+.bot-card-btn.loading,
+.create-row button.loading,
+.traj-btn.loading,
+.members-btn.loading,
+.invite-btn.loading,
+.turn-actions button.loading,
+.dialog-actions button.loading,
+.cron-sheet-acts button.loading {
+  animation: busy-pulse 0.9s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .icon-btn,
   .add-ch,
@@ -3788,3 +3844,211 @@ dialog p { margin: 0 0 0.8rem; color: var(--muted); font-size: 0.9rem; }
 @media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
   .sidebar { transition: transform 0.2s ease; }
 }
+
+/* Dialog / Popover / Sheet: .traj / .cron-sheet / .mention-pop / .model-pop / .html-zoom */
+.traj,
+.cron-sheet,
+.mention-pop,
+.model-pop,
+.html-zoom {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 120ms ease-in,
+    transform 120ms ease-in;
+}
+
+.traj:not([hidden]),
+.cron-sheet:not([hidden]),
+.mention-pop:not([hidden]),
+.model-pop:not([hidden]),
+.html-zoom:not([hidden]) {
+  opacity: 1;
+  transform: translateY(0);
+  animation: dialog-float-in 180ms var(--ease-out);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+
+@keyframes dialog-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dialog-sink-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Message bubbles: slide in from speaker side */
+.msg.bot {
+  animation: bubble-in-bot 200ms var(--ease-out) both;
+}
+
+.msg.you {
+  animation: bubble-in-you 200ms var(--ease-out) both;
+}
+
+#thread:empty,
+.empty-thread {
+  animation: none;
+}
+
+.msg:nth-child(1) { animation-delay: 0ms; }
+.msg:nth-child(2) { animation-delay: 40ms; }
+.msg:nth-child(3) { animation-delay: 80ms; }
+.msg:nth-child(4) { animation-delay: 120ms; }
+.msg:nth-child(5) { animation-delay: 160ms; }
+
+@keyframes bubble-in-bot {
+  from {
+    opacity: 0;
+    transform: translate(-6px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes bubble-in-you {
+  from {
+    opacity: 0;
+    transform: translate(6px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+/* Failed message bubble: flash border only, no jitter/shake */
+.msg.err .bubble,
+.msg.failed .bubble,
+.msg.is-error .bubble,
+.bubble.err,
+.bubble.failed {
+  animation: bubble-err-flash 1.2s ease;
+  transform: none;
+}
+
+@keyframes bubble-err-flash {
+  0%, 100% {
+    box-shadow: 0 0 0 1px transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--danger);
+  }
+}
+
+/* Typing indicator: 3 dots 0.9s pulse adapted to dots */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.typing span,
+.typing .dot,
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: typing-dot 0.9s ease-in-out infinite;
+}
+.typing span:nth-child(1),
+.typing .dot:nth-child(1),
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing span:nth-child(2),
+.typing .dot:nth-child(2),
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3),
+.typing .dot:nth-child(3),
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing-dot {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Small screen: no displacement, opacity only */
+@media (max-width: 760px) {
+  .traj,
+  .cron-sheet,
+  .mention-pop,
+  .model-pop,
+  .html-zoom {
+    transform: none;
+    transition: opacity 120ms ease-in;
+  }
+  .traj:not([hidden]),
+  .cron-sheet:not([hidden]),
+  .mention-pop:not([hidden]),
+  .model-pop:not([hidden]),
+  .html-zoom:not([hidden]) {
+    transform: none;
+    animation: dialog-fade-in 180ms var(--ease-out);
+    transition: opacity 180ms var(--ease-out);
+  }
+  .msg.bot,
+  .msg.you {
+    animation-name: bubble-in-fade;
+  }
+}
+
+@keyframes dialog-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bubble-in-fade {
+  from { opacity: 0; transform: none; }
+  to { opacity: 1; transform: none; }
+}
+
+/* Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .msg.bot,
+  .msg.you,
+  .msg.err .bubble,
+  .msg.failed .bubble,
+  .bubble.err,
+  .bubble.failed,
+  .traj,
+  .cron-sheet,
+  .mention-pop,
+  .model-pop,
+  .html-zoom,
+  .typing span,
+  .typing .dot,
+  .typing-dot,
+  button.loading,
+  button[aria-busy="true"],
+  button.busy,
+  button[data-loading] {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+

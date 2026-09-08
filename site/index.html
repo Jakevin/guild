@@ -88,6 +88,11 @@
   --latin-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
 
   --shot-bg: #141318;
+  --press: 0.97;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --press-ms: 140ms;
+  --hover-ms: 160ms;
+  --focus: 0 0 0 2px var(--parchment), 0 0 0 3px #A8B0BC;
 }
 
 * { box-sizing: border-box; }
@@ -119,6 +124,67 @@ a:hover { color: var(--brand-light); }
 
 /* ========== Buttons ========== */
 
+.btn-primary,
+.btn-ghost,
+button.seat,
+button.chip,
+button.btn,
+.locale-switch button,
+.gallery-tabs button {
+  transition:
+    background-color var(--hover-ms) ease,
+    border-color var(--hover-ms) ease,
+    color var(--hover-ms) ease,
+    transform var(--press-ms) var(--ease-out),
+    opacity var(--hover-ms) ease;
+}
+
+.btn-primary:active:not(:disabled),
+.btn-ghost:active:not(:disabled),
+button.seat:active:not(:disabled),
+button.chip:active:not(:disabled),
+button.btn:active:not(:disabled),
+.locale-switch button:active:not(:disabled),
+.gallery-tabs button:active:not(:disabled) {
+  transform: scale(var(--press));
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled,
+button.seat:disabled,
+button.chip:disabled,
+button.btn:disabled,
+.locale-switch button:disabled,
+.gallery-tabs button:disabled,
+button:disabled,
+[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.btn-primary.loading,
+.btn-ghost.loading,
+button.seat.loading,
+button.chip.loading,
+button.btn.loading,
+button.loading,
+button[aria-busy="true"],
+[data-loading] {
+  animation: busy-pulse 0.9s ease-in-out infinite;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+@keyframes busy-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.25; transform: scale(0.82); }
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -133,7 +199,6 @@ a:hover { color: var(--brand-light); }
   padding: 13px 28px;
   border-radius: 999px;
   border: 1.5px solid var(--brand);
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
   cursor: pointer;
   min-width: 158px;
 }
@@ -141,7 +206,6 @@ a:hover { color: var(--brand-light); }
   background: var(--brand-light);
   border-color: var(--brand-light);
   color: var(--ivory);
-  transform: translateY(-1px);
 }
 
 .btn-ghost {
@@ -157,14 +221,12 @@ a:hover { color: var(--brand-light); }
   padding: 13px 28px;
   border-radius: 999px;
   border: 1.5px solid var(--brand);
-  transition: background 0.15s, color 0.15s, transform 0.15s;
   cursor: pointer;
   min-width: 158px;
 }
 .btn-ghost:hover {
   background: var(--brand-tint);
   color: var(--brand);
-  transform: translateY(-1px);
 }
 
 /* ========== Hero ========== */
@@ -877,7 +939,35 @@ footer.foot {
 
 @media (prefers-reduced-motion: reduce) {
   .gallery-panel,
-  .gallery-caption { transition: none; transform: none; }
+  .gallery-caption,
+  .btn-primary,
+  .btn-ghost,
+  button.seat,
+  button.chip,
+  button.btn,
+  .locale-switch button,
+  .gallery-tabs button,
+  button.loading,
+  button[aria-busy="true"],
+  [data-loading],
+  .msg,
+  .msg.you,
+  .msg.err .bubble,
+  .msg.failed .bubble,
+  .bubble.err,
+  .bubble.failed,
+  .traj,
+  .cron-sheet,
+  .mention-pop,
+  .model-pop,
+  .html-zoom,
+  .typing span,
+  .typing .dot,
+  .typing-dot {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
 }
 
 /* ========== Guild product chrome on parchment ========== */
@@ -1087,8 +1177,187 @@ button.seat.on { background: var(--brand-tint); }
   gap: 10px;
   background: var(--parchment);
 }
-.msg { display: flex; gap: 8px; align-items: flex-start; }
-.msg.you { flex-direction: row-reverse; }
+.msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  animation: bubble-in-bot 200ms var(--ease-out) both;
+}
+.msg.you {
+  flex-direction: row-reverse;
+  animation: bubble-in-you 200ms var(--ease-out) both;
+}
+.thread:empty,
+#thread:empty {
+  animation: none;
+}
+.msg:nth-child(1) { animation-delay: 0ms; }
+.msg:nth-child(2) { animation-delay: 40ms; }
+.msg:nth-child(3) { animation-delay: 80ms; }
+.msg:nth-child(4) { animation-delay: 120ms; }
+.msg:nth-child(5) { animation-delay: 160ms; }
+
+@keyframes bubble-in-bot {
+  from {
+    opacity: 0;
+    transform: translate(-6px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes bubble-in-you {
+  from {
+    opacity: 0;
+    transform: translate(6px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+@media (max-width: 640px) {
+  .msg,
+  .msg.you {
+    animation-name: bubble-in-fade;
+  }
+}
+
+@keyframes bubble-in-fade {
+  from { opacity: 0; transform: none; }
+  to { opacity: 1; transform: none; }
+}
+
+.msg.err .bubble,
+.msg.failed .bubble,
+.bubble.err,
+.bubble.failed {
+  animation: bubble-err-flash 1.2s ease;
+  transform: none;
+}
+
+@keyframes bubble-err-flash {
+  0%, 100% {
+    box-shadow: 0 0 0 1px transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 2px #DF4F5E;
+  }
+}
+
+/* Dialog / Popover / Sheet: .traj / .cron-sheet / .mention-pop / .model-pop / .html-zoom */
+.traj,
+.cron-sheet,
+.mention-pop,
+.model-pop,
+.html-zoom {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 120ms ease-in,
+    transform 120ms ease-in;
+}
+
+.traj:not([hidden]),
+.cron-sheet:not([hidden]),
+.mention-pop:not([hidden]),
+.model-pop:not([hidden]),
+.html-zoom:not([hidden]) {
+  opacity: 1;
+  transform: translateY(0);
+  animation: dialog-float-in 180ms var(--ease-out);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+
+@keyframes dialog-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dialog-sink-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 640px) {
+  .traj,
+  .cron-sheet,
+  .mention-pop,
+  .model-pop,
+  .html-zoom {
+    transform: none;
+    transition: opacity 120ms ease-in;
+  }
+  .traj:not([hidden]),
+  .cron-sheet:not([hidden]),
+  .mention-pop:not([hidden]),
+  .model-pop:not([hidden]),
+  .html-zoom:not([hidden]) {
+    transform: none;
+    animation: dialog-fade-in 180ms var(--ease-out);
+    transition: opacity 180ms var(--ease-out);
+  }
+}
+
+@keyframes dialog-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Typing indicator: 3 dots 0.9s pulse adapted to dots */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.typing span,
+.typing .dot,
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: typing-dot 0.9s ease-in-out infinite;
+}
+.typing span:nth-child(1),
+.typing .dot:nth-child(1),
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing span:nth-child(2),
+.typing .dot:nth-child(2),
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3),
+.typing .dot:nth-child(3),
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing-dot {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .bubble {
   background: var(--ivory);
   border-radius: 8px;
