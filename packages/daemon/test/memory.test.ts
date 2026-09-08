@@ -85,6 +85,7 @@ test("clipTidyAsk trims and the tidy prompt treats ask as the live task", () => 
   assert.match(prompt, /刪除v0\.2\.26降版的記憶/);
   assert.match(prompt, /this is the Plan directive/);
   assert.match(prompt, /wait-for-human blocker after the human already asked/);
+  assert.match(prompt, /shipped or withdrawn version cut/);
   assert.doesNotMatch(
     buildTidyPrompt({ scope: "channel", current: "- keep" }),
     /Live task/,

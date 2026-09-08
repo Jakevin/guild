@@ -83,6 +83,7 @@ Prefix fact bullets with YYYY-MM-DD (keep existing dates; new or changed facts u
 Put cancelled, shipped, or do-not-revive items under ## Closed. Closed is not this-turn Goal.
 The latest user message outranks Channel.md, which outranks these notes. Do not treat Closed or contradicted bullets as the live task.
 If the latest human message asked to push / 上版 / commit / tag / 發布, record that as authorized Act — do not keep a wait-for-human blocker.
+Shipped or withdrawn version cuts belong under ## Closed (one line). Do not keep them as Current Goal.
 Do not record greetings, one-off questions, secrets, passwords, or API keys.
 Keep useful old bullets. Drop stale or contradicted ones. Max 80 lines.
 
@@ -382,6 +383,7 @@ Rules:
 - Sections: Current, Closed, Conventions (omit empty)
 - Closed = cancelled, shipped-and-done, do-not-revive. Never phrase Closed as a Goal.
 - Drop status theater, PID trivia, and repeated void-rituals of old versions once recorded as Closed.
+- A shipped or withdrawn version cut (old tag / republish / downgrade) is Closed history. One Closed line is enough. Never a Current Goal.
 - If the live task asks to delete or drop a topic, remove it from Current. Do not leave it as a Goal. A one-line Closed note is enough if the fact still matters (shipped / do not revive).
 - Max 80 lines. Language: follow the current file.
 

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   canReuseCheckpoint,
   packHistory,
@@ -22,6 +23,15 @@ function items(n: number, body = "hello world") {
     body: body + " " + i,
   }));
 }
+
+test("compact summarizer treats shipped version cuts as Closed history", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../src/compact.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.match(src, /BACKGROUND only/);
+  assert.match(src, /never an open Goal/);
+});
 
 test("short rooms send the full transcript, not a last-8 slice", () => {
   const history = items(20);
@@ -63,6 +73,7 @@ test("packHistory writes a compact prefix then recent turns", async () => {
   assert.ok(packed.checkpoint?.summary);
   assert.match(packed.messages[0].content, /REFERENCE ONLY/);
   assert.match(packed.messages[0].content, /compacted/i);
+  assert.match(packed.messages[0].content, /Do not revive Closed cuts/);
   assert.doesNotMatch(packed.messages[0].content, /Understood/);
   assert.equal(packed.messages.some((row) => row.role === "assistant" && /Understood/.test(row.content)), false);
   assert.equal(packed.messages[packed.messages.length - 1].content, "what next");
@@ -225,6 +236,7 @@ test("fitSendMessages inserts a reference-only prefix when compacting", async ()
   const fitted = fitSendMessages(messages, 0, { budget: 8_000, compact: true });
   assert.ok(fitted.length < messages.length);
   assert.match(fitted[0].content, /REFERENCE ONLY/);
+  assert.match(fitted[0].content, /Do not revive Closed cuts/);
 });
 
 test("toModelMessage keeps this seat as assistant and other bots as hall lines", () => {

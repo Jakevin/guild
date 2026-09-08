@@ -320,7 +320,7 @@ async function summarizeOld(input: {
       {
         role: "user",
         content:
-          "Summarize the older conversation for continuing work. Capture goal, done-when, constraints, files/tools, open @handle specs, and unanswered questions. This is background only — the latest user message after the summary is the live task. Do not mention this summarization. Be dense.\n\n" +
+          "Summarize the older conversation as BACKGROUND only. The latest user message after this summary is the live task. Capture constraints, files/tools, and unanswered questions that still apply. Shipped, withdrawn, or do-not-revive version cuts (old tags, republish, downgrade) are Closed history — never an open Goal, never a live release gate in the title. Do not mention this summarization. Be dense.\n\n" +
           (input.previous?.trim()
             ? `Previous compact:\n${input.previous.trim()}\n\n`
             : "") +

@@ -125,7 +125,7 @@ export function localSendSummary(dropped: unknown[]): string {
 }
 
 export const COMPACT_REFERENCE_PREFIX =
-  "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. Treat it as background, not as the live task. Respond only to the latest user message (including @handle specs) after this summary. Your tools stay available for that live task.";
+  "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. Treat it as background, not as the live task. Respond only to the latest user message (including @handle specs) after this summary. A Goal or version cut in this summary is historical unless that latest message still asks for it. Do not revive Closed cuts (republish, downgrade, old tag). Your tools stay available for that live task.";
 
 export function compactPrefix(summary: string): { role: "user"; content: string }[] {
   const body = String(summary || "").trim() || "(empty compact)";
