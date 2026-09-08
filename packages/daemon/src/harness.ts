@@ -335,6 +335,7 @@ export async function runAgentLoop(input: {
     TOOL_LOOP_WRAP,
   } = await import("./tools.ts");
   const traces = input.traces ?? [];
+  input.toolCtx.traces = traces;
   const thinkingChunks = input.thinkingChunks ?? [];
   const exhausted = input.exhausted ?? TOOL_LOOP_EXHAUSTED;
   const emptyAfterTools = input.emptyAfterTools ?? EMPTY_AFTER_TOOLS;

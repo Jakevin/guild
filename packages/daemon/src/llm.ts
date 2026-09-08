@@ -731,7 +731,7 @@ export async function llmComplete(input: {
         text: formatFreebuffError(error),
         provider: target.providerId,
         model: target.model,
-        traces: [],
+        traces: toolCtx.traces ?? [],
         thinking: "",
         usage: { provider: target.providerId, model: target.model },
       };
@@ -761,7 +761,7 @@ export async function llmComplete(input: {
         ),
         provider: target.providerId,
         model: target.model,
-        traces: [],
+        traces: toolCtx.traces ?? [],
         thinking: "",
         usage: { provider: target.providerId, model: target.model },
       };
@@ -793,19 +793,23 @@ export async function llmComplete(input: {
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
-    if (target.transport === "commandcode" || target.transport === "antigravity") {
-      const message = error instanceof Error ? error.message : String(error);
-      const label = target.transport === "commandcode" ? "Command Code" : "Antigravity";
-      return {
-        text: `模型請求失敗：${label}: ${message}`,
-        provider: target.providerId,
-        model: target.model,
-        traces: [],
-        thinking: "",
-        usage: { provider: target.providerId, model: target.model },
-      };
-    }
-    return null;
+    const traces = toolCtx.traces ?? [];
+    const message = error instanceof Error ? error.message : String(error);
+    const label =
+      target.transport === "commandcode"
+        ? "Command Code"
+        : target.transport === "antigravity"
+          ? "Antigravity"
+          : "";
+    if (!traces.length && !label) return null;
+    return {
+      text: label ? `模型請求失敗：${label}: ${message}` : `模型請求失敗：${message}`,
+      provider: target.providerId,
+      model: target.model,
+      traces,
+      thinking: "",
+      usage: { provider: target.providerId, model: target.model },
+    };
   }
 }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,7 +14,7 @@ import {
   spawnProfile,
 } from "../src/subagent.ts";
 import { IMAGE_GEN_TIMEOUT_MS, isSafeGeneratedName } from "../src/image-gen.ts";
-import { AUX_ROLES, resolveLlm, writeModelsFile } from "../src/llm.ts";
+import { AUX_ROLES, llmComplete, resolveLlm, writeModelsFile } from "../src/llm.ts";
 import {
   builtinExecute,
   executeTool,
@@ -706,6 +707,130 @@ test("tool loop last-resort round fuse and Hermes wrap tools=None", () => {
     "utf8",
   );
   assert.match(cc, /wrap \? \{\} : \{ tools: catalog \}/);
+});
+
+test("Stop kills the run process group so background children do not keep writing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "guild-run-abort-"));
+  const late = join(dir, "late.txt");
+  const ac = new AbortController();
+  const pending = executeTool(
+    "run",
+    {
+      command: `(sleep 0.35; echo survived > "${late}") & sleep 8`,
+    },
+    { signal: ac.signal, sandbox: "full_access" },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  ac.abort();
+  await assert.rejects(pending, (err: unknown) => {
+    return Boolean(err && typeof err === "object" && "name" in err && err.name === "AbortError");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(existsSync(late), false);
+});
+
+test("run clips stdout before appending the exit code", async () => {
+  const result = await executeTool("run", {
+    command: "python3 -c 'import sys; sys.stdout.write(\"x\" * 17000); sys.exit(7)'",
+  });
+  assert.equal(result.isError, false);
+  assert.match(result.text, /\[exit code: 7\]/);
+  assert.match(result.text, /truncated/);
+  assert.ok(result.text.length < 17000);
+});
+
+test("executeTool keeps dispatch on the ctx passed to plugin handlers", async () => {
+  const result = await executeTool(
+    "spawn",
+    { prompt: "list cron" },
+    {
+      dispatch: async (name, _args, ctx) => {
+        if (name === "spawn") {
+          return executeTool("cronjob", { action: "list" }, ctx);
+        }
+        if (name === "cronjob") return { text: "via-plugin", isError: false };
+        return { text: "x", isError: false };
+      },
+    },
+  );
+  assert.equal(result.text, "via-plugin");
+  assert.equal(result.isError, false);
+});
+
+test("llmComplete keeps executed tool traces when the next model payload is invalid", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "guild-llm-traces-"));
+  const file = join(dir, "kept.txt");
+  let hits = 0;
+  const server = createServer((req, res) => {
+    hits += 1;
+    if (hits === 1) {
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                  {
+                    id: "c1",
+                    type: "function",
+                    function: {
+                      name: "write",
+                      arguments: JSON.stringify({ path: file, content: "kept" }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      return;
+    }
+    res.setHeader("content-type", "application/json");
+    res.end("{not-json");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  try {
+    writeModelsFile(dir, {
+      default: { provider: "mock", model: "m1" },
+      providers: {
+        mock: {
+          name: "mock",
+          baseUrl: `http://127.0.0.1:${port}/v1`,
+          api: "openai-completions" as const,
+          apiKey: "k",
+          models: [{ id: "m1" }],
+        },
+      },
+    });
+    const result = await llmComplete({
+      dataDir: dir,
+      env: {},
+      system: "test",
+      messages: [{ role: "user", content: "write the file" }],
+      tools: true,
+      toolCtx: {
+        dataDir: dir,
+        spawnDepth: 0,
+        allowWrite: true,
+        sandbox: "full_access",
+      },
+    });
+    assert.ok(result);
+    assert.match(result.text, /模型請求失敗/);
+    assert.doesNotMatch(result.text, /沒有可用模型/);
+    assert.equal(result.traces.length, 1);
+    assert.equal(result.traces[0]?.name, "write");
+    assert.equal(readFileSync(file, "utf8"), "kept");
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((err) => (err ? reject(err) : resolve())),
+    );
+  }
 });
 
 test("truncated tool args are not executed", async () => {

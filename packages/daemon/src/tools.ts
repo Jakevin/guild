@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { promisify } from "node:util";
 import { Type, type Tool } from "@earendil-works/pi-ai";
 import { listHostSkills } from "./host-skills.ts";
 import type { McpToolRef } from "./mcp.ts";
@@ -14,7 +13,6 @@ import {
   type Sandbox,
 } from "./harness.ts";
 
-const execFileAsync = promisify(execFile);
 const HOME = homedir();
 const OUTPUT_CAP = 16_000;
 const TRACE_CAP = 1_200;
@@ -87,6 +85,8 @@ export type ToolContext = {
   cronRun?: boolean;
   /** Pause the live row until the user allows computer use. */
   askComputer?: () => Promise<boolean>;
+  /** Live tool traces for this turn. Survives a later model-round throw. */
+  traces?: ToolTrace[];
 };
 
 export type SpawnHandle = {
@@ -634,8 +634,7 @@ export async function executeTool(
     if (refused) return refused;
     attachSpawnHandles(ctx);
     if (ctx.dispatch) {
-      const { dispatch, ...rest } = ctx;
-      return await dispatch(name, args, rest);
+      return await ctx.dispatch(name, args, ctx);
     }
     return await builtinExecute(name, args, ctx);
   } catch (error) {
@@ -831,9 +830,26 @@ function formatRunOutput(input: {
   const stderr = String(input.stderr ?? "").trim();
   const chunks = [stdout || ""];
   if (stderr) chunks.push(`[stderr]\n${stderr}`);
-  const body = chunks.join("\n").trim() || "(no output)";
+  const body = clip(chunks.join("\n").trim() || "(no output)");
   const extra = (input.extra ?? []).filter(Boolean);
-  return clip([body, ...extra].join("\n"));
+  return extra.length ? `${body}\n${extra.join("\n")}` : body;
+}
+
+function killProcessTree(pid: number | undefined): void {
+  if (!pid || pid <= 0) return;
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+      return;
+    }
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 function optionalTimeoutSec(raw: unknown): number | undefined {
@@ -865,52 +881,118 @@ async function runCommand(
     opts.timeoutSec !== undefined
       ? Math.max(1, Math.round(opts.timeoutSec * 1000))
       : undefined;
-  try {
-    const { stdout, stderr } = await execFileAsync(shell, ["-lc", cmd], {
+  return await new Promise<ToolOutcome>((resolve, reject) => {
+    const child = spawn(shell, ["-lc", cmd], {
       cwd,
-      ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
-      maxBuffer: OUTPUT_CAP * 2,
       env: process.env,
-      signal: opts.signal,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
-    return {
-      text: formatRunOutput({ stdout, stderr, extra: ["[exit code: 0]"] }),
-      isError: false,
+    const pid = child.pid;
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cap = OUTPUT_CAP * 2;
+    const take = (prev: string, chunk: Buffer | string) => {
+      const next = prev + String(chunk);
+      return next.length > cap ? next.slice(0, cap) : next;
     };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    const err = error as {
-      stdout?: string;
-      stderr?: string;
-      message?: string;
-      killed?: boolean;
-      code?: number | string;
+    const finish = (outcome: ToolOutcome) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(outcome);
     };
-    if (err.killed) {
-      return {
-        text: formatRunOutput({
-          stdout: err.stdout,
-          stderr: err.stderr,
-          extra: [`[timed out after ${timeoutMs}ms]`],
-        }),
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => {
+      killProcessTree(pid);
+      setTimeout(() => {
+        if (child.exitCode == null && child.signalCode == null) {
+          try {
+            if (pid && process.platform !== "win32") process.kill(-pid, "SIGKILL");
+            else child.kill("SIGKILL");
+          } catch {
+            /* already gone */
+          }
+        }
+      }, 200);
+    };
+    const cleanup = () => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      if (timer) clearTimeout(timer);
+    };
+    if (opts.signal?.aborted) {
+      onAbort();
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      fail(err);
+      return;
+    }
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    if (timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        killProcessTree(pid);
+      }, timeoutMs);
+    }
+    child.stdout?.on("data", (chunk) => {
+      stdout = take(stdout, chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr = take(stderr, chunk);
+    });
+    child.on("error", (error) => {
+      fail(error instanceof Error ? error : new Error(String(error)));
+    });
+    child.on("close", (code) => {
+      if (opts.signal?.aborted) {
+        const err = new Error("aborted");
+        err.name = "AbortError";
+        fail(err);
+        return;
+      }
+      if (timedOut) {
+        finish({
+          text: formatRunOutput({
+            stdout,
+            stderr,
+            extra: [`[timed out after ${timeoutMs}ms]`],
+          }),
+          isError: true,
+        });
+        return;
+      }
+      if (code === 0) {
+        finish({
+          text: formatRunOutput({ stdout, stderr, extra: ["[exit code: 0]"] }),
+          isError: false,
+        });
+        return;
+      }
+      if (typeof code === "number") {
+        finish({
+          text: formatRunOutput({
+            stdout,
+            stderr,
+            extra: [`[exit code: ${code}]`],
+          }),
+          isError: false,
+        });
+        return;
+      }
+      finish({
+        text: clip(stderr.trim() || "command failed"),
         isError: true,
-      };
-    }
-    if (typeof err.code === "number") {
-      return {
-        text: formatRunOutput({
-          stdout: err.stdout,
-          stderr: err.stderr,
-          extra: [`[exit code: ${err.code}]`],
-        }),
-        isError: false,
-      };
-    }
-    return {
-      text: clip(err.message || "command failed"),
-      isError: true,
-    };
-  }
+      });
+    });
+  });
 }
 
 function readFile(path: string, base = HOME): ToolOutcome {
