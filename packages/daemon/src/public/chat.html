@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=code-plain" />
+    <link rel="stylesheet" href="/chat.css?v=bot-model" />
     <script src="/i18n.js?v=computer-grant"></script>
     <script src="/md.js?v=heading-h4"></script>
   </head>
@@ -305,14 +305,30 @@
       <iframe class="html-zoom-frame" id="html-zoom-frame" sandbox="allow-scripts" title="HTML preview large"></iframe>
     </div>
     <div class="bot-card" id="bot-card" hidden>
-      <div class="bot-card-av" id="bot-card-av"></div>
-      <div class="bot-card-name" id="bot-card-name"></div>
-      <div class="bot-card-handle" id="bot-card-handle"></div>
-      <p class="bot-card-bio" id="bot-card-bio"></p>
-      <div class="bot-card-actions">
-        <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">密談</a>
-        <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">狀態欄</a>
-        <button type="button" class="bot-card-btn" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
+      <div id="bot-card-profile">
+        <div class="bot-card-av" id="bot-card-av"></div>
+        <div class="bot-card-name" id="bot-card-name"></div>
+        <div class="bot-card-handle" id="bot-card-handle"></div>
+        <p class="bot-card-bio" id="bot-card-bio"></p>
+        <div class="bot-card-actions">
+          <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">密談</a>
+          <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">狀態欄</a>
+          <button type="button" class="bot-card-btn bot-card-wide" id="bot-card-model" data-i18n-title="switchModel" title="切換模型">切換模型</button>
+          <button type="button" class="bot-card-btn bot-card-wide" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
+        </div>
+      </div>
+      <div class="bot-card-picker" id="bot-card-picker" hidden>
+        <div class="bot-card-picker-bar">
+          <button type="button" class="bot-card-back" id="bot-card-picker-back" aria-label="返回">‹</button>
+          <strong data-i18n="switchModel">切換模型</strong>
+        </div>
+        <label class="model-search">
+          <span class="model-search-ico" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6.2" cy="6.2" r="4.1" stroke="currentColor" stroke-width="1.3"/><path d="M9.2 9.2 12 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </span>
+          <input id="bot-card-model-q" placeholder="搜尋全部模型" data-i18n-placeholder="search.models" autocomplete="off" />
+        </label>
+        <div class="bot-card-picker-list" id="bot-card-model-list"></div>
       </div>
     </div>
     <dialog id="channel-md">
@@ -3948,23 +3964,20 @@
         }
       }
       const botCard = document.getElementById("bot-card");
+      let cardBotId = "";
+      let cardAnchor = null;
       function hideBotCard() {
         botCard.hidden = true;
+        cardBotId = "";
+        cardAnchor = null;
+        const profile = document.getElementById("bot-card-profile");
+        const picker = document.getElementById("bot-card-picker");
+        if (profile) profile.hidden = false;
+        if (picker) picker.hidden = true;
       }
-      function showBotCard(bot, anchor) {
-        if (!bot || !anchor) return;
-        document.getElementById("bot-card-av").textContent = initials(bot.name);
-        document.getElementById("bot-card-av").style.background = hue(bot.handle);
-        document.getElementById("bot-card-name").textContent = bot.name;
-        document.getElementById("bot-card-handle").textContent = "@" + bot.handle;
-        document.getElementById("bot-card-bio").textContent =
-          bot.oneLiner || "";
-        document.getElementById("bot-card-dm").setAttribute("href", "#d/" + bot.id);
-        document.getElementById("bot-card-edit").setAttribute(
-          "href",
-          "/edit/" + encodeURIComponent(bot.id),
-        );
-        botCard.hidden = false;
+      function placeBotCard() {
+        const anchor = cardAnchor;
+        if (!anchor || botCard.hidden) return;
         const rect = anchor.getBoundingClientRect();
         const width = botCard.offsetWidth || 280;
         const height = botCard.offsetHeight || 220;
@@ -3980,6 +3993,65 @@
         if (top < 12) top = 12;
         botCard.style.left = left + "px";
         botCard.style.top = top + "px";
+      }
+      function fillBotCardModel() {
+        const btn = document.getElementById("bot-card-model");
+        if (!btn) return;
+        const bot = botById(cardBotId);
+        const ref = botModelRef(bot);
+        const name = displayName(ref);
+        const spec = (() => {
+          if (!ref) return null;
+          const hit = allModels().find(
+            (row) => row.provider === ref.provider && row.model === ref.model,
+          );
+          if (!hit || hit.kind === "commandcode" || hit.kind === "antigravity") return null;
+          return hit.reasoning || null;
+        })();
+        const choices = effortChoices(spec);
+        const reasonVal = clampEffort(
+          ref && ref.reasoning,
+          spec,
+          Boolean(modelCfg && modelCfg.fast),
+        );
+        const reason = choices.length ? reasonLabel(reasonVal) : "";
+        btn.textContent = reason ? name + " " + reason : name;
+      }
+      function setBotCardPicker(on) {
+        const profile = document.getElementById("bot-card-profile");
+        const picker = document.getElementById("bot-card-picker");
+        if (profile) profile.hidden = Boolean(on);
+        if (picker) picker.hidden = !on;
+        if (on) {
+          const q = document.getElementById("bot-card-model-q");
+          if (q) q.value = "";
+          renderBotCardModels();
+          if (q) q.focus();
+        }
+        placeBotCard();
+      }
+      function showBotCard(bot, anchor) {
+        if (!bot || !anchor) return;
+        cardBotId = bot.id;
+        cardAnchor = anchor;
+        document.getElementById("bot-card-av").textContent = initials(bot.name);
+        document.getElementById("bot-card-av").style.background = hue(bot.handle);
+        document.getElementById("bot-card-name").textContent = bot.name;
+        document.getElementById("bot-card-handle").textContent = "@" + bot.handle;
+        document.getElementById("bot-card-bio").textContent =
+          bot.oneLiner || "";
+        document.getElementById("bot-card-dm").setAttribute("href", "#d/" + bot.id);
+        document.getElementById("bot-card-edit").setAttribute(
+          "href",
+          "/edit/" + encodeURIComponent(bot.id),
+        );
+        fillBotCardModel();
+        const profile = document.getElementById("bot-card-profile");
+        const picker = document.getElementById("bot-card-picker");
+        if (profile) profile.hidden = false;
+        if (picker) picker.hidden = true;
+        botCard.hidden = false;
+        placeBotCard();
       }
       document.getElementById("head-id").addEventListener("click", (event) => {
         if (state.kind === "channel") {
@@ -4034,7 +4106,9 @@
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           closeHtmlZoom();
-          hideBotCard();
+          const picker = document.getElementById("bot-card-picker");
+          if (picker && !botCard.hidden && !picker.hidden) setBotCardPicker(false);
+          else hideBotCard();
           setNavOpen(false);
         }
       });
@@ -4354,6 +4428,41 @@
         const handle = document.getElementById("bot-card-handle").textContent.replace(/^@/, "");
         const bot = state.bots.find((item) => item.handle === handle);
         openBotMemory(bot);
+      });
+      document.getElementById("bot-card-model").addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setBotCardPicker(true);
+      });
+      document.getElementById("bot-card-picker-back").addEventListener("click", (event) => {
+        event.preventDefault();
+        setBotCardPicker(false);
+      });
+      document.getElementById("bot-card-model-q").addEventListener("input", () => {
+        renderBotCardModels();
+      });
+      document.getElementById("bot-card-model-q").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+        event.stopPropagation();
+      });
+      document.getElementById("bot-card-model-list").addEventListener("click", async (event) => {
+        const item = event.target.closest("[data-provider][data-model]");
+        if (!item) return;
+        const row = allModels().find(
+          (m) =>
+            m.provider === item.getAttribute("data-provider") &&
+            m.model === item.getAttribute("data-model"),
+        );
+        if (!row) return;
+        if (!row.ready) {
+          window.location.href = "/settings";
+          return;
+        }
+        const ok = await applyChatModel(
+          { provider: row.provider, model: row.model },
+          cardBotId,
+        );
+        if (ok) setBotCardPicker(false);
       });
       document.getElementById("channel-md-del").addEventListener("click", async () => {
         const ch = currentChannel();
@@ -6911,24 +7020,55 @@
           btn.classList.toggle("on", btn.getAttribute("data-sheet") === name);
         });
       }
-      function paneModels() {
-        const needle = (
-          document.getElementById("model-q")?.value || ""
+      function paneModels(needle) {
+        const q = String(
+          needle != null
+            ? needle
+            : document.getElementById("model-q")?.value || "",
         )
           .trim()
           .toLowerCase();
         return allModels().filter((row) => {
           if (!row.ready) return false;
-          if (!needle) return true;
+          if (!q) return true;
           return (
-            row.name.toLowerCase().includes(needle) ||
-            row.model.toLowerCase().includes(needle) ||
-            row.group.toLowerCase().includes(needle)
+            row.name.toLowerCase().includes(q) ||
+            row.model.toLowerCase().includes(q) ||
+            row.group.toLowerCase().includes(q)
           );
         });
       }
-      function renderModelList() {
-        const current = activeModelRef();
+      function modelChoiceHtml(row, current) {
+        const on =
+          current &&
+          current.provider === row.provider &&
+          current.model === row.model
+            ? " on"
+            : "";
+        const locked = row.ready ? "" : " locked";
+        const glyph = modelGlyph(row.kind, row.group + " " + row.name);
+        const tick = on ? '<span class="tick">✓</span>' : "";
+        const label = row.name + " · " + row.group;
+        return (
+          '<button type="button" class="model-choice' +
+          on +
+          locked +
+          '" data-provider="' +
+          escapeHtml(row.provider) +
+          '" data-model="' +
+          escapeHtml(row.model) +
+          '"><span class="glyph' +
+          (glyph.tone ? " " + glyph.tone : "") +
+          '">' +
+          glyph.mark +
+          '</span><span class="model-choice-name">' +
+          escapeHtml(label) +
+          "</span>" +
+          tick +
+          "</button>"
+        );
+      }
+      function modelListHtml(current, needle) {
         const recents = (modelCfg.recent || [])
           .map((ref) =>
             allModels().find(
@@ -6939,50 +7079,24 @@
             ),
           )
           .filter(Boolean);
-        const needle = (document.getElementById("model-q")?.value || "").trim();
-        const rows = paneModels();
-        function itemHtml(row) {
-          const on =
-            current &&
-            current.provider === row.provider &&
-            current.model === row.model
-              ? " on"
-              : "";
-          const locked = row.ready ? "" : " locked";
-          const glyph = modelGlyph(row.kind, row.group + " " + row.name);
-          const tick = on ? '<span class="tick">✓</span>' : "";
-          const label = row.name + " · " + row.group;
-          return (
-            '<button type="button" class="model-choice' +
-            on +
-            locked +
-            '" data-provider="' +
-            escapeHtml(row.provider) +
-            '" data-model="' +
-            escapeHtml(row.model) +
-            '"><span class="glyph' +
-            (glyph.tone ? " " + glyph.tone : "") +
-            '">' +
-            glyph.mark +
-            '</span><span class="model-choice-name">' +
-            escapeHtml(label) +
-            "</span>" +
-            tick +
-            "</button>"
-          );
-        }
+        const q = String(needle || "").trim();
+        const rows = paneModels(q);
         let html = "";
-        if (!needle && recents.length) {
+        if (!q && recents.length) {
           const shown = recents.filter((row) =>
             rows.some(
               (r) => r.provider === row.provider && r.model === row.model,
             ),
           );
           if (shown.length) {
-            html += '<div class="model-sec">' + t("recent") + "</div>" + shown.map(itemHtml).join("");
+            html +=
+              '<div class="model-sec">' +
+              t("recent") +
+              "</div>" +
+              shown.map((row) => modelChoiceHtml(row, current)).join("");
           }
         }
-        const rest = needle
+        const rest = q
           ? rows
           : rows.filter(
               (row) =>
@@ -6993,12 +7107,26 @@
         if (rest.length) {
           html +=
             '<div class="model-sec">' +
-            (needle ? t("searchResults") : t("allModels")) +
+            (q ? t("searchResults") : t("allModels")) +
             "</div>" +
-            rest.map(itemHtml).join("");
+            rest.map((row) => modelChoiceHtml(row, current)).join("");
         }
-        document.getElementById("model-results").innerHTML =
-          html || '<p class="model-empty">' + t("noModels") + "</p>";
+        return html || '<p class="model-empty">' + t("noModels") + "</p>";
+      }
+      function renderBotCardModels() {
+        const list = document.getElementById("bot-card-model-list");
+        if (!list) return;
+        const bot = botById(cardBotId);
+        const needle = document.getElementById("bot-card-model-q")?.value || "";
+        list.innerHTML = modelListHtml(botModelRef(bot), needle);
+      }
+      function renderModelList() {
+        const current = activeModelRef();
+        const needle = (document.getElementById("model-q")?.value || "").trim();
+        document.getElementById("model-results").innerHTML = modelListHtml(
+          current,
+          needle,
+        );
         document.getElementById("model-fast").checked = Boolean(modelCfg.fast);
         const spec = activeReasoningSpec();
         const choices = effortChoices(spec);
@@ -7071,10 +7199,12 @@
         renderModelList();
         renderNav();
       }
-      async function applyChatModel(ref) {
-        if (state.kind !== "dm") return;
-        const bot = botById(state.id);
-        if (!bot || !ref || !ref.provider || !ref.model) return;
+      async function applyChatModel(ref, botId) {
+        const id =
+          (botId && String(botId)) ||
+          (state.kind === "dm" && !isPeerDm() ? state.id : "");
+        const bot = botById(id);
+        if (!bot || !ref || !ref.provider || !ref.model) return false;
         const spec = (() => {
           const hit = allModels().find(
             (row) => row.provider === ref.provider && row.model === ref.model,
@@ -7082,11 +7212,14 @@
           if (!hit || hit.kind === "commandcode" || hit.kind === "antigravity") return null;
           return hit.reasoning || null;
         })();
-        const reason = clampEffort(
-          document.getElementById("model-reasoning").value || ref.reasoning,
-          spec,
-          Boolean(document.getElementById("model-fast").checked),
-        );
+        const fromComposer = !botId;
+        const want = fromComposer
+          ? document.getElementById("model-reasoning").value || ref.reasoning
+          : ref.reasoning || (bot.model && bot.model.reasoning);
+        const fast = fromComposer
+          ? Boolean(document.getElementById("model-fast").checked)
+          : Boolean(modelCfg.fast);
+        const reason = clampEffort(want, spec, fast);
         const next = { provider: ref.provider, model: ref.model };
         if (reason) next.reasoning = reason;
         const res = await fetch("/bots/" + encodeURIComponent(bot.id), {
@@ -7097,23 +7230,27 @@
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           alert(body.error || t("modelSwitchFailed"));
-          return;
+          return false;
         }
         const updated = await res.json();
         const i = state.bots.findIndex((item) => item.id === bot.id);
         if (i >= 0) state.bots[i] = { ...state.bots[i], model: updated.model };
-        const fast = document.getElementById("model-fast").checked;
-        if (Boolean(modelCfg.fast) !== Boolean(fast)) {
-          await fetch("/settings/models", {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ fast: fast }),
-          }).then(async (r) => {
-            if (r.ok) modelCfg = await r.json();
-          });
+        if (fromComposer) {
+          const nextFast = document.getElementById("model-fast").checked;
+          if (Boolean(modelCfg.fast) !== Boolean(nextFast)) {
+            await fetch("/settings/models", {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ fast: nextFast }),
+            }).then(async (r) => {
+              if (r.ok) modelCfg = await r.json();
+            });
+          }
         }
         renderModelList();
         renderNav();
+        fillBotCardModel();
+        return true;
       }
       const modelPop = document.getElementById("model-pop");
       document.getElementById("model-btn").addEventListener("click", (event) => {

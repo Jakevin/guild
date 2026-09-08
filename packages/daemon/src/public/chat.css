@@ -34,6 +34,7 @@ html, body { margin: 0; height: 100%; }
 .icon-btn,
 .add-ch,
 .bot-card-btn,
+.bot-card-back,
 .create-row button,
 .traj-btn,
 .members-btn,
@@ -73,6 +74,7 @@ html, body { margin: 0; height: 100%; }
 .icon-btn:active:not(:disabled),
 .add-ch:active:not(:disabled),
 .bot-card-btn:active:not(:disabled),
+.bot-card-back:active:not(:disabled),
 .create-row button:active:not(:disabled),
 .traj-btn:active:not(:disabled),
 .members-btn:active:not(:disabled),
@@ -110,6 +112,7 @@ button[disabled],
 .icon-btn:disabled,
 .add-ch:disabled,
 .bot-card-btn:disabled,
+.bot-card-back:disabled,
 .create-row button:disabled,
 .traj-btn:disabled,
 .members-btn:disabled,
@@ -164,6 +167,7 @@ button[data-loading],
   .icon-btn,
   .add-ch,
   .bot-card-btn,
+  .bot-card-back,
   .create-row button,
   .traj-btn,
   .members-btn,
@@ -196,6 +200,7 @@ button[data-loading],
   .icon-btn:active:not(:disabled),
   .add-ch:active:not(:disabled),
   .bot-card-btn:active:not(:disabled),
+  .bot-card-back:active:not(:disabled),
   .create-row button:active:not(:disabled),
   .traj-btn:active:not(:disabled),
   .members-btn:active:not(:disabled),
@@ -603,6 +608,7 @@ a.avatar { text-decoration: none; color: #fff; }
   box-shadow: 0 18px 50px #000c;
 }
 .bot-card[hidden] { display: none; }
+#bot-card-profile[hidden] { display: none; }
 .bot-card-av {
   width: 72px;
   height: 72px;
@@ -635,7 +641,7 @@ a.avatar { text-decoration: none; color: #fff; }
   grid-template-columns: 1fr 1fr;
   gap: 0.4rem;
 }
-.bot-card-actions .bot-card-btn:last-child {
+.bot-card-actions .bot-card-wide {
   grid-column: 1 / -1;
 }
 .bot-card-btn {
@@ -659,6 +665,46 @@ a.avatar { text-decoration: none; color: #fff; }
   cursor: pointer;
 }
 .bot-card-btn:hover { background: var(--bubble); text-decoration: none; }
+.bot-card-picker {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(70vh, 28rem);
+}
+.bot-card-picker[hidden] { display: none; }
+.bot-card-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: -2px 0 8px;
+}
+.bot-card-picker-bar strong {
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.bot-card-back {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 0 0 -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.bot-card-back:hover { background: var(--lift); }
+.bot-card-picker .model-search { margin: 0 0 8px; }
+.bot-card-picker-list {
+  overflow: auto;
+  max-height: min(52vh, 16.5rem);
+  margin: 0 -16px -4px;
+}
 button.avatar {
   border: 0;
   padding: 0;
