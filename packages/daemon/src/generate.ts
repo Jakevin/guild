@@ -79,7 +79,7 @@ export function localGenerate(
     return {
       name,
       source: "local",
-      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- Channel.md is the task. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.\n\n## Plan\n- One local directive: goal + done when + a short checklist. Revise it when evidence changes.\n\n## Act\n- Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
+      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- The latest human message is the live task. Channel.md is room procedure. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.\n\n## Plan\n- One local directive from that live task: goal + done when + a short checklist. Revise it when evidence changes. Do not plan wait-for-human when they already asked.\n\n## Act\n- Do the live task this turn. Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
     };
   }
   if (kind === "skill") {
@@ -144,9 +144,9 @@ async function tryLlmGenerate(
       ? "body must be Codex-style TOML with name, description, and developer_instructions."
       : kind === "agent"
         ? `body must be Markdown with sections:
-## Memory — Channel.md is the task; MEMORY.md is dated standing notes, not the live task; do not recap the whole thread
-## Plan — one local directive: goal, done when, short checklist
-## Act — inspect, smallest change, verify, stop; hand off other seats with a line-start @handle spec
+## Memory — latest human message is the live task; Channel.md is room procedure; MEMORY.md is dated standing notes, not the live task; do not recap the whole thread
+## Plan — one local directive from that live task: goal, done when, short checklist; do not plan wait-for-human when they already asked
+## Act — do the live task this turn; inspect, smallest change, verify, stop; hand off other seats with a line-start @handle spec
 ## Skills — catalog is availability, not a todo; call skill only when this turn matches`
         : kind === "soul"
           ? "body must be Markdown: voice, values, boundaries. Not an operating procedure."
@@ -365,26 +365,28 @@ When work belongs to someone else, put @handle at the start of a line with a wri
 Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that spec into a 1:1 交辦 so the next seat works from the brief, not the whole quest log; the public reply still lands on this quest. Do not wait for the human to press a button.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster with 加入 (max ${CHANNEL_ROSTER_CAP} on a quest). @handle never adds a seat.
 You may @handle any teammate on this quest's roster whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
-Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
+Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision.
+Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act when the latest human message already asked — that is the authorization. Do not invent a second wait. Do not @handle a teammate to re-authorize. A prior seat's "wait for human" dies when the human already spoke.
 
 Harness this turn (Memory → Plan → Skills → Act):
-- Memory: Channel.md is the task. MEMORY.md is dated standing notes, not the live task — Closed bullets stay closed. The compact log is working memory — do not recap the whole thread.
-- Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
+- Memory: the latest human message is the live task. Channel.md is room procedure. MEMORY.md is dated standing notes, not the live task — Closed bullets stay closed and are not this-turn Goal. A teammate spec does not outrank the human. The compact log is working memory — do not recap the whole thread.
+- Plan: one local directive from that live task (goal + done when) before tools. Revise it when evidence changes. Do not plan "wait for human" when they already asked.
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
-- Act: you coordinate this seat. Spawn first when the work is a repo survey (\`explorer\` / luna-explore), a critique (\`reviewer\`), or a bounded isolated patch (\`worker\` / luna-general); then verify the child's evidence and decide. Independent surveys: spawn background=true, keep working, then read_spawn before you answer. Sequential: background=false and wait. Do not spawn for one known file, a one-line change, or a question that needs no repo. Do not let children commit, push, or make the architecture call. Do not skip spawn just because you can do the work yourself. Do not spawn to do another staffed bot's job — @handle them instead.`;
+- Act: do the live task this turn. You coordinate this seat. Spawn first when the work is a repo survey (\`explorer\` / luna-explore), a critique (\`reviewer\`), or a bounded isolated patch (\`worker\` / luna-general); then verify the child's evidence and decide. Independent surveys: spawn background=true, keep working, then read_spawn before you answer. Sequential: background=false and wait. Do not spawn for one known file, a one-line change, or a question that needs no repo. Do not let children commit, push, or make the architecture call. Do not skip spawn just because you can do the work yourself. Do not spawn to do another staffed bot's job — @handle them instead.`;
 
 /** 1:1 whisper: only this seat speaks. No hall handoffs. */
 export const WHISPER_RULES = `# Whisper
 This is a 1:1 whisper with the human. Only you speak here.
 Do not @handle other bots. Do not hand off, recruit, or start another seat in this thread.
 If the work belongs to another adventurer, say so in prose and ask the human to take it to that quest or that bot's whisper. Do not write a line-start @handle spec here.
-Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision. Money, sends, and destructive actions wait for the human.
+Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision.
+Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act when the latest human message already asked — that is the authorization. Do not invent a second wait.
 
 Harness this turn (Memory → Plan → Skills → Act):
-- Memory: MEMORY.md is dated standing notes, not the live task. There is no Channel.md in a whisper. Do not recap the whole thread.
-- Plan: one local directive (goal + done when) before tools. Revise it when evidence changes.
+- Memory: the latest human message is the live task. MEMORY.md is dated standing notes, not the live task — Closed bullets stay closed. There is no Channel.md in a whisper. Do not recap the whole thread.
+- Plan: one local directive from that live task (goal + done when) before tools. Revise it when evidence changes. Do not plan "wait for human" when they already asked.
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
-- Act: you may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
+- Act: do the live task this turn. You may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
 
 /** Live member handles for this quest. Empty in whispers. */
 export function questRosterBlock(handles: string[] | undefined): string {
@@ -495,7 +497,7 @@ export function buildChatSystem(input: {
     .join("\n");
   const channel = (input.channelMd ?? "").trim();
   const channelBlock = channel
-    ? `# Channel.md\nThis channel's operating notes written by the user. Follow them for this room. They outrank MEMORY.md.\n\n${channel.slice(0, 4000)}`
+    ? `# Channel.md\nThis channel's operating notes written by the user. Follow them for this room. The latest human message outranks Channel.md. Channel.md outranks MEMORY.md.\n\n${channel.slice(0, 4000)}`
     : "";
   const botMem = (input.botMemory ?? "").trim();
   const botMemBlock = botMem

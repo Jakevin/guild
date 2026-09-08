@@ -5,7 +5,7 @@ import { StoreError, type GuildStore } from "./store.ts";
 export const MEMORY_FILE_CAP = 8_000;
 export const MEMORY_INJECT_CAP = 3_500;
 export const MEMORY_LIVE_TASK_NOTE =
-  "Dated standing notes (Updated / YYYY-MM-DD). Not the live task. Channel.md and the latest user message outrank this file. Do not revive Closed or contradicted bullets as this-turn Goal.";
+  "Dated standing notes (Updated / YYYY-MM-DD). Not the live task. The latest user message outranks Channel.md, which outranks this file. Do not revive Closed, contradicted, or wait-for-human bullets as this-turn Goal once the human already asked.";
 
 const UPDATED_LINE = /^Updated:\s*\S+[^\n]*\n*/;
 
@@ -81,7 +81,8 @@ Standing notes only: names, preferences, decisions, recurring work, conventions,
 Today (UTC) is ${today}. Start the file with one line: Updated: <ISO-8601 UTC>.
 Prefix fact bullets with YYYY-MM-DD (keep existing dates; new or changed facts use ${today}).
 Put cancelled, shipped, or do-not-revive items under ## Closed. Closed is not this-turn Goal.
-Channel.md and the latest user message outrank these notes. Do not treat Closed or contradicted bullets as the live task.
+The latest user message outranks Channel.md, which outranks these notes. Do not treat Closed or contradicted bullets as the live task.
+If the latest human message asked to push / 上版 / commit / tag / 發布, record that as authorized Act — do not keep a wait-for-human blocker.
 Do not record greetings, one-off questions, secrets, passwords, or API keys.
 Keep useful old bullets. Drop stale or contradicted ones. Max 80 lines.
 
@@ -367,7 +368,7 @@ export function buildTidyPrompt(input: {
   return `Tidy MEMORY.md for ${who}. Follow the Guild harness this turn.
 Today (UTC) is ${today}.
 
-Memory: Channel.md is the task when present. MEMORY.md is dated standing notes, not the live task. Do not recap a transcript. Closed bullets stay closed.
+Memory: the latest human ask is the live task when present. Channel.md is room procedure. MEMORY.md is dated standing notes, not the live task. Do not recap a transcript. Closed bullets stay closed. Do not keep a wait-for-human blocker after the human already asked.
 
 ${plan}
 

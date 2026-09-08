@@ -297,7 +297,8 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(system, /End with what changed/);
   assert.match(system, /Do not @all/);
   assert.match(system, /even if the human only named you this turn/);
-  assert.match(system, /Channel.md is the task/);
+  assert.match(system, /latest human message is the live task/);
+  assert.match(system, /Channel.md is room procedure/);
   assert.match(system, /dated standing notes, not the live task/);
   assert.match(system, /catalog is availability/);
   assert.match(system, /<available_subagents>/);
@@ -308,6 +309,9 @@ test("chat system owns a seat and hands off with a spec", () => {
   assert.match(HALL_RULES, /派工 list/);
   assert.match(HALL_RULES, /1:1 交辦/);
   assert.match(HALL_RULES, /Do not wait for the human to press a button/);
+  assert.match(HALL_RULES, /that is the authorization/);
+  assert.match(HALL_RULES, /Do not invent a second wait/);
+  assert.match(HALL_RULES, /do the live task this turn/);
   assert.match(HALL_RULES, /on this quest's roster/);
 });
 
@@ -350,6 +354,8 @@ test("whisper system does not hand off to other seats", () => {
   assert.doesNotMatch(system, /# Hall/);
   assert.doesNotMatch(system, /even if the human only named you this turn/);
   assert.match(WHISPER_RULES, /1:1 whisper/);
+  assert.match(WHISPER_RULES, /latest human message is the live task/);
+  assert.match(WHISPER_RULES, /that is the authorization/);
 });
 
 test("child spawn cannot escalate a read_only parent", () => {

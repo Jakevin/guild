@@ -84,6 +84,7 @@ test("clipTidyAsk trims and the tidy prompt treats ask as the live task", () => 
   assert.match(prompt, /Live task/);
   assert.match(prompt, /刪除v0\.2\.26降版的記憶/);
   assert.match(prompt, /this is the Plan directive/);
+  assert.match(prompt, /wait-for-human blocker after the human already asked/);
   assert.doesNotMatch(
     buildTidyPrompt({ scope: "channel", current: "- keep" }),
     /Live task/,
@@ -165,6 +166,7 @@ test("bot and channel MEMORY.md round-trip; DMs have no channel memory", async (
     assert.match(chatTurnSystem(store, channelId, rd.id), /MEMORY\.md/);
     assert.match(chatTurnSystem(store, channelId, rd.id), /dated standing notes/);
     assert.match(chatTurnSystem(store, channelId, rd.id), /Not the live task/);
+    assert.match(chatTurnSystem(store, channelId, rd.id), /latest human message is the live task/);
     assert.match(chatTurnSystem(store, channelId, rd.id), /RD owns reviews/);
     assert.match(chatTurnSystem(store, channelId, rd.id), /ship Friday/);
 
