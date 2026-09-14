@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,7 @@ import {
   hostTree,
 } from "../src/host-browse.ts";
 import { StoreError } from "../src/store.ts";
+import { defaultWorkspace } from "../src/harness.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
 
 const CHAT_HTML = fileURLToPath(
@@ -143,6 +144,19 @@ function notRefused(fn: () => unknown): void {
     }
   }
 }
+
+test("hostRead resolves a relative path against the Guild workspace", () => {
+  const name = `guild-host-rel-${Date.now()}.txt`;
+  const abs = join(defaultWorkspace(), name);
+  writeFileSync(abs, "hello-rel");
+  try {
+    const got = hostRead(name);
+    assert.equal(got.text, "hello-rel");
+    assert.equal(got.path, abs);
+  } finally {
+    rmSync(abs, { force: true });
+  }
+});
 
 test("hostOpen refuses secrets and missing paths without launching", async () => {
   await assert.rejects(

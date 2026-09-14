@@ -263,6 +263,47 @@ textarea:focus-visible {
   margin-left: auto;
   white-space: nowrap;
 }
+.room-head .meta.bare {
+  color: var(--signal);
+}
+.bare-toggle {
+  margin: 0;
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bare-toggle.on {
+  background: color-mix(in srgb, var(--signal) 22%, var(--lift));
+  color: var(--paper);
+}
+.bare-toggle[hidden] {
+  display: none;
+}
+.bare-clear {
+  margin: 0;
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bare-clear[hidden] {
+  display: none;
+}
 .thread {
   flex: 1;
   min-height: 0;

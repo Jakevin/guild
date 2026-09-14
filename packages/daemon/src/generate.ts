@@ -388,6 +388,9 @@ Harness this turn (Memory → Plan → Skills → Act):
 - Skills: the catalog is availability, not a todo. Call \`skill\` only when this directive matches. Do not load every skill.
 - Act: do the live task this turn. You may spawn explorer / reviewer / worker for repo work. Spawn is a specialist tool, not another hall bot. Do not spawn to stand in for a staffed teammate — tell the human instead.`;
 
+/** Incognito whisper: probe the seat files without standing notes. */
+export const BARE_WHISPER_NOTE = `This is an incognito whisper to probe Soul, Agent, Position, and the harness. MEMORY.md is not in context and will not be updated. There is no Channel.md. The latest human message is the live task.`;
+
 /** Live member handles for this quest. Empty in whispers. */
 export function questRosterBlock(handles: string[] | undefined): string {
   const tags = [
@@ -419,6 +422,7 @@ export function buildChatSystem(input: {
   botMemory?: string;
   channelMemory?: string;
   whisper?: boolean;
+  bare?: boolean;
   rosterHandles?: string[];
 }): string {
   const skills = input.skills ?? [];
@@ -495,22 +499,26 @@ export function buildChatSystem(input: {
   ]
     .filter(Boolean)
     .join("\n");
-  const channel = (input.channelMd ?? "").trim();
+  const channel = input.bare ? "" : (input.channelMd ?? "").trim();
   const channelBlock = channel
     ? `# Channel.md\nThis channel's operating notes written by the user. Follow them for this room. The latest human message outranks Channel.md. Channel.md outranks MEMORY.md.\n\n${channel.slice(0, 4000)}`
     : "";
-  const botMem = (input.botMemory ?? "").trim();
+  const botMem = input.bare ? "" : (input.botMemory ?? "").trim();
   const botMemBlock = botMem
     ? `# MEMORY.md\nStanding notes this bot has learned. Auto-updated after useful turns. ${MEMORY_LIVE_TASK_NOTE}\n\n${botMem.slice(0, MEMORY_INJECT_CAP)}`
     : "";
-  const roomMem = (input.channelMemory ?? "").trim();
+  const roomMem = input.bare ? "" : (input.channelMemory ?? "").trim();
   const roomMemBlock = roomMem
     ? `# Channel MEMORY.md\nStanding notes for this channel, shared by everyone here. Auto-updated. ${MEMORY_LIVE_TASK_NOTE}\n\n${roomMem.slice(0, MEMORY_INJECT_CAP)}`
     : "";
   return [
     `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
     "Reply in the user's language. Be brief. Stay in character.",
-    input.whisper ? WHISPER_RULES : hallRulesFor(input.rosterHandles),
+    input.whisper
+      ? input.bare
+        ? `${WHISPER_RULES}\n\n${BARE_WHISPER_NOTE}`
+        : WHISPER_RULES
+      : hallRulesFor(input.rosterHandles),
     hostContext(),
     TOOL_SYSTEM,
     skillLine,
@@ -544,6 +552,7 @@ export async function chatReply(input: {
   botMemory?: string;
   channelMemory?: string;
   whisper?: boolean;
+  bare?: boolean;
   rosterHandles?: string[];
   compact?: CompactCheckpoint | null;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
@@ -573,6 +582,7 @@ export async function chatReply(input: {
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
     whisper: input.whisper,
+    bare: input.bare,
     rosterHandles: input.rosterHandles,
   });
   const llm = input.dataDir
@@ -617,6 +627,7 @@ async function tryChatLlm(
     botMemory?: string;
     channelMemory?: string;
     whisper?: boolean;
+    bare?: boolean;
     compact?: CompactCheckpoint | null;
     onCompact?: (checkpoint: CompactCheckpoint) => void;
     onProgress?: (update: ToolProgress) => void;
@@ -652,6 +663,7 @@ async function tryChatLlm(
     botMemory: input.botMemory,
     channelMemory: input.channelMemory,
     whisper: input.whisper,
+    bare: input.bare,
     rosterHandles: input.rosterHandles,
   });
   const peek = resolveLlm(dataDir, env, "chat", prefer);

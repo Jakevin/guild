@@ -16,7 +16,7 @@ import {
   stampMemoryUpdated,
 } from "../src/memory.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
-import { GuildStore } from "../src/store.ts";
+import { bareDmRoomId, GuildStore, isBareDmId } from "../src/store.ts";
 
 const CHAT_HTML = fileURLToPath(
   new URL("../src/public/chat.html", import.meta.url),
@@ -200,6 +200,131 @@ test("bot and channel MEMORY.md round-trip; DMs have no channel memory", async (
   } finally {
     await closeServer(server);
   }
+});
+
+test("incognito whisper skips MEMORY.md inject and keeps a separate transcript", async () => {
+  const dataDir = tempHome();
+  const store = new GuildStore(dataDir);
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  assert.ok(rd);
+  store.writeBotMemory(rd.id, "# Bot memory\n- SECRET_STANDING_NOTE");
+  const whisper = store.openDm(rd.id);
+  const bare = store.openBareDm(rd.id);
+  assert.equal(isBareDmId(bare.id), true);
+  assert.equal(bareDmRoomId(rd.id), bare.id);
+  assert.equal(bare.kind, "dm");
+  store.appendMessage(whisper.id, "you", "regular standing chat");
+  store.appendMessage(bare.id, "you", "probe soul without memory");
+  assert.equal(
+    store.lastMessagePreview(`dm-${rd.id}`)?.body,
+    "regular standing chat",
+  );
+  assert.match(store.lastMessagePreview(bare.id)?.body || "", /probe soul/);
+  const bareSys = chatTurnSystem(store, bare.id, rd.id);
+  assert.match(bareSys, /incognito whisper/);
+  assert.match(bareSys, /Only you speak here/);
+  assert.doesNotMatch(bareSys, /SECRET_STANDING_NOTE/);
+  assert.doesNotMatch(bareSys, /# MEMORY.md/);
+  const dmSys = chatTurnSystem(store, whisper.id, rd.id);
+  assert.match(dmSys, /SECRET_STANDING_NOTE/);
+  store.close();
+
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
+  try {
+    const posted = await json(origin, `/dms/bare-${rd.id}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "probe Position without MEMORY.md" }),
+    });
+    assert.equal(posted.status, 201);
+    const listed = await json(origin, `/dms/bare-${rd.id}/messages`);
+    assert.match(JSON.stringify(listed.body), /probe Position without MEMORY.md/);
+    const regular = await json(origin, `/dms/${rd.id}/messages`);
+    assert.doesNotMatch(
+      JSON.stringify(regular.body),
+      /probe Position without MEMORY.md/,
+    );
+    const space = await json(origin, "/workspace");
+    const bots = (space.body as { bots: { id: string; lastMessage?: { body?: string } }[] }).bots;
+    const bot = bots.find((row) => row.id === rd.id);
+    assert.ok(bot);
+    assert.doesNotMatch(
+      String(bot.lastMessage?.body || ""),
+      /probe Position without MEMORY.md/,
+    );
+    const memory = await json(origin, `/bots/${rd.id}/memory.md`);
+    assert.match(String(memory.body.body), /SECRET_STANDING_NOTE/);
+  } finally {
+    await closeServer(server);
+  }
+
+  const after = new GuildStore(dataDir);
+  after.deleteBot(rd.id);
+  assert.equal(after.getRoom(bare.id), null);
+  assert.equal(after.getRoom(whisper.id), null);
+  after.close();
+});
+
+test("DELETE /dms/bare-id/messages wipes incognito history only", async () => {
+  const dataDir = tempHome();
+  const store = new GuildStore(dataDir);
+  const rd = store.listBots().find((bot) => bot.handle === "rd");
+  assert.ok(rd);
+  store.writeBotMemory(rd.id, "# Bot memory\n- SECRET_STANDING_NOTE");
+  const whisper = store.openDm(rd.id);
+  const bare = store.openBareDm(rd.id);
+  store.appendMessage(whisper.id, "you", "keep the regular whisper");
+  store.appendMessage(bare.id, "you", "throw away this probe");
+  store.writeCompact(bare.id, {
+    throughId: "turn-1",
+    summary: "SECRET_COMPACT",
+    updatedAt: "2026-09-14T00:00:00.000Z",
+    messageCount: 1,
+  });
+  store.appendTrajectory(bare.id, [
+    {
+      ts: "2026-09-14T00:00:00.000Z",
+      turnId: "turn-1",
+      kind: "user",
+      summary: "throw away this probe",
+    },
+  ]);
+  store.close();
+
+  writeModelsFile(dataDir, { default: null, providers: {} });
+  const { server, origin } = await listen(dataDir);
+  try {
+    const refused = await json(origin, `/dms/${rd.id}/messages`, {
+      method: "DELETE",
+    });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.error, "can only clear incognito whispers");
+
+    const cleared = await json(origin, `/dms/bare-${rd.id}/messages`, {
+      method: "DELETE",
+    });
+    assert.equal(cleared.status, 200);
+    assert.equal((cleared.body as { ok?: boolean }).ok, true);
+
+    const listed = await json(origin, `/dms/bare-${rd.id}/messages`);
+    assert.deepEqual(listed.body, []);
+    const regular = await json(origin, `/dms/${rd.id}/messages`);
+    assert.match(JSON.stringify(regular.body), /keep the regular whisper/);
+    const memory = await json(origin, `/bots/${rd.id}/memory.md`);
+    assert.match(String(memory.body.body), /SECRET_STANDING_NOTE/);
+  } finally {
+    await closeServer(server);
+  }
+
+  const after = new GuildStore(dataDir);
+  assert.ok(after.getRoom(bare.id));
+  assert.equal(after.listMessages(bare.id).length, 0);
+  assert.equal(after.readCompact(bare.id), null);
+  assert.equal(after.listTrajectory(bare.id).length, 0);
+  assert.equal(after.listMessages(whisper.id).length, 1);
+  assert.match(after.readBotMemory(rd.id), /SECRET_STANDING_NOTE/);
+  after.close();
 });
 
 test("chat page edits Channel MEMORY.md and bot MEMORY.md", () => {

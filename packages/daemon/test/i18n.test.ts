@@ -47,6 +47,10 @@ test("t interpolates and switches locale in memory", () => {
   assert.equal(t("nav.chat"), "大廳");
   assert.equal(t("channels"), "委託");
   assert.equal(t("dms"), "密談");
+  assert.equal(t("bot.bare"), "無痕密談");
+  assert.equal(t("bare.subtitle"), "無痕 · 不含記憶");
+  assert.equal(t("bare.clear"), "清除");
+  assert.equal(t("bare.clearConfirm"), "清掉這次無痕密談？紀錄會刪掉。一般密談與 MEMORY.md 不會動。");
   assert.equal(t("bot.settings"), "狀態欄");
   assert.equal(t("trace"), "軌跡");
   assert.equal(
@@ -89,6 +93,10 @@ test("t interpolates and switches locale in memory", () => {
   assert.equal(t("error.freebuff_busy"), "Another turn is using Freebuff.");
   assert.equal(t("channels"), "Channels");
   assert.equal(t("dms"), "Whispers");
+  assert.equal(t("bot.bare"), "Incognito");
+  assert.equal(t("bare.subtitle"), "Incognito · no memory");
+  assert.equal(t("bare.clear"), "Clear");
+  assert.equal(t("bare.clearConfirm"), "Clear this incognito whisper? The log goes. The regular whisper and MEMORY.md stay.");
   assert.equal(t("bot.settings"), "Status");
   assert.equal(t("trace"), "Trajectory");
   assert.equal(t("spawn"), "Subagent");

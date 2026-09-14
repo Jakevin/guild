@@ -1236,6 +1236,9 @@ body.grok .sidebar .side-foot a:hover { color: #F7F1E4; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.pane-head .meta.bare {
+  color: var(--signal);
+}
 .head-actions {
   display: flex;
   align-items: center;

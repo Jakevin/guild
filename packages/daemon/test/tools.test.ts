@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildChatSystem, HALL_RULES, WHISPER_RULES, localGenerate } from "../src/generate.ts";
+import { BARE_WHISPER_NOTE, buildChatSystem, HALL_RULES, WHISPER_RULES, localGenerate } from "../src/generate.ts";
 import {
   childSpawnPolicy,
   readSpawn,
@@ -357,6 +357,32 @@ test("whisper system does not hand off to other seats", () => {
   assert.match(WHISPER_RULES, /1:1 whisper/);
   assert.match(WHISPER_RULES, /latest human message is the live task/);
   assert.match(WHISPER_RULES, /that is the authorization/);
+});
+
+test("incognito whisper omits MEMORY.md and keeps soul files", () => {
+  const system = buildChatSystem({
+    botName: "PM",
+    handle: "pm",
+    soul: "# Soul\nI am PM.",
+    agent: "# Agent\nPlan first.",
+    position: "# Position\nCoordinate.",
+    whisper: true,
+    bare: true,
+    botMemory: "# MEMORY.md\nSECRET_STANDING_NOTE",
+    channelMemory: "ROOM_SECRET",
+    channelMd: "CHANNEL_SECRET",
+  });
+  assert.match(system, /# Whisper/);
+  assert.match(system, /incognito whisper to probe Soul, Agent, Position/);
+  assert.equal(system.includes(BARE_WHISPER_NOTE), true);
+  assert.match(system, /I am PM/);
+  assert.match(system, /Plan first/);
+  assert.match(system, /Coordinate/);
+  assert.doesNotMatch(system, /SECRET_STANDING_NOTE/);
+  assert.doesNotMatch(system, /ROOM_SECRET/);
+  assert.doesNotMatch(system, /CHANNEL_SECRET/);
+  assert.doesNotMatch(system, /# MEMORY.md/);
+  assert.doesNotMatch(system, /# Hall/);
 });
 
 test("child spawn cannot escalate a read_only parent", () => {

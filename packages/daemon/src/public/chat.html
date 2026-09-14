@@ -8,9 +8,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=bot-model" />
-    <script src="/i18n.js?v=computer-grant"></script>
-    <script src="/md.js?v=heading-h4"></script>
+    <link rel="stylesheet" href="/chat.css?v=bare-clear" />
+    <script src="/i18n.js?v=bare-clear"></script>
+    <script src="/md.js?v=file-chip"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
     <div class="nav-scrim" id="nav-scrim" hidden></div>
@@ -102,6 +102,7 @@
         </button>
         <div class="meta" id="subtitle"></div>
         <div class="head-actions">
+          <button type="button" class="traj-btn" id="bare-clear" hidden data-i18n="bare.clear" data-i18n-title="bare.clearHelp" title="清掉這次無痕紀錄。Soul、Agent、Position 和一般密談不會動。">清除</button>
           <button type="button" class="traj-btn" id="traj-btn" title="Trajectory" data-i18n="trace" data-i18n-title="trace">Trajectory</button>
         <div class="members-wrap" id="members-wrap" hidden>
           <button type="button" class="members-btn" id="members-btn" title="編制" data-i18n-title="members">
@@ -313,6 +314,7 @@
         <div class="bot-card-actions">
           <a class="bot-card-btn" id="bot-card-dm" data-i18n="bot.message">密談</a>
           <a class="bot-card-btn" id="bot-card-edit" data-i18n="bot.settings">狀態欄</a>
+          <a class="bot-card-btn bot-card-wide" id="bot-card-bare" data-i18n="bot.bare" data-i18n-title="bot.bareHelp" title="不含 MEMORY.md。用來試 Soul、Agent、Position 與 harness。">無痕密談</a>
           <button type="button" class="bot-card-btn bot-card-wide" id="bot-card-model" data-i18n-title="switchModel" title="切換模型">切換模型</button>
           <button type="button" class="bot-card-btn bot-card-wide" id="bot-card-memory" data-i18n="memory.bot">MEMORY.md</button>
         </div>
@@ -449,6 +451,7 @@
         peers: [],
         kind: "channel",
         id: "channel-general",
+        bare: false,
         messages: [],
         editingId: null,
         statsId: null,
@@ -1111,24 +1114,39 @@
           return;
         }
         state.cronOpen = "";
+        if (raw.startsWith("b/")) {
+          state.kind = "dm";
+          state.bare = true;
+          state.id = decodeURIComponent(raw.slice(2));
+          return;
+        }
         if (raw.startsWith("d/")) {
           state.kind = "dm";
-          state.id = raw.slice(2);
+          state.bare = false;
+          state.id = decodeURIComponent(raw.slice(2));
           return;
         }
         if (raw.startsWith("c/")) {
           state.kind = "channel";
-          state.id = raw.slice(2);
+          state.bare = false;
+          state.id = decodeURIComponent(raw.slice(2));
           return;
         }
         state.kind = "channel";
+        state.bare = false;
         state.id = "channel-general";
+      }
+      function dmApiId(id) {
+        const raw = String(id == null ? state.id : id);
+        if (raw.indexOf("peer-") === 0 || raw.indexOf("bare-") === 0) return raw;
+        if (state.kind === "dm" && state.bare) return "bare-" + raw;
+        return raw;
       }
       function setHash() {
         const next = state.cronOpen
           ? "#s/" + encodeURIComponent(state.cronOpen)
           : state.kind === "dm"
-            ? "#d/" + state.id
+            ? (state.bare ? "#b/" : "#d/") + encodeURIComponent(state.id)
             : "#c/" + state.id;
         if (location.hash !== next) history.replaceState(null, "", next);
       }
@@ -1142,11 +1160,15 @@
         );
       }
       function markRoomRead() {
-        state.unread.delete(roomKey(state.kind, state.id));
+        const r = currentRoomRef();
+        state.unread.delete(roomKey(r.kind, r.id));
         saveUnread();
       }
       function currentRoomRef() {
-        return { kind: state.kind, id: state.id };
+        return {
+          kind: state.kind,
+          id: state.kind === "dm" ? dmApiId(state.id) : state.id,
+        };
       }
       function sameRoom(a, b) {
         return Boolean(a && b && a.kind === b.kind && a.id === b.id);
@@ -1652,6 +1674,9 @@
       function touchNavTime(kind, id, iso, lastMessage) {
         const k = kind || state.kind;
         const roomId = id || state.id;
+        if (k === "dm" && (state.bare || String(roomId).indexOf("bare-") === 0)) {
+          return;
+        }
         const at = iso || (lastMessage && lastMessage.createdAt) || new Date().toISOString();
         const preview = lastMessage
           ? {
@@ -1844,7 +1869,7 @@
             const unread = state.unread.has(roomKey("dm", bot.id));
             return navRowHtml({
               href: "#d/" + encodeURIComponent(bot.id),
-              on: state.kind === "dm" && state.id === bot.id,
+              on: state.kind === "dm" && !state.bare && state.id === bot.id,
               av:
                 '<span class="avatar" style="background:' +
                 hue(bot.handle) +
@@ -1995,6 +2020,10 @@
           "</div>"
         );
       }
+      function setBareClearVisible(on) {
+        const btn = document.getElementById("bare-clear");
+        if (btn) btn.hidden = !on;
+      }
       function renderHead() {
         const wrap = document.getElementById("members-wrap");
         const av = document.getElementById("head-av");
@@ -2004,7 +2033,10 @@
             const members = (peer && peer.members) || [];
             document.getElementById("title").textContent =
               peer && peer.name ? peer.name : t("peers");
-            document.getElementById("subtitle").textContent = "";
+            const peerSub = document.getElementById("subtitle");
+            peerSub.textContent = "";
+            peerSub.classList.remove("bare");
+            setBareClearVisible(false);
             wrap.hidden = true;
             document.getElementById("members-pop").hidden = true;
             av.style.background = "transparent";
@@ -2030,7 +2062,10 @@
           } else {
           const bot = botById(state.id);
           document.getElementById("title").textContent = bot ? bot.name : t("dm");
-          document.getElementById("subtitle").textContent = "";
+          const sub = document.getElementById("subtitle");
+          sub.textContent = state.bare ? t("bare.subtitle") : "";
+          sub.classList.toggle("bare", Boolean(state.bare));
+          setBareClearVisible(Boolean(state.bare));
           wrap.hidden = true;
           document.getElementById("members-pop").hidden = true;
           av.style.background = bot ? hue(bot.handle) : "#333";
@@ -2055,7 +2090,10 @@
         document.getElementById("title").textContent = ch ? ch.name : "…";
         const members = ch ? ch.members || [] : [];
         const locked = isGeneralChannel(ch);
-        document.getElementById("subtitle").textContent = "";
+        const chSub = document.getElementById("subtitle");
+        chSub.textContent = "";
+        chSub.classList.remove("bare");
+        setBareClearVisible(false);
         av.textContent = "#";
         av.style.background = "";
         av.classList.add("hash-av");
@@ -2463,9 +2501,10 @@
           room ||
           (currentRoomBusy() ? currentRoomRef() : state.busyRoom);
         if (!r) return "";
+        const id = r.kind === "dm" ? dmApiId(r.id) : r.id;
         return r.kind === "dm"
-          ? "/dms/" + encodeURIComponent(r.id) + "/live"
-          : "/channels/" + encodeURIComponent(r.id) + "/live";
+          ? "/dms/" + encodeURIComponent(id) + "/live"
+          : "/channels/" + encodeURIComponent(id) + "/live";
       }
       function paintLiveSteps() {
         if (!currentRoomBusy()) return;
@@ -2956,43 +2995,49 @@
 
 
       function roomMessagesUrl(kind, id, suffix) {
+        const roomId = kind === "dm" ? dmApiId(id) : id;
         const base =
           kind === "dm"
-            ? "/dms/" + encodeURIComponent(id) + "/messages"
-            : "/channels/" + encodeURIComponent(id) + "/messages";
+            ? "/dms/" + encodeURIComponent(roomId) + "/messages"
+            : "/channels/" + encodeURIComponent(roomId) + "/messages";
         return suffix ? base + "/" + encodeURIComponent(suffix) : base;
       }
       function messagesUrl(suffix) {
         return roomMessagesUrl(state.kind, state.id, suffix);
       }
       function steerUrl(kind, id) {
+        const roomId = kind === "dm" ? dmApiId(id) : id;
         return kind === "dm"
-          ? "/dms/" + encodeURIComponent(id) + "/steer"
-          : "/channels/" + encodeURIComponent(id) + "/steer";
+          ? "/dms/" + encodeURIComponent(roomId) + "/steer"
+          : "/channels/" + encodeURIComponent(roomId) + "/steer";
       }
       function abortUrl(room) {
-        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        const r = room || state.busyRoom || currentRoomRef();
+        const id = r.kind === "dm" ? dmApiId(r.id) : r.id;
         return r.kind === "dm"
-          ? "/dms/" + encodeURIComponent(r.id) + "/abort"
-          : "/channels/" + encodeURIComponent(r.id) + "/abort";
+          ? "/dms/" + encodeURIComponent(id) + "/abort"
+          : "/channels/" + encodeURIComponent(id) + "/abort";
       }
       function pauseUrl(room) {
-        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        const r = room || state.busyRoom || currentRoomRef();
+        const id = r.kind === "dm" ? dmApiId(r.id) : r.id;
         return r.kind === "dm"
-          ? "/dms/" + encodeURIComponent(r.id) + "/pause"
-          : "/channels/" + encodeURIComponent(r.id) + "/pause";
+          ? "/dms/" + encodeURIComponent(id) + "/pause"
+          : "/channels/" + encodeURIComponent(id) + "/pause";
       }
       function computerUrl(room) {
-        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        const r = room || state.busyRoom || currentRoomRef();
+        const id = r.kind === "dm" ? dmApiId(r.id) : r.id;
         return r.kind === "dm"
-          ? "/dms/" + encodeURIComponent(r.id) + "/computer"
-          : "/channels/" + encodeURIComponent(r.id) + "/computer";
+          ? "/dms/" + encodeURIComponent(id) + "/computer"
+          : "/channels/" + encodeURIComponent(id) + "/computer";
       }
       function continueUrl(room) {
-        const r = room || state.busyRoom || { kind: state.kind, id: state.id };
+        const r = room || state.busyRoom || currentRoomRef();
+        const id = r.kind === "dm" ? dmApiId(r.id) : r.id;
         return r.kind === "dm"
-          ? "/dms/" + encodeURIComponent(r.id) + "/continue"
-          : "/channels/" + encodeURIComponent(r.id) + "/continue";
+          ? "/dms/" + encodeURIComponent(id) + "/continue"
+          : "/channels/" + encodeURIComponent(id) + "/continue";
       }
       function stopTurn(botId) {
         const room = currentRoomRef();
@@ -3197,7 +3242,7 @@
         state.queueSeq += 1;
         state.queue.push({
           id: "q-" + state.queueSeq,
-          room: { kind: state.kind, id: state.id },
+          room: currentRoomRef(),
           raw: pending.raw,
           packed: pending.packed,
           replyTo: pending.replyTo,
@@ -3268,7 +3313,7 @@
       }
       async function resumeCurrentLive() {
         if (state.posting) return;
-        const url = liveUrl({ kind: state.kind, id: state.id });
+        const url = liveUrl(currentRoomRef());
         if (!url) return;
         const res = await fetch(url);
         const body = await res.json().catch(() => ({}));
@@ -3388,6 +3433,27 @@
           ok.focus();
         });
       }
+      async function clearBareDm() {
+        if (!state.bare) return;
+        const sure = await askConfirm({
+          title: t("bare.clear"),
+          body: t("bare.clearConfirm"),
+          danger: true,
+          ok: t("bare.clear"),
+        });
+        if (!sure) return;
+        if (currentRoomBusy()) stopTurn();
+        const res = await fetch(messagesUrl(), { method: "DELETE" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+        state.messages = [];
+        state.retryDrop = {};
+        if (state.replyTo) clearReply();
+        if (state.editingId) state.editingId = null;
+        if (state.statsId) state.statsId = null;
+        renderThread();
+        showToast(t("bare.cleared"));
+      }
       async function deleteChatMessage(id) {
         if (!id) return;
         const ok = await askConfirm({
@@ -3484,7 +3550,7 @@
         await postChat(
           messagesUrl(id) + "/retry",
           payload,
-          { kind: state.kind, id: state.id },
+          currentRoomRef(),
           botIds,
         );
       }
@@ -3540,6 +3606,18 @@
           const path = decodeURIComponent(fileLink.getAttribute("data-path") || "");
           if (!path) return;
           try {
+            if (/\.(html?|svg)$/i.test(path)) {
+              const res = await fetch(
+                "/host/read?path=" + encodeURIComponent(path),
+              );
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                showToast(body.error || "open failed");
+                return;
+              }
+              openHtmlZoom(body.text);
+              return;
+            }
             const res = await fetch("/host/open", {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -4041,6 +4119,7 @@
         document.getElementById("bot-card-bio").textContent =
           bot.oneLiner || "";
         document.getElementById("bot-card-dm").setAttribute("href", "#d/" + bot.id);
+        document.getElementById("bot-card-bare").setAttribute("href", "#b/" + bot.id);
         document.getElementById("bot-card-edit").setAttribute(
           "href",
           "/edit/" + encodeURIComponent(bot.id),
@@ -4079,6 +4158,12 @@
       });
       document.getElementById("bot-card-dm").addEventListener("click", () => {
         hideBotCard();
+      });
+      document.getElementById("bot-card-bare").addEventListener("click", () => {
+        hideBotCard();
+      });
+      document.getElementById("bare-clear").addEventListener("click", () => {
+        clearBareDm().catch((err) => alert(err.message));
       });
       document.addEventListener("click", (event) => {
         if (!membersPop.hidden && !event.target.closest("#members-wrap")) {
@@ -5947,8 +6032,7 @@
           if (Array.isArray(body.assign) && sent.kind === "channel") {
             applyAssign(sent.id, body.assign);
           }
-          const here =
-            state.kind === sent.kind && state.id === sent.id;
+          const here = sameRoom(sent, currentRoomRef());
           if (here) {
             await loadMessages({ resume: false });
             if (liveBotIds(sent).filter((id) => (botIds || []).indexOf(id) < 0).length) {
@@ -5974,7 +6058,7 @@
           }
         } catch (err) {
           if (err.name === "AbortError") {
-            if (state.kind === sent.kind && state.id === sent.id) {
+            if (sameRoom(sent, currentRoomRef())) {
               await loadMessages({ resume: false }).catch(() => {});
               const url = liveUrl(sent);
               if (url) {
@@ -5996,7 +6080,7 @@
           }
           setBusy(false, botIds, { room: sent });
         }
-        if (state.kind === sent.kind && state.id === sent.id) {
+        if (sameRoom(sent, currentRoomRef())) {
           await resumeCurrentLive().catch(() => {});
         }
         if (ok) await flushQueued(sent);
@@ -6186,8 +6270,8 @@
         const draft = document.getElementById("draft");
         const text = composeSendBody(raw);
         const attachments = packed.map(wireAttachment);
-        const room = dest || { kind: state.kind, id: state.id };
-        const here = state.kind === room.kind && state.id === room.id;
+        const room = dest || currentRoomRef();
+        const here = sameRoom(room, currentRoomRef());
         if (here) {
           draft.value = "";
           fitDraft();
@@ -7327,7 +7411,7 @@
       let trajFetch = 0;
       function trajUrl() {
         return state.kind === "dm"
-          ? "/dms/" + encodeURIComponent(state.id) + "/trajectory"
+          ? "/dms/" + encodeURIComponent(dmApiId(state.id)) + "/trajectory"
           : "/channels/" + encodeURIComponent(state.id) + "/trajectory";
       }
       function prettyJson(value) {

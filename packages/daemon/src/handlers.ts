@@ -36,6 +36,7 @@ import { listHostSkills, type HostSkill } from "./host-skills.ts";
 import {
   CHANNEL_ROSTER_CAP,
   GuildStore,
+  isBareDmId,
   StoreError,
   type LiveStep,
   type LiveTurn,
@@ -551,7 +552,7 @@ export function workspace(store: GuildStore) {
     if (!room || room.kind === "cron") return [];
     const id =
       room.kind === "dm"
-        ? roomId.startsWith("peer-")
+        ? roomId.startsWith("peer-") || isBareDmId(roomId)
           ? roomId
           : roomId.replace(/^dm-/, "")
         : roomId;
@@ -664,6 +665,10 @@ export function openDm(store: GuildStore, botId: string) {
   return store.openDm(botId);
 }
 
+export function clearBareDm(store: GuildStore, roomId: string) {
+  return store.clearBareRoom(roomId);
+}
+
 export function resolveDm(store: GuildStore, raw: string) {
   const id = decodeURIComponent(raw || "").trim();
   if (!id) throw new StoreError(400, "missing id");
@@ -671,6 +676,11 @@ export function resolveDm(store: GuildStore, raw: string) {
     const room = store.getRoom(id);
     if (!room || room.kind !== "dm") throw new StoreError(404, "room not found");
     return room;
+  }
+  if (isBareDmId(id)) {
+    const botId = id.slice("bare-".length);
+    if (!botId) throw new StoreError(400, "missing id");
+    return store.openBareDm(botId);
   }
   return store.openDm(id);
 }
@@ -1086,13 +1096,16 @@ export function chatTurnForBot(
     ),
     subagents,
     wantSpawn: extraTurnSubagents(asked, subagents),
-    channelMd: channelMarkdownForRoom(store, mdRoomId),
-    botMemory: store.readBotMemory(botId),
+    channelMd: isBareDmId(roomId) ? "" : channelMarkdownForRoom(store, mdRoomId),
+    botMemory: isBareDmId(roomId) ? "" : store.readBotMemory(botId),
     channelMemory:
-      mdRoom?.kind === "channel" || mdRoom?.kind === "cron"
-        ? store.readChannelMemory(mdRoomId)
-        : "",
-    whisper: room?.kind === "dm",
+      isBareDmId(roomId)
+        ? ""
+        : mdRoom?.kind === "channel" || mdRoom?.kind === "cron"
+          ? store.readChannelMemory(mdRoomId)
+          : "",
+    whisper: room?.kind === "dm" || isBareDmId(roomId),
+    bare: isBareDmId(roomId),
     rosterHandles,
     compact: store.readCompact(roomId),
     onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),
@@ -1629,7 +1642,7 @@ async function generateReplies(
         author: botId,
         body: generated.body,
       });
-      if (extras.harvest !== false) {
+      if (extras.harvest !== false && !isBareDmId(roomId)) {
         void harvestBotMemory({
           store,
           botId,

@@ -48,6 +48,16 @@ const MARKDOWN: Record<LibraryKind, string> = {
 
 const GENERAL_CHANNEL_ID = "channel-general";
 const NAV_PREVIEW_CAP = 120;
+/** Incognito whisper. kind stays dm — SCHEMA_VERSION 2 additive. */
+export const BARE_DM_PREFIX = "bare-";
+
+export function isBareDmId(id: string): boolean {
+  return String(id || "").startsWith(BARE_DM_PREFIX);
+}
+
+export function bareDmRoomId(botId: string): string {
+  return `${BARE_DM_PREFIX}${botId}`;
+}
 /** Project channels (not #general). Reuse seats first; human adds specialists. */
 export const CHANNEL_ROSTER_CAP = 6;
 /** Parent → child → grandchild. Deeper than this hides in the sidebar. */
@@ -664,6 +674,8 @@ export class GuildStore {
     }
     const dm = this.getRoom(`dm-${id}`);
     if (dm) this.removeRoomDir(dm.id);
+    const bare = this.getRoom(bareDmRoomId(id));
+    if (bare) this.removeRoomDir(bare.id);
     for (const peer of this.listPeers()) {
       if (peer.memberIds.includes(id)) this.removeRoomDir(peer.id);
     }
@@ -1059,6 +1071,36 @@ export class GuildStore {
       id,
       kind: "dm",
       name: bot.handle,
+      memberIds: [botId],
+      createdAt: new Date().toISOString(),
+    };
+    this.writeRoom(room);
+    this.writeMessages(id, []);
+    return room;
+  }
+
+  /** Wipe an incognito whisper. Regular DM and MEMORY.md stay. */
+  clearBareRoom(roomId: string): { ok: true; id: string } {
+    if (!isBareDmId(roomId)) {
+      throw new StoreError(400, "can only clear incognito whispers");
+    }
+    if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
+    this.abortTurn(roomId);
+    this.db.clearRoomHistory(roomId);
+    return { ok: true, id: roomId };
+  }
+
+  /** Whisper without MEMORY.md inject or harvest. Probes Soul / Agent / Position. */
+  openBareDm(botId: string): Room {
+    const bot = this.getBot(botId);
+    if (!bot) throw new StoreError(404, "bot not found");
+    const id = bareDmRoomId(botId);
+    const existing = this.getRoom(id);
+    if (existing) return existing;
+    const room: Room = {
+      id,
+      kind: "dm",
+      name: `@${bot.handle} · bare`,
       memberIds: [botId],
       createdAt: new Date().toISOString(),
     };

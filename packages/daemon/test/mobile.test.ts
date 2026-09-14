@@ -66,6 +66,13 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   const css = readFileSync(MOBILE_CSS, "utf8");
   assert.match(html, /#c\//);
   assert.match(html, /#d\//);
+  assert.match(html, /#b\//);
+  assert.match(html, /function dmApiId/);
+  assert.match(html, /id="bare-toggle"/);
+  assert.match(html, /id="bare-clear"/);
+  assert.match(html, /bare\.subtitle/);
+  assert.match(html, /bare\.clearConfirm/);
+  assert.match(css, /\.bare-toggle/);
   assert.match(html, /payload\.mentions/);
   assert.match(html, /deepDiving/);
   assert.match(html, /live.messageId/);

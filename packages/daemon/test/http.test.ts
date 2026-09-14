@@ -735,6 +735,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /\.nav-av \.avatar \{ font-size:\s*15px/);
   assert.match(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n\}/);
   assert.match(chatCss, /\.bot-card-wide/);
+  assert.match(chatCss, /\.pane-head \.meta\.bare/);
   assert.match(chatCss, /\.bot-card-picker/);
   assert.doesNotMatch(chatCss, /\.bot-card-actions \.bot-card-btn:last-child/);
   assert.doesNotMatch(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n  font: inherit;/);
@@ -757,6 +758,13 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /bot-card/);
   assert.match(home, /bot-card-actions/);
   assert.match(home, /id="bot-card-model"/);
+  assert.match(home, /id="bot-card-bare"/);
+  assert.match(home, /id="bare-clear"/);
+  assert.match(home, /function clearBareDm/);
+  assert.match(home, /startsWith\("b\/"\)/);
+  assert.match(home, /function dmApiId/);
+  assert.match(home, /sameRoom\(sent, currentRoomRef\(\)\)/);
+  assert.match(home, /dest \|\| currentRoomRef\(\)/);
   assert.match(home, /id="bot-card-picker"/);
   assert.match(home, /function fillBotCardModel/);
   assert.match(home, /function renderBotCardModels/);
@@ -1103,6 +1111,9 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /function botModelMeta/);
     assert.match(html, /applyChatModel\(ref, botId\)/);
     assert.match(html, /id="bot-card-model"/);
+    assert.match(html, /id="bot-card-bare"/);
+    assert.match(html, /startsWith\("b\/"\)/);
+    assert.match(html, /function dmApiId/);
     assert.match(html, /byUpdatedAtDesc/);
     assert.doesNotMatch(html, /botNavPreview/);
     assert.doesNotMatch(html, /位 bot 在裡面/);

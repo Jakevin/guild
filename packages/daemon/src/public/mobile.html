@@ -9,9 +9,9 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=code-plain" />
-    <script src="/i18n.js?v=computer-grant"></script>
-    <script src="/md.js?v=heading-h4"></script>
+    <link rel="stylesheet" href="/mobile.css?v=bare-clear" />
+    <script src="/i18n.js?v=bare-clear"></script>
+    <script src="/md.js?v=file-chip"></script>
   </head>
   <body class="m-away" data-i18n-page="mobile">
     <section class="screen" id="screen-list">
@@ -31,6 +31,8 @@
         <button type="button" class="back" id="back" data-i18n-title="mobile.back" data-i18n-aria="mobile.back" title="返回委託" aria-label="返回委託">‹</button>
         <h1 id="title"></h1>
         <div class="meta" id="subtitle"></div>
+        <button type="button" class="bare-toggle" id="bare-toggle" hidden data-i18n="bot.bare" data-i18n-title="bot.bareHelp" title="不含 MEMORY.md。用來試 Soul、Agent、Position 與 harness。">無痕密談</button>
+        <button type="button" class="bare-clear" id="bare-clear" hidden data-i18n="bare.clear" data-i18n-title="bare.clearHelp" title="清掉這次無痕紀錄。Soul、Agent、Position 和一般密談不會動。">清除</button>
       </header>
       <div class="thread" id="thread"></div>
       <form class="composer" id="composer">
@@ -74,6 +76,7 @@
           lives: [],
           kind: "",
           id: "",
+          bare: false,
           posting: false,
           mentionIndex: 0,
           pollTimer: 0,
@@ -126,12 +129,23 @@
         function currentChannel() {
           return (state.channels || []).find((ch) => ch.id === state.id);
         }
+        function dmApiId(id) {
+          const raw = String(id == null ? state.id : id);
+          if (raw.indexOf("peer-") === 0 || raw.indexOf("bare-") === 0) return raw;
+          if (state.kind === "dm" && state.bare) return "bare-" + raw;
+          return raw;
+        }
         function currentRoomRef() {
-          return state.kind ? { kind: state.kind, id: state.id } : null;
+          return state.kind
+            ? {
+                kind: state.kind,
+                id: state.kind === "dm" ? dmApiId(state.id) : state.id,
+              }
+            : null;
         }
         function roomMessagesUrl() {
           return state.kind === "dm"
-            ? "/dms/" + encodeURIComponent(state.id) + "/messages"
+            ? "/dms/" + encodeURIComponent(dmApiId(state.id)) + "/messages"
             : "/channels/" + encodeURIComponent(state.id) + "/messages";
         }
         function liveUrl() {
@@ -178,17 +192,26 @@
         }
         function parseHash() {
           const raw = location.hash.replace(/^#/, "");
+          if (raw.startsWith("b/")) {
+            state.kind = "dm";
+            state.bare = true;
+            state.id = decodeURIComponent(raw.slice(2));
+            return;
+          }
           if (raw.startsWith("d/")) {
             state.kind = "dm";
+            state.bare = false;
             state.id = decodeURIComponent(raw.slice(2));
             return;
           }
           if (raw.startsWith("c/")) {
             state.kind = "channel";
+            state.bare = false;
             state.id = decodeURIComponent(raw.slice(2));
             return;
           }
           state.kind = "";
+          state.bare = false;
           state.id = "";
         }
         function showList() {
@@ -696,7 +719,9 @@
                 preview: last
                   ? previewLine(last.body) + " · " + relTime(last.createdAt)
                   : "@" + bot.handle,
-                busy: roomLiveRows("dm", bot.id).length > 0,
+                busy:
+                  roomLiveRows("dm", bot.id).length > 0 ||
+                  roomLiveRows("dm", "bare-" + bot.id).length > 0,
                 av:
                   '<span class="avatar" style="background:' +
                   hue(bot.handle) +
@@ -710,12 +735,30 @@
         function renderHead() {
           const title = document.getElementById("title");
           const sub = document.getElementById("subtitle");
+          const toggle = document.getElementById("bare-toggle");
+          const clearBtn = document.getElementById("bare-clear");
           if (state.kind === "dm") {
             const bot = botById(state.id);
             title.textContent = bot ? bot.name : state.id;
-            sub.textContent = bot ? "@" + bot.handle : "";
+            sub.textContent = state.bare
+              ? t("bare.subtitle")
+              : bot
+                ? "@" + bot.handle
+                : "";
+            sub.classList.toggle("bare", Boolean(state.bare));
+            if (toggle) {
+              toggle.hidden = !bot;
+              toggle.classList.toggle("on", Boolean(state.bare));
+            }
+            if (clearBtn) clearBtn.hidden = !state.bare;
             return;
           }
+          if (toggle) {
+            toggle.hidden = true;
+            toggle.classList.remove("on");
+          }
+          if (clearBtn) clearBtn.hidden = true;
+          sub.classList.remove("bare");
           const ch = currentChannel();
           title.textContent = ch ? "#" + ch.name : state.id;
           const n = ch && ch.members ? ch.members.length : 0;
@@ -1022,6 +1065,17 @@
           syncComposer();
           schedule();
         }
+        async function clearBareDm() {
+          if (!state.bare) return;
+          if (!window.confirm(t("bare.clearConfirm"))) return;
+          if (isBusy()) stopTurn();
+          const res = await fetch(roomMessagesUrl(), { method: "DELETE" });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+          state.messages = [];
+          renderThread();
+          toast(t("bare.cleared"), { ok: true });
+        }
         async function sendDraft() {
           const draft = document.getElementById("draft");
           const raw = draft.value.trim();
@@ -1070,6 +1124,14 @@
         document.getElementById("back").addEventListener("click", () => {
           showList();
         });
+        document.getElementById("bare-toggle").addEventListener("click", () => {
+          if (state.kind !== "dm" || !state.id) return;
+          location.hash =
+            (state.bare ? "#d/" : "#b/") + encodeURIComponent(state.id);
+        });
+        document.getElementById("bare-clear").addEventListener("click", () => {
+          clearBareDm().catch((err) => toast(err.message || String(err)));
+        });
         document.getElementById("composer").addEventListener("submit", (event) => {
           event.preventDefault();
           sendDraft();
@@ -1092,6 +1154,19 @@
             event.preventDefault();
             const path = decodeURIComponent(fileLink.getAttribute("data-path") || "");
             if (!path) return;
+            if (/\.(html?|svg)$/i.test(path)) {
+              fetch("/host/read?path=" + encodeURIComponent(path))
+                .then((res) => res.json().then((body) => ({ res: res, body: body })))
+                .then((got) => {
+                  if (!got.res.ok) {
+                    toast(got.body.error || "open failed");
+                    return;
+                  }
+                  openHtmlZoom(got.body.text);
+                })
+                .catch((err) => toast(err.message || "open failed"));
+              return;
+            }
             fetch("/host/open", {
               method: "POST",
               headers: { "content-type": "application/json" },

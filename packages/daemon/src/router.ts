@@ -45,6 +45,7 @@ import {
   createMcpServer,
   importMcpServer,
   deleteMcpServer,
+  clearBareDm,
   deleteRoomMessage,
   listRoomMessages,
   listRoomTrajectory,
@@ -1121,6 +1122,11 @@ export async function handleRequest(
     if (dmMessages && method === "GET") {
       const room = resolveDm(store, dmMessages[1]);
       json(res, 200, listRoomMessages(store, room.id));
+      return;
+    }
+    if (dmMessages && method === "DELETE") {
+      const room = resolveDm(store, dmMessages[1]);
+      json(res, 200, clearBareDm(store, room.id));
       return;
     }
     if (dmMessages && method === "POST") {

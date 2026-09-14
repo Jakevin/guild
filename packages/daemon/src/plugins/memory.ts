@@ -1,5 +1,6 @@
 import { Service, type Context } from "cordis";
 import { harvestBotMemory, harvestChannelMemory } from "../memory.ts";
+import { isBareDmId } from "../store.ts";
 
 export class MemoryService extends Service {
   static inject = ["store", "llm"];
@@ -10,14 +11,16 @@ export class MemoryService extends Service {
       const store = ctx.store.guild;
       const env = ctx.store.env;
       const prefer = store.getBot(turn.botId)?.model ?? null;
-      void harvestBotMemory({
-        store,
-        botId: turn.botId,
-        userMessage: turn.userText,
-        reply: turn.reply,
-        env,
-        prefer,
-      }).catch(() => {});
+      if (!isBareDmId(turn.roomId)) {
+        void harvestBotMemory({
+          store,
+          botId: turn.botId,
+          userMessage: turn.userText,
+          reply: turn.reply,
+          env,
+          prefer,
+        }).catch(() => {});
+      }
       const room = store.getRoom(turn.roomId);
       if (room?.kind === "channel") {
         void harvestChannelMemory({

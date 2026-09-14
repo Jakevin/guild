@@ -749,6 +749,20 @@ export class GuildDb {
     };
   }
 
+  clearRoomHistory(roomId: string): void {
+    this.sqlite.exec("BEGIN");
+    try {
+      this.sqlite.prepare("DELETE FROM messages WHERE room_id = ?").run(roomId);
+      this.sqlite.prepare("DELETE FROM trajectory WHERE room_id = ?").run(roomId);
+      this.sqlite.prepare("DELETE FROM compact WHERE room_id = ?").run(roomId);
+      this.sqlite.exec("COMMIT");
+    } catch (error) {
+      this.sqlite.exec("ROLLBACK");
+      throw error;
+    }
+    rmIfExists(this.warehousePath(roomId));
+  }
+
   writeCompact(roomId: string, compact: CompactRow): void {
     this.sqlite
       .prepare(

@@ -189,7 +189,10 @@ test("renderMarkdown turns GFM tables into HTML", () => {
   assert.match(html, /<table class="md-table">/);
   assert.match(html, /<th>包<\/th>/);
   assert.match(html, /<th>實際角色<\/th>/);
-  assert.match(html, /<td><code class="md-file">packages\/protocol<\/code><\/td>/);
+  assert.match(
+    html,
+    /<td><a class="md-file" href="#" data-path="packages%2Fprotocol" title="packages\/protocol">packages\/protocol<\/a><\/td>/,
+  );
   assert.match(html, /<td>共用型別：Bot<\/td>/);
   assert.match(html, /<td>早期 React 殼<\/td>/);
   assert.doesNotMatch(html, /\|---\|/);
@@ -216,12 +219,24 @@ test("renderMarkdown marks path-like inline code as files", () => {
   const html = renderMarkdown(
     "`docs/plan.md` and `llm.ts` and `CODEX_HOME` and `hw.memsize`",
   );
-  assert.match(html, /class="md-file">docs\/plan.md<\/code>/);
-  assert.match(html, /class="md-file">llm.ts<\/code>/);
+  assert.match(
+    html,
+    /<a class="md-file" href="#" data-path="docs%2Fplan.md" title="docs\/plan.md">docs\/plan.md<\/a>/,
+  );
+  assert.match(
+    html,
+    /<a class="md-file" href="#" data-path="llm.ts" title="llm.ts">llm.ts<\/a>/,
+  );
   assert.match(html, /<code>CODEX_HOME<\/code>/);
   assert.match(html, /<code>hw.memsize<\/code>/);
   assert.doesNotMatch(html, /md-file">CODEX_HOME/);
   assert.doesNotMatch(html, /md-file">hw.memsize/);
+  const htmlFile = renderMarkdown("做好了：`pelican-bike.html`");
+  assert.match(
+    htmlFile,
+    /<a class="md-file" href="#" data-path="pelican-bike.html" title="pelican-bike.html">pelican-bike.html<\/a>/,
+  );
+  assert.doesNotMatch(htmlFile, /<code class="md-file"/);
 });
 
 test("a pipe line is not a table without a separator", () => {
@@ -241,6 +256,8 @@ test("chat page loads the shipped markdown renderer", async () => {
   assert.match(home, /putHtmlFrames/);
   assert.match(home, /dropPending/);
   assert.match(home, /htmlPreviewSrcdoc/);
+  assert.match(home, /\/host\/read\?path=/);
+  assert.match(home, /openHtmlZoom\(body\.text\)/);
   assert.match(home, /chat\.css\?v=/);
   const dataDir = mkdtempSync(join(tmpdir(), "guild-home-"));
   const { server, origin } = await listenApp(dataDir, {});

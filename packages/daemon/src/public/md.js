@@ -147,8 +147,16 @@ function inlineMd(text) {
     );
   });
   out = out.replace(/`([^`]+)`/g, function (_m, code) {
-    const cls = isFileCode(code) ? ' class="md-file"' : "";
-    return "<code" + cls + ">" + code + "</code>";
+    if (!isFileCode(code)) return "<code>" + code + "</code>";
+    return (
+      '<a class="md-file" href="#" data-path="' +
+      encodeURIComponent(code) +
+      '" title="' +
+      code +
+      '">' +
+      code +
+      "</a>"
+    );
   });
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/__([^_]+)__/g, "<strong>$1</strong>");

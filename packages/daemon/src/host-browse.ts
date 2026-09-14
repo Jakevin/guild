@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { StoreError } from "./store.ts";
+import { workspaceFromEnv } from "./harness.ts";
 
 const execFileAsync = promisify(execFile);
 const HOME = homedir();
@@ -29,6 +30,10 @@ function resolveUserPath(input: string): string {
   if (trimmed === "~") return HOME;
   if (trimmed.startsWith("~/")) return resolve(HOME, trimmed.slice(2));
   if (trimmed.startsWith("/")) return resolve(trimmed);
+  const fromWorkspace = resolve(workspaceFromEnv(), trimmed);
+  if (existsSync(fromWorkspace)) return fromWorkspace;
+  const fromCwd = resolve(process.cwd(), trimmed);
+  if (existsSync(fromCwd)) return fromCwd;
   return resolve(HOME, trimmed);
 }
 
