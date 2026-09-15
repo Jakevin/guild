@@ -18,9 +18,13 @@ import {
   getBotMemory,
   setBotMemory,
   tidyBotMemory,
+  getBotMemoryLog,
+  restoreBotMemory,
   getChannelMemory,
   setChannelMemory,
   tidyChannelMemory,
+  getChannelMemoryLog,
+  restoreChannelMemory,
   generateKind,
   draftListing,
   pickBotSkills,
@@ -743,6 +747,26 @@ export async function handleRequest(
       throw new StoreError(400, "Channel.md is only for channels");
     }
 
+    const botMemoryLog = path.match(/^\/bots\/([^/]+)\/memory\.md\/log$/);
+    if (botMemoryLog && method === "GET") {
+      json(res, 200, getBotMemoryLog(store, decodeURIComponent(botMemoryLog[1])));
+      return;
+    }
+    const botMemoryRestore = path.match(/^\/bots\/([^/]+)\/memory\.md\/restore$/);
+    if (botMemoryRestore && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        restoreBotMemory(
+          store,
+          decodeURIComponent(botMemoryRestore[1]),
+          typeof body.id === "string" ? body.id : "",
+        ),
+      );
+      return;
+    }
+
     const botMemoryTidy = path.match(/^\/bots\/([^/]+)\/memory\.md\/tidy$/);
     if (botMemoryTidy && method === "POST") {
       const body = asRecord(await readJson(req));
@@ -772,6 +796,34 @@ export async function handleRequest(
           store,
           decodeURIComponent(botMemory[1]),
           typeof body.body === "string" ? body.body : "",
+        ),
+      );
+      return;
+    }
+
+    const channelMemoryLog = path.match(
+      /^\/channels\/([^/]+)\/memory\.md\/log$/,
+    );
+    if (channelMemoryLog && method === "GET") {
+      json(
+        res,
+        200,
+        getChannelMemoryLog(store, decodeURIComponent(channelMemoryLog[1])),
+      );
+      return;
+    }
+    const channelMemoryRestore = path.match(
+      /^\/channels\/([^/]+)\/memory\.md\/restore$/,
+    );
+    if (channelMemoryRestore && method === "POST") {
+      const body = asRecord(await readJson(req));
+      json(
+        res,
+        200,
+        restoreChannelMemory(
+          store,
+          decodeURIComponent(channelMemoryRestore[1]),
+          typeof body.id === "string" ? body.id : "",
         ),
       );
       return;

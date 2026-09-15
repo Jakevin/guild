@@ -1,6 +1,7 @@
 import { Service, type Context } from "cordis";
 import { CRON_TICK_MS } from "../cron-schedule.ts";
 import { executeCronjob, tickCronJobs } from "../cron.ts";
+import { compactIdleRooms } from "../idle-compact.ts";
 import { guildEnvOf } from "../start.ts";
 
 export class CronService extends Service {
@@ -12,7 +13,10 @@ export class CronService extends Service {
       executeCronjob(this.ctx.store.guild, args, toolCtx),
     );
     const tick = () => {
-      void tickCronJobs(this.ctx.store.guild, guildEnvOf(this.ctx));
+      const store = this.ctx.store.guild;
+      const env = guildEnvOf(this.ctx);
+      void tickCronJobs(store, env);
+      void compactIdleRooms(store, env).catch(() => {});
     };
     const interval = setInterval(tick, CRON_TICK_MS);
     interval.unref();

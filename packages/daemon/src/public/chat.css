@@ -1258,6 +1258,44 @@ body.grok .sidebar .side-foot a:hover { color: #F7F1E4; }
   cursor: pointer;
 }
 .traj-btn:hover { background: var(--lift); color: var(--text); }
+.bare-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.bare-switch[hidden] { display: none; }
+.bare-switch input[type="checkbox"] {
+  appearance: none;
+  width: 36px;
+  height: 22px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #3a4048;
+  position: relative;
+  cursor: pointer;
+  flex: none;
+}
+.bare-switch input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--press-ms) var(--ease-out);
+}
+.bare-switch input[type="checkbox"]:checked { background: #34c759; }
+.bare-switch input[type="checkbox"]:checked::after { transform: translateX(14px); }
+.bare-switch:has(input:checked) { color: var(--text); }
 .bot-card-btn.danger { color: #fca5a5; }
 .members-wrap {
   position: relative;
@@ -3309,6 +3347,18 @@ dialog p { margin: 0 0 0.8rem; color: var(--muted); font-size: 0.9rem; }
   border-color: color-mix(in srgb, var(--steel) 65%, var(--line));
 }
 .memory-tidy-row button:disabled { opacity: 0.55; cursor: wait; }
+.memory-log-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 999px;
+  background: #0e0e0e;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+}
 .memory-proposal {
   width: 100%;
   margin: 0;

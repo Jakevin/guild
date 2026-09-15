@@ -209,6 +209,9 @@ export function planCompact(input: {
   tokenLimit?: number;
   selfAuthor?: string;
   roomId?: string;
+  checkpoint?: CompactCheckpoint | null;
+  /** Idle compact must not wait for a live-turn usage reading. */
+  skipDefer?: boolean;
 }): { mode: "full" | "compact"; old: HistoryItem[]; recent: HistoryItem[] } {
   const limit = input.tokenLimit ?? DEFAULT_AUTO_COMPACT_TOKENS;
   const mapped = input.history.map((item) => toModelMessage(item, input.selfAuthor));
@@ -223,19 +226,6 @@ export function planCompact(input: {
     extraSince: estimateTokens(input.userMessage),
     awaitingAfterCompact: state?.awaitingAfterCompact,
   });
-  if (
-    input.roomId &&
-    shouldDeferToRealUsage({
-      source: pressure.source,
-      tokens: pressure.tokens,
-      threshold: limit,
-      window: SEND_TOKEN_BUDGET,
-      alreadyWaited: Boolean(state?.waitedOnce),
-    })
-  ) {
-    markCompactDeferred(input.roomId);
-    return { mode: "full", old: [], recent: input.history };
-  }
   const fullCost = pressure.source === "rough" ? rough : pressure.tokens;
   if (!shouldCompress(fullCost, limit)) {
     return { mode: "full", old: [], recent: input.history };
@@ -267,11 +257,24 @@ export function planCompact(input: {
   if (split <= 0) {
     return { mode: "full", old: [], recent: input.history };
   }
-  return {
-    mode: "compact",
-    old: input.history.slice(0, split),
-    recent: input.history.slice(split),
-  };
+  const old = input.history.slice(0, split);
+  const recent = input.history.slice(split);
+  if (
+    input.roomId &&
+    !input.skipDefer &&
+    !canReuseCheckpoint(input.checkpoint, old) &&
+    shouldDeferToRealUsage({
+      source: pressure.source,
+      tokens: pressure.tokens,
+      threshold: limit,
+      window: SEND_TOKEN_BUDGET,
+      alreadyWaited: Boolean(state?.waitedOnce),
+    })
+  ) {
+    markCompactDeferred(input.roomId);
+    return { mode: "full", old: [], recent: input.history };
+  }
+  return { mode: "compact", old, recent };
 }
 
 async function summarizeOld(input: {
@@ -351,6 +354,7 @@ export async function packHistory(input: {
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
   signal?: AbortSignal;
+  skipDefer?: boolean;
 }): Promise<PackedHistory> {
   restoreUsageAnchor(input.roomId, input.checkpoint?.usageAnchor);
   const user = { role: "user" as const, content: input.userMessage };
@@ -362,6 +366,8 @@ export async function packHistory(input: {
     tokenLimit: input.tokenLimit,
     selfAuthor: input.selfAuthor,
     roomId: input.roomId,
+    checkpoint: input.checkpoint,
+    skipDefer: input.skipDefer,
   });
   if (plan.mode === "full") {
     return {
@@ -410,7 +416,7 @@ export async function packHistory(input: {
     };
   }
 
-  markCompacted(input.roomId);
+  if (!input.skipDefer) markCompacted(input.roomId);
   input.onCompact?.(checkpoint);
   return {
     messages: [

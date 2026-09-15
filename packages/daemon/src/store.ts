@@ -29,6 +29,12 @@ import { parseAgentFile } from "./agent-file.ts";
 import { parseUsageAnchor, type UsageAnchor } from "./usage-anchor.ts";
 import { abortComputerGrant } from "./computer-grant.ts";
 import {
+  listMemoryLog,
+  restoreMemoryFile,
+  snapshotMemoryFile,
+  type MemoryLogEntry,
+} from "./memory-log.ts";
+import {
   dismissAssign,
   mergeAssign,
   parseMentionIds,
@@ -876,6 +882,10 @@ export class GuildStore {
     return this.listRooms().filter((room) => room.kind === "channel");
   }
 
+  listAllRooms(): Room[] {
+    return this.listRooms();
+  }
+
   cronDeskDir(jobId: string): string {
     return join(this.dataDir, "cron", jobId);
   }
@@ -1453,10 +1463,34 @@ export class GuildStore {
   writeBotMemory(botId: string, body: string): string {
     if (!this.getBot(botId)) throw new StoreError(404, "bot not found");
     const text = typeof body === "string" ? body : "";
-    const dir = join(this.dataDir, "bots", botId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(this.botMemoryPath(botId), text);
+    const path = this.botMemoryPath(botId);
+    const prev = existsSync(path) ? readFileSync(path, "utf8") : "";
+    if (prev !== text) snapshotMemoryFile(path, this.botMemoryLogDir(botId));
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
     return text;
+  }
+
+  private botMemoryLogDir(botId: string): string {
+    return join(this.dataDir, "bots", botId, "memory-log");
+  }
+
+  listBotMemoryLog(botId: string): MemoryLogEntry[] {
+    if (!this.getBot(botId)) throw new StoreError(404, "bot not found");
+    return listMemoryLog(this.botMemoryLogDir(botId));
+  }
+
+  restoreBotMemory(botId: string, id: string): string {
+    if (!this.getBot(botId)) throw new StoreError(404, "bot not found");
+    try {
+      return restoreMemoryFile(
+        this.botMemoryPath(botId),
+        this.botMemoryLogDir(botId),
+        id,
+      );
+    } catch {
+      throw new StoreError(404, "memory log not found");
+    }
   }
 
   private channelMemoryPath(roomId: string): string {
@@ -1487,9 +1521,41 @@ export class GuildStore {
     }
     const text = typeof body === "string" ? body : "";
     const path = this.channelMemoryPath(roomId);
+    const prev = existsSync(path) ? readFileSync(path, "utf8") : "";
+    if (prev !== text) snapshotMemoryFile(path, this.channelMemoryLogDir(roomId));
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, text);
     return text;
+  }
+
+  private channelMemoryLogDir(roomId: string): string {
+    return join(dirname(this.channelMemoryPath(roomId)), "memory-log");
+  }
+
+  listChannelMemoryLog(roomId: string): MemoryLogEntry[] {
+    const room = this.getRoom(roomId);
+    if (!room) throw new StoreError(404, "room not found");
+    if (room.kind !== "channel" && room.kind !== "cron") {
+      throw new StoreError(400, "Channel MEMORY.md is only for channels");
+    }
+    return listMemoryLog(this.channelMemoryLogDir(roomId));
+  }
+
+  restoreChannelMemory(roomId: string, id: string): string {
+    const room = this.getRoom(roomId);
+    if (!room) throw new StoreError(404, "room not found");
+    if (room.kind !== "channel" && room.kind !== "cron") {
+      throw new StoreError(400, "Channel MEMORY.md is only for channels");
+    }
+    try {
+      return restoreMemoryFile(
+        this.channelMemoryPath(roomId),
+        this.channelMemoryLogDir(roomId),
+        id,
+      );
+    } catch {
+      throw new StoreError(404, "memory log not found");
+    }
   }
 
   private writeMessages(roomId: string, messages: ChatMessage[]): void {

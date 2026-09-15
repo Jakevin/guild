@@ -7,4 +7,7 @@ Guild bots drive macOS GUI apps through a native `computer` tool. Not a skill.
 - Chrome/Safari/Edge/Arc stay on `browser`. `computer` refuses those windows.
 - Writes refuse when the window is off the current Space or the user is at the keyboard.
 - Default `op` / click / type post events to the target pid (no focus steal). `focus=true` borrows the front app and flashes a capture-invisible HUD.
-- `ax` dumps the accessibility tree (`e1`…). `axset` writes a value by ref. `see` is screenshot + AX.
+- `ax` / `see` return `look=L4` and a folded AX tree (interactive controls first). Search with `query` + `look`; expand with `ref` + `look`. Full dump stays in guildd (last 8 looks).
+- `axset` / `press` require that `look` and `eN`. Helper re-walks and matches `{role, pos, title}` — stale index fails closed (`Call ax again`).
+- `axset` re-reads the value (`outcome=worked|didnt`). `press` is `AXPress` (`outcome=unknown`).
+- `op` is still window-local coordinates (not look-bound). Chrome/Safari/Edge/Arc stay on `browser`.

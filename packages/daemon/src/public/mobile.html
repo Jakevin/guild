@@ -9,8 +9,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
-    <link rel="stylesheet" href="/mobile.css?v=bare-clear" />
-    <script src="/i18n.js?v=bare-clear"></script>
+    <link rel="stylesheet" href="/mobile.css?v=bare-switch" />
+    <script src="/i18n.js?v=memory-log"></script>
     <script src="/md.js?v=file-chip"></script>
   </head>
   <body class="m-away" data-i18n-page="mobile">
@@ -31,7 +31,10 @@
         <button type="button" class="back" id="back" data-i18n-title="mobile.back" data-i18n-aria="mobile.back" title="返回委託" aria-label="返回委託">‹</button>
         <h1 id="title"></h1>
         <div class="meta" id="subtitle"></div>
-        <button type="button" class="bare-toggle" id="bare-toggle" hidden data-i18n="bot.bare" data-i18n-title="bot.bareHelp" title="不含 MEMORY.md。用來試 Soul、Agent、Position 與 harness。">無痕密談</button>
+        <label class="bare-switch" id="bare-toggle" hidden data-i18n-title="bot.bareHelp" title="不含 MEMORY.md。用來試 Soul、Agent、Position 與 harness。">
+          <input type="checkbox" id="bare-toggle-input" role="switch" />
+          <span data-i18n="bot.bare">無痕密談</span>
+        </label>
         <button type="button" class="bare-clear" id="bare-clear" hidden data-i18n="bare.clear" data-i18n-title="bare.clearHelp" title="清掉這次無痕紀錄。Soul、Agent、Position 和一般密談不會動。">清除</button>
       </header>
       <div class="thread" id="thread"></div>
@@ -746,16 +749,20 @@
                 ? "@" + bot.handle
                 : "";
             sub.classList.toggle("bare", Boolean(state.bare));
-            if (toggle) {
-              toggle.hidden = !bot;
-              toggle.classList.toggle("on", Boolean(state.bare));
+            if (toggle) toggle.hidden = !bot;
+            const input = document.getElementById("bare-toggle-input");
+            if (input) {
+              input.checked = Boolean(bot && state.bare);
+              input.setAttribute("aria-checked", input.checked ? "true" : "false");
             }
             if (clearBtn) clearBtn.hidden = !state.bare;
             return;
           }
-          if (toggle) {
-            toggle.hidden = true;
-            toggle.classList.remove("on");
+          if (toggle) toggle.hidden = true;
+          const input = document.getElementById("bare-toggle-input");
+          if (input) {
+            input.checked = false;
+            input.setAttribute("aria-checked", "false");
           }
           if (clearBtn) clearBtn.hidden = true;
           sub.classList.remove("bare");
@@ -1124,10 +1131,13 @@
         document.getElementById("back").addEventListener("click", () => {
           showList();
         });
-        document.getElementById("bare-toggle").addEventListener("click", () => {
-          if (state.kind !== "dm" || !state.id) return;
+        document.getElementById("bare-toggle-input").addEventListener("change", (event) => {
+          if (state.kind !== "dm" || !state.id) {
+            event.target.checked = false;
+            return;
+          }
           location.hash =
-            (state.bare ? "#d/" : "#b/") + encodeURIComponent(state.id);
+            (event.target.checked ? "#b/" : "#d/") + encodeURIComponent(state.id);
         });
         document.getElementById("bare-clear").addEventListener("click", () => {
           clearBareDm().catch((err) => toast(err.message || String(err)));

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import {
   defaultWorkspace,
   gateTool,
@@ -19,10 +19,22 @@ function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "guild-harness-"));
 }
 
+const awayDirs: string[] = [];
+
 /** Not under `/tmp` — Linux CI tmpdir is `/tmp`, which workspace_write now allows. */
 function awayDir(): string {
-  return mkdtempSync(join(homedir(), "guild-harness-out-"));
+  const root = join(homedir(), ".cache");
+  mkdirSync(root, { recursive: true });
+  const dir = mkdtempSync(join(root, "guild-harness-out-"));
+  awayDirs.push(dir);
+  return dir;
 }
+
+after(() => {
+  for (const dir of awayDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("default catalog seats ship workspace_write", async () => {
   const { DEFAULT_BOTS } = await import("../src/catalog/default-bots.ts");

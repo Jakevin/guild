@@ -918,6 +918,30 @@ export function setChannelMemory(
   return { body: store.writeChannelMemory(roomId, stampMemoryUpdated(body)) };
 }
 
+export function getBotMemoryLog(store: GuildStore, botId: string) {
+  return { entries: store.listBotMemoryLog(botId) };
+}
+
+export function restoreBotMemory(store: GuildStore, botId: string, id: string) {
+  const token = String(id || "").trim();
+  if (!token) throw new StoreError(400, "memory log id is required");
+  return { body: store.restoreBotMemory(botId, token) };
+}
+
+export function getChannelMemoryLog(store: GuildStore, roomId: string) {
+  return { entries: store.listChannelMemoryLog(roomId) };
+}
+
+export function restoreChannelMemory(
+  store: GuildStore,
+  roomId: string,
+  id: string,
+) {
+  const token = String(id || "").trim();
+  if (!token) throw new StoreError(400, "memory log id is required");
+  return { body: store.restoreChannelMemory(roomId, token) };
+}
+
 export async function tidyBotMemory(
   store: GuildStore,
   botId: string,

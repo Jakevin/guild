@@ -66,6 +66,7 @@ import {
   builtinExecute,
   emitProgress,
   roundSignal,
+  unknownToolMessage,
   type ToolContext,
   type ToolOutcome,
   type ToolTrace,
@@ -492,7 +493,7 @@ function withAdvertisedTools(ctx: ToolContext): ToolContext {
     ...ctx,
     dispatch: async (name, args, rest) => {
       if (!allowed.has(name)) {
-        return { text: `unknown tool: ${name}`, isError: true };
+        return { text: unknownToolMessage(name, [...allowed]), isError: true };
       }
       if (orig) return orig(name, args, rest);
       return builtinExecute(name, args, rest);

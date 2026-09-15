@@ -26,7 +26,9 @@ import {
   openaiTools,
   parseToolArgs,
   roundSignal,
+  suggestToolName,
   takeSteers,
+  unknownToolMessage,
   TOOL_LOOP_EXHAUSTED,
   TOOL_LOOP_STALL,
   TOOL_LOOP_WRAP,
@@ -108,6 +110,17 @@ test("run refuses mkfs", async () => {
   assert.match(result.text, /refused/);
 });
 
+test("unknown tool suggests a close builtin name", async () => {
+  assert.equal(suggestToolName("Read", ["read", "write", "run"]), "read");
+  assert.equal(suggestToolName("compter", ["computer", "cronjob"]), "computer");
+  assert.equal(suggestToolName("ping", ["run", "read", "write"]), null);
+  assert.match(unknownToolMessage("Read", ["read", "write"]), /Did you mean 'read'/);
+  const gone = await executeTool("Read", {}, { sandbox: "full_access" });
+  assert.equal(gone.isError, true);
+  assert.match(gone.text, /unknown tool: Read/);
+  assert.match(gone.text, /Did you mean 'read'/);
+});
+
 test("takeSteers wraps mid-turn user text once", () => {
   const bag = ["  keep going  ", ""];
   const first = takeSteers({
@@ -126,6 +139,8 @@ test("tool prompt claims local access", () => {
   assert.match(TOOL_SYSTEM, /local computer/i);
   assert.match(TOOL_SYSTEM, /\bcomputer\b/);
   assert.match(TOOL_SYSTEM, /axset/);
+  assert.match(TOOL_SYSTEM, /look=L4/);
+  assert.match(TOOL_SYSTEM, /\bpress\b/);
   assert.match(TOOL_SYSTEM, /Never say you cannot access/);
   assert.match(TOOL_SYSTEM, /exit code/);
   assert.match(TOOL_SYSTEM, /image_gen/);

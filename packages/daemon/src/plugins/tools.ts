@@ -4,6 +4,7 @@ import { gateTool } from "../harness.ts";
 import {
   builtinExecute,
   BUILTIN_TOOL_NAMES,
+  unknownToolMessage,
   type ToolContext,
   type ToolOutcome,
 } from "../tools.ts";
@@ -72,7 +73,11 @@ export class ToolsService extends Service {
     for (const [prefix, handler] of this.prefixes) {
       if (name.startsWith(prefix)) return handler(name, args, toolCtx);
     }
-    return { text: `unknown tool: ${name}`, isError: true };
+    const known = [
+      ...this.named.keys(),
+      ...(toolCtx.mcpTools ?? []).map((item) => item.callName).filter(Boolean),
+    ];
+    return { text: unknownToolMessage(name, known), isError: true };
   }
 }
 

@@ -12,7 +12,8 @@ import ScreenCaptureKit
 ///   idle
 ///   open <name-or-path> [--cdp PORT]
 ///   ax <windowId>
-///   axset <windowId> <eN> <text>
+///   axset <windowId> <text> --expect '{"role","pos","title?","desc?","ref?"}'
+///   press <windowId> --expect '{"role","pos","title?","desc?","ref?"}'
 ///   click <windowId> <x> <y> [--focus]
 ///   type <windowId> <text> [--focus]
 ///   hud [ms]
@@ -383,6 +384,10 @@ private func axChildren(_ el: AXUIElement) -> [AXUIElement] {
 private struct AxRow {
   let el: AXUIElement
   let line: String
+  let role: String
+  let title: String
+  let desc: String
+  let pos: String
 }
 
 private func collectAx(_ w: Win) -> [AxRow] {
@@ -401,9 +406,12 @@ private func collectAx(_ w: Win) -> [AxRow] {
       let n = rows.count + 1
       let focused = axBool(el, kAXFocusedAttribute as String) ? 1 : 0
       let enabled = axBool(el, kAXEnabledAttribute as String) ? 1 : 0
+      let pos = axPoint(el, originX: w.x, originY: w.y)
       let line =
-        "e\(n) role=\(role) title=\(title) value=\(value) desc=\(desc) pos=\(axPoint(el, originX: w.x, originY: w.y)) size=\(axSize(el)) focused=\(focused) enabled=\(enabled)"
-      rows.append(AxRow(el: el, line: line))
+        "e\(n) role=\(role) title=\(title) value=\(value) desc=\(desc) pos=\(pos) size=\(axSize(el)) focused=\(focused) enabled=\(enabled)"
+      rows.append(
+        AxRow(el: el, line: line, role: role, title: title, desc: desc, pos: pos)
+      )
     }
     if rows.count >= axCap || depth >= axDepth { return }
     for child in axChildren(el) {
@@ -418,35 +426,115 @@ private func collectAx(_ w: Win) -> [AxRow] {
 private func dumpAx(_ w: Win) {
   let rows = collectAx(w)
   if rows.isEmpty {
-    print("ax none pid=\(w.pid)")
+    print("ax none pid=\(w.pid) window=\(w.id)")
     return
   }
-  print("ax pid=\(w.pid) n=\(rows.count)")
+  print("ax pid=\(w.pid) window=\(w.id) n=\(rows.count)")
   rows.forEach { print($0.line) }
 }
 
-private func axSet(_ w: Win, ref: String, text: String) {
+private struct Expect {
+  let role: String
+  let pos: String
+  let title: String
+  let desc: String
+  let ref: String
+}
+
+private func flagValue(_ args: [String], _ name: String) -> String? {
+  guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
+  return args[i + 1]
+}
+
+private func parsePos(_ s: String) -> (Double, Double)? {
+  let parts = s.split(separator: ",")
+  guard parts.count == 2, let x = Double(parts[0]), let y = Double(parts[1]) else { return nil }
+  return (x, y)
+}
+
+private func posClose(_ a: String, _ b: String) -> Bool {
+  guard let p = parsePos(a), let q = parsePos(b) else { return a == b }
+  return abs(p.0 - q.0) <= 8 && abs(p.1 - q.1) <= 8
+}
+
+private func parseExpect(_ raw: String) -> Expect {
+  guard let data = raw.data(using: .utf8),
+    let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  else {
+    die("needs --expect json", 1)
+  }
+  let role = obj["role"] as? String ?? ""
+  let pos = obj["pos"] as? String ?? ""
+  let title = obj["title"] as? String ?? ""
+  if role.isEmpty { die("needs --expect role", 1) }
+  if pos.isEmpty && title.isEmpty { die("needs --expect pos or title", 1) }
+  return Expect(
+    role: role,
+    pos: pos,
+    title: title,
+    desc: obj["desc"] as? String ?? "",
+    ref: obj["ref"] as? String ?? "",
+  )
+}
+
+private func findByExpect(_ rows: [AxRow], _ expect: Expect) -> AxRow {
+  let keyed = parsePos(expect.pos) != nil
+  let hits = rows.filter { row in
+    if row.role != expect.role { return false }
+    if keyed {
+      if !posClose(row.pos, expect.pos) { return false }
+    } else if row.title != expect.title {
+      return false
+    }
+    if !expect.title.isEmpty && row.title != expect.title { return false }
+    if !expect.desc.isEmpty && row.desc != expect.desc { return false }
+    return true
+  }
+  let label = expect.ref.isEmpty ? "e?" : expect.ref
+  if hits.count != 1 {
+    die(
+      "fingerprint miss \(label) role=\(expect.role) title=\(expect.title) pos=\(expect.pos)",
+      1,
+    )
+  }
+  return hits[0]
+}
+
+private func axSet(_ w: Win, text: String, expect: Expect) {
   gateWrite(w)
   let rows = collectAx(w)
-  let token = ref.trimmingCharacters(in: CharacterSet.alphanumerics.inverted).lowercased()
-  let idx: Int
-  if token.hasPrefix("e"), let n = Int(token.dropFirst()) {
-    idx = n - 1
-  } else if let n = Int(token) {
-    idx = n - 1
-  } else {
-    die("axset needs ref like e1", 1)
-  }
-  guard idx >= 0, idx < rows.count else { die("ax ref not found", 1) }
+  let hit = findByExpect(rows, expect)
   let err = AXUIElementSetAttributeValue(
-    rows[idx].el,
+    hit.el,
     kAXValueAttribute as CFString,
     text as CFTypeRef,
   )
   if err != .success {
     die("axset failed (\(err.rawValue))", 1)
   }
-  print("axset \(ref) chars=\(text.count)")
+  let got = axString(hit.el, kAXValueAttribute as String)
+  let want = text.replacingOccurrences(of: "\n", with: " ")
+  let outcome = got == want ? "worked" : "didnt"
+  let ref = expect.ref.isEmpty ? "e?" : expect.ref
+  print("axset \(ref) outcome=\(outcome) chars=\(text.count) value=\(got)")
+}
+
+private func axPress(_ w: Win, expect: Expect) {
+  gateWrite(w)
+  let rows = collectAx(w)
+  let hit = findByExpect(rows, expect)
+  var names: CFArray?
+  let listed = AXUIElementCopyActionNames(hit.el, &names)
+  let actions = (listed == .success ? names as? [String] : nil) ?? []
+  if !actions.contains(kAXPressAction as String) {
+    die("press failed (not actionable)", 1)
+  }
+  let err = AXUIElementPerformAction(hit.el, kAXPressAction as CFString)
+  if err != .success {
+    die("press failed (\(err.rawValue))", 1)
+  }
+  let ref = expect.ref.isEmpty ? "e?" : expect.ref
+  print("pressed \(ref) outcome=unknown")
 }
 
 private func resolveApp(_ name: String) -> URL? {
@@ -540,7 +628,8 @@ private func usage() -> Never {
     guildmac idle
     guildmac open <name-or-path> [--cdp PORT]
     guildmac ax <id>
-    guildmac axset <id> <eN> <text>
+    guildmac axset <id> <text> --expect JSON
+    guildmac press <id> --expect JSON
     guildmac click <id> <x> <y> [--focus]
     guildmac type <id> <text> [--focus]
     guildmac hud [ms]
@@ -593,9 +682,15 @@ case "ax":
   dumpAx(w)
 
 case "axset":
-  guard args.count >= 4, let w = findWin(args[1]) else { die("axset needs id eN text", 1) }
-  let text = args[3...].joined(separator: " ")
-  axSet(w, ref: args[2], text: text)
+  guard args.count >= 2, let w = findWin(args[1]) else { die("axset needs id", 1) }
+  guard let raw = flagValue(args, "--expect") else { die("axset needs --expect json", 1) }
+  let text = args.count >= 3 && args[2] != "--expect" ? args[2] : ""
+  axSet(w, text: text, expect: parseExpect(raw))
+
+case "press":
+  guard args.count >= 2, let w = findWin(args[1]) else { die("press needs id", 1) }
+  guard let raw = flagValue(args, "--expect") else { die("press needs --expect json", 1) }
+  axPress(w, expect: parseExpect(raw))
 
 case "click":
   guard args.count >= 4, let w = findWin(args[1]), let x = Double(args[2]), let y = Double(args[3])

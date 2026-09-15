@@ -146,6 +146,29 @@ test("bot and channel MEMORY.md round-trip; DMs have no channel memory", async (
     assert.match(String(savedBot.body.body), /RD owns reviews/);
     assert.match(String(savedBot.body.body), /^Updated: \d{4}-\d{2}-\d{2}T/);
 
+    const firstLog = await json(origin, `/bots/${rd.id}/memory.md/log`);
+    assert.equal(firstLog.status, 200);
+    assert.equal((firstLog.body.entries as unknown[]).length, 0);
+
+    const savedBot2 = await json(origin, `/bots/${rd.id}/memory.md`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "# Bot memory\n- RD owns reviews\n- prefers pnpm" }),
+    });
+    assert.equal(savedBot2.status, 200);
+    const botLog = await json(origin, `/bots/${rd.id}/memory.md/log`);
+    assert.equal(botLog.status, 200);
+    const botEntries = botLog.body.entries as { id: string }[];
+    assert.equal(botEntries.length, 1);
+    const restored = await json(origin, `/bots/${rd.id}/memory.md/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: botEntries[0].id }),
+    });
+    assert.equal(restored.status, 200);
+    assert.match(String(restored.body.body), /RD owns reviews/);
+    assert.doesNotMatch(String(restored.body.body), /prefers pnpm/);
+
     const created = await json(origin, "/channels", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -338,6 +361,11 @@ test("chat page edits Channel MEMORY.md and bot MEMORY.md", () => {
   assert.match(html, /channel-memory-ask/);
   assert.match(html, /bot-memory-ask/);
   assert.match(html, /memory\.md\/tidy/);
+  assert.match(html, /memory\.md\/log/);
+  assert.match(html, /memory\.md\/restore/);
   assert.match(html, /runMemoryTidy/);
+  assert.match(html, /fillMemoryLog/);
   assert.match(html, /memory\.tidySaved/);
+  assert.match(html, /bot-memory-restore/);
+  assert.match(html, /channel-memory-restore/);
 });

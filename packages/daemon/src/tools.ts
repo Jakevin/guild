@@ -237,19 +237,30 @@ const BASE_TOOLS: Tool[] = [
   {
     name: "computer",
     description:
-      "Drive macOS GUI apps that are not a web browser. First use asks the human to allow; allow is remembered in GUILD_HOME. Chrome/Safari/Edge/Arc: use browser instead. Do not click pay, delete, publish, TCC, or bank UI. Actions: windows, shot, see (shot+AX), idle, open, op, ax, axset, hud, cdp. op needs window + x + y in window-local points; optional text types after click. Default writes post to the target pid without stealing focus; focus=true borrows the front app and flashes a HUD. ax dumps the accessibility tree (e1…); axset writes a value by ref. Writes refuse if the window is on another Space or the user is at the keyboard.",
+      "Drive macOS GUI apps that are not a web browser. First use asks the human to allow; allow is remembered in GUILD_HOME. Chrome/Safari/Edge/Arc: use browser instead. Do not click pay, delete, publish, TCC, or bank UI. Actions: windows, shot, see (shot+folded AX), idle, open, op, ax, axset, press, hud, cdp. ax/see return look=L4 and a folded tree; search with query+look or expand with ref+look (no recapture). axset/press need that look and eN — stale eN fails. op needs window + x + y in window-local points; optional text types after click. Default writes post to the target pid without stealing focus; focus=true borrows the front app and flashes a HUD. Writes refuse if the window is on another Space or the user is at the keyboard.",
     parameters: Type.Object({
       action: Type.String({
-        description: "windows | shot | see | idle | open | op | ax | axset | hud | cdp",
+        description: "windows | shot | see | idle | open | op | ax | axset | press | hud | cdp",
       }),
-      query: Type.Optional(Type.String({ description: "Filter for windows, or app name for open" })),
+      query: Type.Optional(
+        Type.String({
+          description: "Filter for windows, app name for open, or AX search when action=ax with look",
+        }),
+      ),
+      look: Type.Optional(
+        Type.String({ description: "Look id from ax/see (L4). Required for axset/press." }),
+      ),
       window: Type.Optional(
         Type.String({ description: "Window id or owner substring" }),
       ),
       app: Type.Optional(Type.String({ description: "App name or .app path for open" })),
       x: Type.Optional(Type.Number({ description: "Window-local x for op" })),
       y: Type.Optional(Type.Number({ description: "Window-local y for op" })),
-      text: Type.Optional(Type.String({ description: "Text to type after op, or cdp insert" })),
+      text: Type.Optional(
+        Type.String({
+          description: "axset value, text to type after op, or cdp insert. Ignored by press.",
+        }),
+      ),
       port: Type.Optional(
         Type.Number({ description: "CDP port for open --cdp or action=cdp" }),
       ),
@@ -618,6 +629,63 @@ export const BUILTIN_TOOL_NAMES = [
   "cronjob",
 ] as const;
 
+function alnumKey(name: string): string {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i - 1;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cur = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+export function suggestToolName(name: string, known: string[]): string | null {
+  const raw = String(name || "").trim();
+  if (!raw) return null;
+  const key = alnumKey(raw);
+  if (!key) return null;
+  const unique = [...new Set(known.map((item) => String(item || "").trim()).filter(Boolean))];
+  const exact = unique.filter((item) => alnumKey(item) === key && item !== raw);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const maxD = key.length >= 8 ? 2 : key.length >= 4 ? 1 : 0;
+  if (!maxD) return null;
+  const fuzzy = unique.filter((item) => {
+    if (item === raw) return false;
+    return editDistance(key, alnumKey(item)) <= maxD;
+  });
+  return fuzzy.length === 1 ? fuzzy[0] : null;
+}
+
+export function knownToolNames(ctx: ToolContext = {}): string[] {
+  const names: string[] = [...BUILTIN_TOOL_NAMES];
+  for (const tool of ctx.mcpTools ?? []) {
+    if (tool.callName) names.push(tool.callName);
+  }
+  return names;
+}
+
+export function unknownToolMessage(name: string, known: string[] = []): string {
+  const hint = suggestToolName(name, known);
+  return hint
+    ? `unknown tool: ${name}. Did you mean '${hint}'? Tool names must match exactly.`
+    : `unknown tool: ${name}`;
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
@@ -732,7 +800,7 @@ export async function builtinExecute(
       if (!ctx.dataDir) return { text: "mcp needs a dataDir", isError: true };
       return callMcpTool(ctx.dataDir, name, args, ctx.mcpTools ?? []);
     }
-    return { text: `unknown tool: ${name}`, isError: true };
+    return { text: unknownToolMessage(name, knownToolNames(ctx)), isError: true };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
     return {
@@ -1149,7 +1217,7 @@ When the question is about this computer, call tools first, then answer with evi
 To generate an image, call image_gen with a prompt. Do not search the disk or load skills looking for Imagine. After it returns, include the markdown image in your reply.
 To speak text aloud (example sentences, 聽力, a short line), call tts with text and an optional voice (ja/nanami, keita, zh, zh-cn, en). After it returns, include the markdown audio link in your reply.
 To use a real website in a browser, call browser with action=open and a url, then snapshot/click/type using refs like @e1. Default is a Hermes-shaped snapshot of the user's last_used Chrome profile (never the live profile). Set GUILD_BROWSER_REAL_PROFILE=0 for a throwaway empty profile.
-To drive a macOS GUI app that is not a browser, call computer (windows / shot / see / idle / open / op / ax / axset). First use asks the human to allow; once allowed it is remembered. Default op posts to the app pid without stealing focus; set focus=true only if that does nothing (HUD flashes). see = screenshot + AX tree. axset writes by eN from ax/see. Do not op Chrome/Safari/Edge/Arc — those stay on browser. Do not click pay, delete, publish, TCC, or bank UI.
+To drive a macOS GUI app that is not a browser, call computer (windows / shot / see / idle / open / op / ax / axset / press). First use asks the human to allow; once allowed it is remembered. Default op posts to the app pid without stealing focus; set focus=true only if that does nothing (HUD flashes). ax/see return look=L4 and a folded AX tree — search with query+look, expand with ref+look. axset/press need that look and eN; stale refs fail. Do not op Chrome/Safari/Edge/Arc — those stay on browser. Do not click pay, delete, publish, TCC, or bank UI.
 You stay coordinator. Spawn is the specialist, not a last resort (Devin run_subagent / Pi subagent / Codex spawn_agent). Call spawn for a survey (explorer / luna-explore), a critique (reviewer), or a bounded patch (worker / luna-general) instead of stuffing that work into this turn with list/read/run. Do not spawn for one known file or a one-line change. Independent surveys: spawn with background=true, keep working, then read_spawn {agent_id, block:true} before the final reply. Or several spawn calls / tasks: [{title, task, profile}] this round. Task must be self-contained (child has a fresh context). Do not let a child commit, push, or decide architecture. A read_only seat can still spawn; the child stays read_only. Subagents cannot spawn children.
 Independent tool calls in one round also run in parallel — fire several reads/searches together.
 Check the [exit code: N] marker on every run result; investigate failures before moving on. Prefer the workdir argument over cd.

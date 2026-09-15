@@ -6,7 +6,18 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { generatedDir, generatedPublicPath } from "./image-gen.ts";
 import { computerAllowed, computerDeniedThisTurn } from "./computer-grant.ts";
+import {
+  expectJson,
+  getLook,
+  lookWindow,
+  rememberLook,
+  renderLook,
+  windowMatchesLook,
+  type ComputerLook,
+} from "./computer-ax.ts";
 import type { ToolContext, ToolOutcome } from "./tools.ts";
+
+export { resetComputerLooks } from "./computer-ax.ts";
 
 const execFileAsync = promisify(execFile);
 const SOURCE = fileURLToPath(
@@ -127,6 +138,69 @@ function windowToken(args: Record<string, unknown>): string {
   if (typeof args.id === "string" && args.id.trim()) return args.id.trim();
   if (typeof args.id === "number" && Number.isFinite(args.id)) return String(args.id);
   return "";
+}
+
+function lookToken(args: Record<string, unknown>): string {
+  return typeof args.look === "string" ? args.look.trim() : "";
+}
+
+function refToken(args: Record<string, unknown>): string {
+  return String(args.ref || "").replace(/^@/, "").trim();
+}
+
+function loadLook(
+  dataDir: string,
+  args: Record<string, unknown>,
+  verb: string,
+): { look: ComputerLook } | ToolOutcome {
+  const id = lookToken(args);
+  if (!id) {
+    return { text: `${verb} needs look from the last ax/see`, isError: true };
+  }
+  const look = getLook(dataDir, id);
+  if (!look) {
+    return { text: `look ${id} gone. Call ax again.`, isError: true };
+  }
+  const win = windowToken(args);
+  if (win && !windowMatchesLook(win, look)) {
+    return {
+      text: `look ${id} is window ${look.windowId || look.token}, not ${win}. Call ax again.`,
+      isError: true,
+    };
+  }
+  return { look };
+}
+
+function rowFromLook(look: ComputerLook, ref: string): ToolOutcome | { row: ComputerLook["rows"][0] } {
+  if (!/^e\d+$/.test(ref)) {
+    return { text: "computer needs ref like e1", isError: true };
+  }
+  const row = look.rows.find((item) => item.ref === ref);
+  if (!row) return { text: `ax ref not found`, isError: true };
+  return { row };
+}
+
+function captureLook(
+  dataDir: string,
+  token: string,
+  dump: string,
+  extra = "",
+): { look: ComputerLook | null; outcome: ToolOutcome } {
+  const look = rememberLook(dataDir, { token, dump });
+  if (!look) {
+    return {
+      look: null,
+      outcome: {
+        text: extra ? `${dump}\n${extra}` : dump || "ax parse failed",
+        isError: false,
+      },
+    };
+  }
+  const folded = renderLook(look);
+  return {
+    look,
+    outcome: { text: extra ? `${folded}\n${extra}` : folded, isError: false },
+  };
 }
 
 export function ownerFromWindowLine(line: string): string {
@@ -332,7 +406,7 @@ export async function runComputer(
   const action = asAction(args);
   if (!action) {
     return {
-      text: "computer needs action: windows | shot | see | idle | open | op | ax | axset | hud | cdp",
+      text: "computer needs action: windows | shot | see | idle | open | op | ax | axset | press | hud | cdp",
       isError: true,
     };
   }
@@ -374,28 +448,63 @@ export async function runComputer(
     const abs = join(generatedDir(dataDir), name);
     const ran = await runMac(dataDir, [action, win, abs], ctx.signal);
     if (ran.code !== 0) return { text: ran.text, isError: true };
-    return {
-      text: `${ran.text}\n![window](${generatedPublicPath(name)})`,
-      isError: false,
-    };
+    const image = `![window](${generatedPublicPath(name)})`;
+    if (action === "see") {
+      return captureLook(dataDir, win, ran.text, image).outcome;
+    }
+    return { text: `${ran.text}\n${image}`, isError: false };
   }
   if (action === "ax") {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    const ref = refToken(args);
+    const existing = lookToken(args);
+    if (existing) {
+      const loaded = loadLook(dataDir, args, "ax");
+      if ("isError" in loaded) return loaded;
+      return {
+        text: renderLook(loaded.look, { query, ref }),
+        isError: false,
+      };
+    }
     const win = windowToken(args);
     if (!win) return { text: "computer ax needs window", isError: true };
     const ran = await runMac(dataDir, ["ax", win], ctx.signal);
-    return { text: ran.text, isError: ran.code !== 0 };
+    if (ran.code !== 0) return { text: ran.text, isError: true };
+    const captured = captureLook(dataDir, win, ran.text);
+    if (!captured.look || (!query && !ref)) return captured.outcome;
+    return { text: renderLook(captured.look, { query, ref }), isError: false };
   }
-  if (action === "axset") {
-    const win = windowToken(args);
-    const ref = String(args.ref || "").replace(/^@/, "").trim();
-    const text = typeof args.text === "string" ? args.text : "";
-    if (!win || !/^e\d+$/.test(ref)) {
-      return { text: "computer axset needs window and ref like e1", isError: true };
-    }
+  if (action === "axset" || action === "press") {
+    const loaded = loadLook(dataDir, args, action);
+    if ("isError" in loaded) return loaded;
+    const ref = refToken(args);
+    const found = rowFromLook(loaded.look, ref);
+    if ("isError" in found) return found;
+    const win = lookWindow(loaded.look, windowToken(args));
     const blocked = await refuseBrowserWindow(dataDir, win, ctx.signal);
     if (blocked) return blocked;
-    const ran = await runMac(dataDir, ["axset", win, ref, text], ctx.signal);
-    return { text: ran.text, isError: ran.code !== 0 };
+    const expect = expectJson(found.row);
+    const argv =
+      action === "press"
+        ? ["press", win, "--expect", expect]
+        : ["axset", win, typeof args.text === "string" ? args.text : "", "--expect", expect];
+    const ran = await runMac(dataDir, argv, ctx.signal);
+    if (ran.code !== 0) {
+      const miss = /fingerprint miss (\S+) role=(\S+) title=(.*) pos=(\S+)/.exec(
+        ran.text,
+      );
+      if (miss) {
+        return {
+          text: `${miss[1]} is not ${miss[2]} title=${miss[3].trim()} at ${miss[4]}. Call ax again.`,
+          isError: true,
+        };
+      }
+      return { text: ran.text, isError: true };
+    }
+    const tagged = /look=/.test(ran.text)
+      ? ran.text
+      : `${ran.text} look=${loaded.look.id}`.trim();
+    return { text: tagged, isError: false };
   }
   if (action === "hud") {
     const ms = Number(args.ms);

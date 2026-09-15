@@ -17,8 +17,19 @@ import {
   isBrowserOpenTarget,
   isBrowserOwnerName,
   ownerFromWindowLine,
+  resetComputerLooks,
   runComputer,
 } from "../src/computer.ts";
+import {
+  foldRows,
+  getLook,
+  matchFingerprint,
+  parseAxDump,
+  parseAxLine,
+  rememberLook,
+  renderLook,
+  searchRows,
+} from "../src/computer-ax.ts";
 import { gateTool } from "../src/harness.ts";
 import { executeTool, guildTools, TOOL_SYSTEM } from "../src/tools.ts";
 import { writeModelsFile } from "../src/llm.ts";
@@ -200,6 +211,8 @@ test("computer catalog names ax, see, and pid-default writes", () => {
   assert.ok(tool);
   assert.match(tool.description, /\bax\b/);
   assert.match(tool.description, /\bsee\b/);
+  assert.match(tool.description, /\bpress\b/);
+  assert.match(tool.description, /look=L4/);
   assert.match(tool.description, /without stealing focus/);
 });
 
@@ -240,5 +253,92 @@ test("runComputer hud and ax after allow on macOS", async (t) => {
     return;
   }
   assert.equal(ax.isError, false);
-  assert.match(ax.text, /^ax /);
+  assert.match(ax.text, /^ax look=L\d+/);
+  const look = /look=(L\d+)/.exec(ax.text)?.[1];
+  assert.ok(look);
+  const again = await runComputer(
+    { action: "ax", look, query: "e" },
+    { dataDir, askComputer: async () => true },
+  );
+  assert.equal(again.isError, false);
+  assert.match(again.text, new RegExp(`look=${look}`));
+  const missing = await runComputer(
+    { action: "axset", ref: "e1", text: "x" },
+    { dataDir, askComputer: async () => true },
+  );
+  assert.equal(missing.isError, true);
+  assert.match(missing.text, /needs look/);
+});
+
+const SAMPLE_AX = `ax pid=312 window=88 n=5
+e1 role=AXWindow title=TextEdit value= desc= pos=0,0 size=800x600 focused=0 enabled=1
+e2 role=AXStaticText title= value=Hello desc= pos=10,10 size=40x12 focused=0 enabled=1
+e3 role=AXButton title=Save value= desc= pos=12,40 size=72x22 focused=0 enabled=1
+e4 role=AXTextField title= value= desc= pos=20,80 size=200x22 focused=1 enabled=1
+e5 role=AXStaticText title= value=Footer desc= pos=0,400 size=800x12 focused=0 enabled=1`;
+
+test("ax looks fold, search, and expire", () => {
+  const dir = tempHome();
+  resetComputerLooks(dir);
+  const parsed = parseAxDump(SAMPLE_AX);
+  assert.ok(parsed);
+  assert.equal(parsed.windowId, "88");
+  assert.equal(parsed.rows.length, 5);
+  const folded = foldRows(parsed.rows);
+  assert.ok(folded.some((row) => row.ref === "e1"));
+  assert.ok(folded.some((row) => row.ref === "e3"));
+  assert.ok(folded.some((row) => row.ref === "e4"));
+  assert.ok(!folded.some((row) => row.ref === "e2"));
+  const hits = searchRows(parsed.rows, "Save");
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.ref, "e3");
+  const look = rememberLook(dir, { token: "TextEdit", dump: SAMPLE_AX });
+  assert.ok(look);
+  const view = renderLook(look);
+  assert.match(view, /look=L1/);
+  assert.match(view, /hidden=2/);
+  assert.match(renderLook(look, { query: "Save" }), /hits=1/);
+  assert.match(renderLook(look, { ref: "e3" }), /AXButton title=Save/);
+  const matched = matchFingerprint(parsed.rows, {
+    role: "AXButton",
+    pos: "14,40",
+    title: "Save",
+  });
+  assert.equal(matched.length, 1);
+  assert.equal(getLook(dir, "L9"), undefined);
+  const noGeom = parseAxLine(
+    "e9 role=AXButton title=OK value= desc= pos= size= focused=0 enabled=1",
+  );
+  assert.ok(noGeom);
+  assert.equal(noGeom.pos, "");
+  assert.equal(noGeom.size, "");
+  const byTitle = matchFingerprint([noGeom], {
+    role: "AXButton",
+    pos: "",
+    title: "OK",
+  });
+  assert.equal(byTitle.length, 1);
+  assert.equal(
+    matchFingerprint([noGeom], { role: "AXButton", pos: "" }).length,
+    0,
+  );
+});
+
+test("runComputer axset without look fails closed after allow", async (t) => {
+  if (process.platform !== "darwin") {
+    t.skip("guildmac is darwin");
+    return;
+  }
+  const dataDir = tempHome();
+  persistComputerAllow(dataDir);
+  const result = await runComputer(
+    { action: "press", ref: "e3" },
+    { dataDir, askComputer: async () => true },
+  );
+  if (result.isError && /swiftc|Command Line Tools/.test(result.text)) {
+    t.skip(result.text);
+    return;
+  }
+  assert.equal(result.isError, true);
+  assert.match(result.text, /needs look from the last ax\/see/);
 });

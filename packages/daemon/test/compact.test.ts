@@ -11,6 +11,9 @@ import {
   toModelMessage,
   trimSendMessages,
 } from "../src/compact.ts";
+import { compactIdleRooms, resetIdleCompactLockForTests } from "../src/idle-compact.ts";
+import { GuildStore } from "../src/store.ts";
+import { peekRoomUsage, resetRoomUsageForTests } from "../src/usage-anchor.ts";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "guild-compact-"));
@@ -252,6 +255,154 @@ test("toModelMessage keeps this seat as assistant and other bots as hall lines",
   );
   assert.equal(other.role, "user");
   assert.match(other.content, /^\[bot-design\] /);
+});
+
+function fillFat(store: GuildStore, roomId: string, botId: string): void {
+  for (let i = 0; i < 16; i += 1) {
+    store.appendMessage(
+      roomId,
+      i % 2 === 0 ? "you" : botId,
+      `${"y".repeat(1_200)} ${i}`,
+    );
+  }
+}
+
+test("idle compact writes a checkpoint for a fat idle room and skips live turns", async () => {
+  resetRoomUsageForTests();
+  resetIdleCompactLockForTests();
+  const dataDir = tempDir();
+  const store = new GuildStore(dataDir);
+  try {
+    const general = store.listChannels().find((room) => room.id === "channel-general");
+    assert.ok(general);
+    const rd = store.listBots().find((bot) => bot.handle === "rd");
+    assert.ok(rd);
+    fillFat(store, general.id, rd.id);
+    const fresh = await compactIdleRooms(store, {}, {
+      idleMs: 60 * 60 * 1000,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 20,
+    });
+    assert.equal(fresh.find((row) => row.roomId === general.id)?.skipped, "fresh");
+    assert.equal(store.readCompact(general.id), null);
+
+    const idle = await compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 20,
+    });
+    assert.equal(idle.find((row) => row.roomId === general.id)?.compacted, true);
+    assert.match(store.readCompact(general.id)?.summary || "", /compacted/i);
+    assert.notEqual(peekRoomUsage(general.id)?.lastPromptTokens, -1);
+
+    const livePack = await packHistory({
+      system: "idle compact",
+      history: store.listMessages(general.id).map((item) => ({
+        id: item.id,
+        author: item.author,
+        body: item.body,
+      })),
+      userMessage: "now",
+      dataDir,
+      checkpoint: store.readCompact(general.id),
+      tokenLimit: 1_500,
+      summarize: "local",
+      roomId: general.id,
+    });
+    assert.equal(livePack.compacted, true);
+    assert.match(livePack.messages[0].content, /REFERENCE ONLY/);
+
+    store.setLiveTurn(general.id, {
+      botId: rd.id,
+      thinking: "",
+      steps: [],
+    });
+    const live = await compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 20,
+    });
+    assert.equal(live.find((row) => row.roomId === general.id)?.skipped, "live");
+  } finally {
+    store.close();
+    resetIdleCompactLockForTests();
+    resetRoomUsageForTests();
+  }
+});
+
+test("idle compact reuse does not block the next fat room", async () => {
+  resetRoomUsageForTests();
+  resetIdleCompactLockForTests();
+  const dataDir = tempDir();
+  const store = new GuildStore(dataDir);
+  try {
+    const general = store.listChannels().find((room) => room.id === "channel-general");
+    assert.ok(general);
+    const rd = store.listBots().find((bot) => bot.handle === "rd");
+    assert.ok(rd);
+    const extra = store.createChannel("fat-two");
+    fillFat(store, general.id, rd.id);
+    fillFat(store, extra.id, rd.id);
+
+    const first = await compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 1,
+    });
+    assert.equal(first.filter((row) => row.compacted).length, 1);
+    const done = first.find((row) => row.compacted)?.roomId;
+    assert.ok(done);
+
+    const second = await compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 1,
+    });
+    assert.equal(second.find((row) => row.roomId === done)?.skipped, "current");
+    const other = done === general.id ? extra.id : general.id;
+    assert.equal(second.find((row) => row.roomId === other)?.compacted, true);
+  } finally {
+    store.close();
+    resetIdleCompactLockForTests();
+    resetRoomUsageForTests();
+  }
+});
+
+test("idle compact skips a second overlapping call", async () => {
+  resetRoomUsageForTests();
+  resetIdleCompactLockForTests();
+  const dataDir = tempDir();
+  const store = new GuildStore(dataDir);
+  try {
+    const general = store.listChannels().find((room) => room.id === "channel-general");
+    assert.ok(general);
+    const rd = store.listBots().find((bot) => bot.handle === "rd");
+    assert.ok(rd);
+    fillFat(store, general.id, rd.id);
+    const first = compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 1,
+    });
+    const overlap = await compactIdleRooms(store, {}, {
+      idleMs: 0,
+      tokenLimit: 1_500,
+      summarize: "local",
+      limit: 1,
+    });
+    assert.deepEqual(overlap, []);
+    assert.equal((await first).find((row) => row.roomId === general.id)?.compacted, true);
+  } finally {
+    store.close();
+    resetIdleCompactLockForTests();
+    resetRoomUsageForTests();
+  }
 });
 
 test("a matching checkpoint is reused instead of summarizing again", () => {

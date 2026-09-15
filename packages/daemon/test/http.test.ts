@@ -736,6 +736,11 @@ test("home is chat and studio is the roster", () => {
   assert.match(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n\}/);
   assert.match(chatCss, /\.bot-card-wide/);
   assert.match(chatCss, /\.pane-head \.meta\.bare/);
+  assert.match(chatCss, /\.bare-switch/);
+  assert.match(
+    chatCss,
+    /\.bare-switch input\[type="checkbox"\]:checked \{ background: #34c759/,
+  );
   assert.match(chatCss, /\.bot-card-picker/);
   assert.doesNotMatch(chatCss, /\.bot-card-actions \.bot-card-btn:last-child/);
   assert.doesNotMatch(chatCss, /button\.avatar \{\n  border: 0;\n  padding: 0;\n  cursor: pointer;\n  font: inherit;/);
@@ -759,6 +764,10 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /bot-card-actions/);
   assert.match(home, /id="bot-card-model"/);
   assert.match(home, /id="bot-card-bare"/);
+  assert.match(home, /id="bare-toggle"/);
+  assert.match(home, /id="bare-toggle-input"/);
+  assert.match(home, /role="switch"/);
+  assert.match(home, /id="bot-card-bare"[\s\S]*id="bot-card-dm"/);
   assert.match(home, /id="bare-clear"/);
   assert.match(home, /function clearBareDm/);
   assert.match(home, /startsWith\("b\/"\)/);
@@ -1112,6 +1121,9 @@ test("workspace seeds #general, invites a bot, and DMs that bot", async () => {
     assert.match(html, /applyChatModel\(ref, botId\)/);
     assert.match(html, /id="bot-card-model"/);
     assert.match(html, /id="bot-card-bare"/);
+    assert.match(html, /id="bare-toggle"/);
+    assert.match(html, /id="bare-toggle-input"/);
+    assert.match(html, /setBareToggleVisible/);
     assert.match(html, /startsWith\("b\/"\)/);
     assert.match(html, /function dmApiId/);
     assert.match(html, /byUpdatedAtDesc/);
