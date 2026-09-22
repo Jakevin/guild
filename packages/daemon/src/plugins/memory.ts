@@ -17,6 +17,7 @@ export class MemoryService extends Service {
           botId: turn.botId,
           userMessage: turn.userText,
           reply: turn.reply,
+          parts: turn.parts,
           env,
           prefer,
         }).catch(() => {});
@@ -34,6 +35,7 @@ export class MemoryService extends Service {
               body: turn.reply,
             },
           ],
+          parts: turn.parts,
           env,
           prefer,
         }).catch(() => {});

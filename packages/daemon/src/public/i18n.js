@@ -403,7 +403,7 @@ var I18N_ROWS = [
   ["settings.provider", "供應商", "Provider"],
   ["settings.apply", "套用", "Apply"],
   ["settings.aux", "輔助模型", "Auxiliary models"],
-  ["settings.auxHint", "只有 Vision、Web extract、SubAgent 可以另選模型。其餘用途一律跟主模型。", "Only Vision, web extract, and SubAgent can use a different model. Everything else follows the default."],
+  ["settings.auxHint", "只有 Vision、Web extract、SubAgent、Classifier 可以另選模型。其餘用途一律跟主模型。", "Only Vision, web extract, SubAgent, and Classifier can use a different model. Everything else follows the default."],
   ["settings.auxReset", "全部改回主模型", "Reset all to default"],
   ["settings.useMain", "改回跟主模型", "Follow default"],
   ["settings.change", "更改", "Change"],

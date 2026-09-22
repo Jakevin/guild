@@ -1,6 +1,65 @@
 import type { ChatPart } from "@guild/protocol";
 import type { ToolTrace } from "./tools.ts";
 
+const DETAIL_CAP = 400;
+const WRITE_BODY_CAP = 500;
+
+function argText(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function oneLine(text: string, cap = DETAIL_CAP): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= cap) return flat;
+  return `${flat.slice(0, cap - 1)}…`;
+}
+
+export function toolArgDetail(
+  name: string,
+  args: Record<string, unknown> | undefined,
+  opts?: { writeBody?: boolean },
+): string {
+  const rec = args || {};
+  if (name === "browser") {
+    return oneLine(
+      [argText(rec, "action"), argText(rec, "url") || argText(rec, "ref"), argText(rec, "text")]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+  if (name === "computer") {
+    return oneLine(
+      [
+        argText(rec, "action"),
+        argText(rec, "app") || argText(rec, "query") || argText(rec, "window") || argText(rec, "ref"),
+        argText(rec, "text"),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+  if (name === "cronjob") {
+    const head = [argText(rec, "action"), argText(rec, "name") || argText(rec, "schedule")]
+      .filter(Boolean)
+      .join(" ");
+    const prompt = argText(rec, "prompt");
+    const clip =
+      prompt.length > WRITE_BODY_CAP ? `${prompt.slice(0, WRITE_BODY_CAP)}…` : prompt;
+    return [oneLine(head, 80), clip].filter(Boolean).join(clip ? "\n" : "");
+  }
+  if (name === "write") {
+    const path = argText(rec, "path");
+    if (!opts?.writeBody) return path;
+    const content = argText(rec, "content");
+    if (!content) return path;
+    const body =
+      content.length > WRITE_BODY_CAP ? `${content.slice(0, WRITE_BODY_CAP)}…` : content;
+    return path ? `${path}\n${body}` : body;
+  }
+  return "";
+}
+
 export function stripModelDump(text: string): string {
   return String(text || "")
     .replace(/<skill_content\b[\s\S]*?<\/skill_content>/gi, "")
@@ -46,7 +105,8 @@ function traceParts(traces: ToolTrace[]): ChatPart[] {
                 )
               : trace.name === "read_spawn"
                 ? String(trace.args.agent_id || trace.args.id || "")
-              : String(trace.args.path ?? ""),
+              : toolArgDetail(trace.name, trace.args, { writeBody: true }) ||
+                String(trace.args.path ?? ""),
       output: trace.text,
       isError: trace.isError,
       ...(label ? { label } : {}),

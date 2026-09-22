@@ -35,6 +35,7 @@ declare module "cordis" {
       botId: string;
       userText: string;
       reply: string;
+      parts?: import("@guild/protocol").ChatPart[];
     }): void;
   }
 }

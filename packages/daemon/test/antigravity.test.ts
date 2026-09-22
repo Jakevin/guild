@@ -223,5 +223,5 @@ test("settings card syncs Antigravity from agy models", () => {
   assert.match(settings, /\/settings\/antigravity\/sync/);
   assert.match(settings, /kind === "antigravity"/);
   assert.match(i18n, /settings\.antigravityHint/);
-  assert.match(settings, /i18n\.js\?v=agy/);
+  assert.match(settings, /i18n\.js\?v=classifier/);
 });

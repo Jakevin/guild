@@ -111,6 +111,11 @@ export const AUX_ROLES: { id: AuxRole; name: string; hint: string }[] = [
   { id: "vision", name: "Vision", hint: "Image analysis" },
   { id: "web", name: "Web extract", hint: "Page summarization" },
   { id: "spawn", name: "SubAgent", hint: "explorer / worker / reviewer" },
+  {
+    id: "classifier",
+    name: "Classifier",
+    hint: "Typed pass/fail/route, no thinking",
+  },
 ];
 
 const CONFIGURABLE_AUX = new Set(AUX_ROLES.map((role) => role.id));
@@ -680,6 +685,8 @@ export async function llmComplete(input: {
   /** Per-turn effort when the seat did not pin reasoning. Lane only, not a new fuse. */
   laneEffort?: string;
   tools?: boolean;
+  /** Force low/minimal effort (classifier seat never thinks). */
+  fast?: boolean;
   skills?: SkillRef[];
   toolCtx?: ToolContext;
   lease?: FreebuffLeaseParts;
@@ -707,12 +714,13 @@ export async function llmComplete(input: {
   const stored = file.providers[target.providerId]?.models.find(
     (model) => model.id === target.model,
   )?.reasoning;
+  const fast = Boolean(file.fast) || Boolean(input.fast) || input.role === "classifier";
   const effort = clampEffort(
-    file.fast
+    fast
       ? "low"
       : input.prefer?.reasoning || input.laneEffort || file.reasoning,
     resolveReasoning(target.providerId, target.model, target.baseUrl, stored),
-    Boolean(file.fast),
+    fast,
   );
   if (isWebBridgeTarget(target)) {
     try {

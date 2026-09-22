@@ -1497,6 +1497,7 @@ test("models.json can add a Pi-style provider", async () => {
     assert.ok(picker.auxRoles.some((r) => r.id === "vision"));
     assert.ok(picker.auxRoles.some((r) => r.id === "web"));
     assert.ok(picker.auxRoles.some((r) => r.id === "spawn"));
+    assert.ok(picker.auxRoles.some((r) => r.id === "classifier"));
     assert.equal(
       picker.subscriptions.find((s) => s.id === "openai-codex")?.id,
       "openai-codex",

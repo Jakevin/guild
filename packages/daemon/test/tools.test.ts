@@ -162,6 +162,9 @@ test("tool prompt claims local access", () => {
 
 test("SubAgent aux role is on the models page and resolveLlm uses it", () => {
   assert.ok(AUX_ROLES.some((role) => role.id === "spawn" && role.name === "SubAgent"));
+  assert.ok(
+    AUX_ROLES.some((role) => role.id === "classifier" && role.name === "Classifier"),
+  );
   const dir = mkdtempSync(join(tmpdir(), "guild-spawn-model-"));
   const env = { XAI_API_KEY: "xai-test" };
   const providers = {
@@ -188,6 +191,13 @@ test("SubAgent aux role is on the models page and resolveLlm uses it", () => {
   assert.equal(resolveLlm(dir, env, "spawn")?.model, "grok-4.5");
   assert.equal(resolveLlm(dir, env, "generate")?.model, "grok-4.6");
   assert.equal(resolveLlm(dir, env, "compression")?.model, "grok-4.6");
+  writeModelsFile(dir, {
+    default: { provider: "xai", model: "grok-4.6" },
+    aux: { classifier: { provider: "xai", model: "grok-4.5" } },
+    providers,
+  });
+  assert.equal(resolveLlm(dir, env, "classifier")?.model, "grok-4.5");
+  assert.equal(resolveLlm(dir, env, "chat")?.model, "grok-4.6");
 });
 
 test("image_gen without credentials fails fast", async () => {
@@ -629,6 +639,46 @@ test("assembleParts interleaves recap text with the tool round that followed", (
   });
   assert.equal(parts.map((part) => part.type).join(","), "thinking,text,tool,text");
   assert.equal(bodyFromParts(parts), "先對 Title。\n\n四城都對了。");
+});
+
+test("assembleParts keeps the act arguments a memory check needs", () => {
+  const parts = assembleParts({
+    traces: [
+      {
+        name: "write",
+        args: { path: "a.ts", content: "export const n = 1;\n" },
+        text: "wrote a.ts (20 bytes)",
+        isError: false,
+      },
+      {
+        name: "browser",
+        args: { action: "open", url: "https://example.com" },
+        text: "opened",
+        isError: false,
+      },
+      {
+        name: "computer",
+        args: { action: "op", app: "Notes" },
+        text: "ok",
+        isError: false,
+      },
+      {
+        name: "cronjob",
+        args: { action: "create", schedule: "every 2h", prompt: "check the deploy" },
+        text: "created",
+        isError: false,
+      },
+    ],
+  });
+  const tools = parts.filter((part) => part.type === "tool");
+  assert.equal(tools.length, 4);
+  const detail = (index: number) =>
+    tools[index] && tools[index].type === "tool" ? tools[index].detail : "";
+  assert.match(detail(0), /^a\.ts\n/);
+  assert.match(detail(0), /export const n = 1/);
+  assert.equal(detail(1), "open https://example.com");
+  assert.equal(detail(2), "op Notes");
+  assert.match(detail(3), /^create every 2h\ncheck the deploy$/);
 });
 
 test("assembleParts strips leaked skill XML from the visible reply", () => {

@@ -913,7 +913,7 @@
           return disclosureRow({
             title: t("write"),
             icon: iconPencil(),
-            summary: part.detail || "write",
+            summary: String(part.detail || "write").split("\n")[0],
             body: part.output || "",
             card: true,
             cardKind: "diff",
@@ -981,7 +981,7 @@
         return disclosureRow({
           title: toolTitle(part.name),
           icon: iconWrench(),
-          summary: part.detail || part.name,
+          summary: String(part.detail || part.name).split("\n")[0],
           body: part.output || "",
           card: true,
           error: err,

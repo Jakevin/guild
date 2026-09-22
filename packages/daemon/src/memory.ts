@@ -1,4 +1,4 @@
-import type { ModelRef } from "@guild/protocol";
+import type { ChatPart, ModelRef } from "@guild/protocol";
 import { llmComplete } from "./llm.ts";
 import { StoreError, type GuildStore } from "./store.ts";
 
@@ -35,6 +35,155 @@ export function redactSecrets(text: string): string {
     .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted-key]")
     .replace(/\bBearer\s+[A-Za-z0-9._\-]{8,}\b/gi, "Bearer [redacted]")
     .replace(/\b(api[_-]?key|secret|token)\s*[:=]\s*\S+/gi, "$1=[redacted]");
+}
+
+const ACT_TOOLS = new Set([
+  "run",
+  "write",
+  "computer",
+  "browser",
+  "cronjob",
+  "spawn",
+  "image_gen",
+  "tts",
+]);
+const EVIDENCE_CAP = 1_600;
+const EVIDENCE_TOOLS = 8;
+const EVIDENCE_BLOCK = 12_000;
+const EXIT_TAIL = /\n\[(?:exit code: [^\]]+|timed out after [^\]]+)\]\s*$/;
+
+export type MemoryVerdict = "pass" | "fail" | "unresolved";
+
+function isActName(name: string): boolean {
+  return ACT_TOOLS.has(name) || name.startsWith("mcp__");
+}
+
+function tailText(text: string, cap: number): string {
+  if (text.length <= cap) return text;
+  const mark = "… truncated …\n";
+  const room = cap - mark.length;
+  if (room < 1) return text.slice(-cap);
+  return mark + text.slice(-room);
+}
+
+function splitRunTail(before: string): { head: string; stderr: string } {
+  const at = before.lastIndexOf("\n[stderr]\n");
+  if (at >= 0) return { head: before.slice(0, at), stderr: before.slice(at + 1) };
+  if (before.startsWith("[stderr]\n")) return { head: "", stderr: before };
+  return { head: before, stderr: "" };
+}
+
+function clipEvidence(text: string): string {
+  const raw = String(text || "");
+  if (raw.length <= EVIDENCE_CAP) return raw;
+  const exit = raw.match(EXIT_TAIL);
+  if (!exit || exit.index == null) {
+    return `${raw.slice(0, EVIDENCE_CAP)}\n… truncated …`;
+  }
+  const exitLine = exit[0].trim();
+  const { head, stderr } = splitRunTail(raw.slice(0, exit.index));
+  const stderrKeep =
+    !stderr ? "" : stderr.length > 400 ? `…\n${stderr.slice(-400)}` : stderr;
+  const tail = stderrKeep ? `${stderrKeep}\n${exitLine}` : exitLine;
+  const mark = "\n… truncated …\n";
+  const room = EVIDENCE_CAP - tail.length - mark.length;
+  if (room < 40) return tail.slice(-EVIDENCE_CAP);
+  if (head.length <= room) return head ? `${head}\n${tail}` : tail;
+  return `${head.slice(0, room)}${mark}${tail}`;
+}
+
+export function shouldVerifyMemory(parts?: ChatPart[]): boolean {
+  return (parts || []).some(
+    (part) => part.type === "tool" && isActName(part.name),
+  );
+}
+
+export function formatTurnEvidence(parts?: ChatPart[]): string {
+  const tools = (parts || [])
+    .filter((part): part is Extract<ChatPart, { type: "tool" }> => part.type === "tool")
+    .map((part, index) => ({ part, index }));
+  if (!tools.length) return "";
+  const acts = tools.filter(({ part }) => isActName(part.name));
+  const spare = Math.max(0, EVIDENCE_TOOLS - acts.length);
+  const filler = tools
+    .filter(({ part }) => !isActName(part.name))
+    .slice(-spare);
+  const chosen = [...acts, ...filler].sort((a, b) => a.index - b.index);
+  const block = chosen
+    .map(({ part }) => {
+      const head = `${part.name} ${part.detail || ""}`.trim();
+      const err = part.isError ? " error" : "";
+      const out = clipEvidence(String(part.output || "").trim());
+      return out ? `${head}${err}\n${out}` : `${head}${err}`;
+    })
+    .join("\n\n");
+  return tailText(block, EVIDENCE_BLOCK);
+}
+
+export function parseVerifyVerdict(text: string): MemoryVerdict | null {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  const verdictOf = (value: unknown): MemoryVerdict | null => {
+    const v = String(value || "").toLowerCase().trim();
+    if (v === "pass" || v === "fail" || v === "unresolved") return v;
+    return null;
+  };
+  if (raw.includes("{")) {
+    const fenced = raw.match(/\{[\s\S]*\}/);
+    if (!fenced) return null;
+    try {
+      const rec = JSON.parse(fenced[0]) as { verdict?: unknown };
+      return verdictOf(rec.verdict);
+    } catch {
+      return null;
+    }
+  }
+  return verdictOf(raw);
+}
+
+export function allowMemoryHarvest(hasAct: boolean, verdict: MemoryVerdict | null): boolean {
+  if (!hasAct) return true;
+  return verdict === "pass";
+}
+
+export async function verifyTurn(input: {
+  dataDir: string;
+  env?: NodeJS.ProcessEnv;
+  userMessage: string;
+  evidence: string;
+}): Promise<MemoryVerdict> {
+  const evidence = String(input.evidence || "").trim();
+  if (!evidence) return "pass";
+  const result = await llmComplete({
+    dataDir: input.dataDir,
+    env: input.env,
+    role: "classifier",
+    tools: false,
+    temperature: 0,
+    fast: true,
+    system:
+      "You independently verify whether observed tool results satisfy the user's ask. You cannot see the actor's plan, thinking, or MEMORY.md. JSON only. Do not think out loud.",
+    messages: [
+      {
+        role: "user",
+        content: `User ask:
+<<<
+${String(input.userMessage || "").trim()}
+>>>
+
+Observed tool results (not the actor's narration):
+<<<
+${tailText(evidence, EVIDENCE_BLOCK)}
+>>>
+
+Reply JSON only: {"verdict":"pass"|"fail"|"unresolved","why":"one line"}
+pass = results show the ask was done.
+fail = results show it was not done, refused, or contradicted.
+unresolved = evidence is insufficient.`,
+      },
+    ],
+  });
+  return parseVerifyVerdict(result?.text || "") || "unresolved";
 }
 
 export function shouldHarvestMemory(userMessage: string, reply = ""): boolean {
@@ -130,20 +279,38 @@ export async function harvestBotMemory(input: {
   botId: string;
   userMessage: string;
   reply: string;
+  parts?: ChatPart[];
   env?: NodeJS.ProcessEnv;
   prefer?: ModelRef | null;
-}): Promise<{ updated: boolean; body: string }> {
+}): Promise<{ updated: boolean; body: string; skipped?: MemoryVerdict }> {
   const current = input.store.readBotMemory(input.botId);
   if (!shouldHarvestMemory(input.userMessage, input.reply)) {
     return { updated: false, body: current };
   }
+  const hasAct = shouldVerifyMemory(input.parts);
+  const evidence = formatTurnEvidence(input.parts);
+  let verdict: MemoryVerdict | null = null;
+  if (hasAct) {
+    verdict = await verifyTurn({
+      dataDir: input.store.dataDir,
+      env: input.env,
+      userMessage: input.userMessage,
+      evidence,
+    });
+    if (!allowMemoryHarvest(true, verdict)) {
+      return { updated: false, body: current, skipped: verdict };
+    }
+  }
+  const turn = hasAct
+    ? `User: ${input.userMessage}\nObserved:\n${evidence}`
+    : `User: ${input.userMessage}\nAssistant: ${input.reply}`;
   const extracted = await extractMemory({
     dataDir: input.store.dataDir,
     env: input.env,
     prefer: input.prefer,
     scope: "bot",
     current,
-    turn: `User: ${input.userMessage}\nAssistant: ${input.reply}`,
+    turn,
   });
   const next = applyMemoryUpdate(current, extracted);
   if (next == null) return { updated: false, body: current };
@@ -234,9 +401,10 @@ export async function harvestChannelMemory(input: {
   roomId: string;
   userMessage: string;
   replies: { handle?: string; author: string; body: string }[];
+  parts?: ChatPart[];
   env?: NodeJS.ProcessEnv;
   prefer?: ModelRef | null;
-}): Promise<{ updated: boolean; body: string }> {
+}): Promise<{ updated: boolean; body: string; skipped?: MemoryVerdict }> {
   const current = input.store.readChannelMemory(input.roomId);
   const lines = input.replies
     .map((item) => `@${item.handle || item.author}: ${item.body}`)
@@ -244,13 +412,29 @@ export async function harvestChannelMemory(input: {
   if (!shouldHarvestMemory(input.userMessage, lines)) {
     return { updated: false, body: current };
   }
+  const hasAct = shouldVerifyMemory(input.parts);
+  const evidence = formatTurnEvidence(input.parts);
+  if (hasAct) {
+    const verdict = await verifyTurn({
+      dataDir: input.store.dataDir,
+      env: input.env,
+      userMessage: input.userMessage,
+      evidence,
+    });
+    if (!allowMemoryHarvest(true, verdict)) {
+      return { updated: false, body: current, skipped: verdict };
+    }
+  }
+  const turn = hasAct
+    ? `User: ${input.userMessage}\nObserved:\n${evidence}`
+    : `User: ${input.userMessage}\n${lines}`;
   const extracted = await extractMemory({
     dataDir: input.store.dataDir,
     env: input.env,
     prefer: input.prefer,
     scope: "channel",
     current,
-    turn: `User: ${input.userMessage}\n${lines}`,
+    turn,
   });
   const next = applyMemoryUpdate(current, extracted);
   if (next == null) return { updated: false, body: current };

@@ -160,6 +160,28 @@ test("chat page can render Think Skill Bash and Deep diving", () => {
   assert.doesNotMatch(css, /tbody tr:nth-child\(even\) \{ background: #111/);
 });
 
+test("toLiveTurn shows browser, computer, and cronjob actions", () => {
+  const live = toLiveTurn("bot-1", {
+    thinking: "",
+    traces: [
+      {
+        name: "browser",
+        args: { action: "open", url: "https://example.com" },
+        text: "opened",
+        isError: false,
+      },
+      {
+        name: "write",
+        args: { path: "a.ts", content: "export const n = 1;\n".repeat(40) },
+        text: "wrote a.ts",
+        isError: false,
+      },
+    ],
+  });
+  assert.equal(live.steps[0].detail, "open https://example.com");
+  assert.equal(live.steps[1].detail, "a.ts");
+});
+
 test("toLiveTurn omits Think when the model has not thought", () => {
   const live = toLiveTurn("bot-1", { thinking: "", traces: [] });
   assert.equal(live.steps.some((step) => step.name === "think"), false);

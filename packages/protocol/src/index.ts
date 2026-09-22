@@ -175,7 +175,8 @@ export type AuxRole =
   | "approval"
   | "title"
   | "generate"
-  | "spawn";
+  | "spawn"
+  | "classifier";
 
 export type ModelsFile = {
   default?: ModelRef | null;

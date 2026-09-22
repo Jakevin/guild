@@ -2,6 +2,7 @@ import type {
   BenchListing,
   ChatAttachment,
   ChatMessage,
+  ChatPart,
   HealthResponse,
   LibraryKind,
   ModelRef,
@@ -25,6 +26,7 @@ import {
 } from "./trajectory.ts";
 import { importFromGithub, importFromUrl } from "./skill-import.ts";
 import { draftListingFromUrl } from "./listing-draft.ts";
+import { toolArgDetail } from "./chat-parts.ts";
 import {
   harvestBotMemory,
   harvestChannelMemory,
@@ -75,6 +77,7 @@ export type TurnComplete = {
   botId: string;
   userText: string;
   reply: string;
+  parts?: ChatPart[];
 };
 
 export type HandlerExtras = {
@@ -1171,6 +1174,16 @@ function liveDetail(trace: ToolTrace): string {
   if (trace.name.startsWith("mcp__")) {
     return JSON.stringify(args).slice(0, 120);
   }
+  const acted = toolArgDetail(trace.name, args);
+  if (
+    acted ||
+    trace.name === "browser" ||
+    trace.name === "computer" ||
+    trace.name === "cronjob" ||
+    trace.name === "write"
+  ) {
+    return acted.replace(/\s+/g, " ").trim();
+  }
   return String(args.path || "");
 }
 
@@ -1503,7 +1516,12 @@ async function generateReplies(
       ? explicit
       : replyBots(store, memberIds, userMessage, extraBotId);
   const replies: ChatMessage[] = [];
-  const harvested: { handle: string; author: string; body: string }[] = [];
+  const harvested: {
+    handle: string;
+    author: string;
+    body: string;
+    parts: ChatPart[];
+  }[] = [];
   const signal = store.beginTurn(roomId, targets);
   const turnMessageId =
     targets
@@ -1659,12 +1677,14 @@ async function generateReplies(
       botId,
       userText: turnAsked,
       reply: generated.body,
+      parts: generated.parts,
     });
     if (generated.source === "llm") {
       harvested.push({
         handle: store.getBot(botId)?.handle || botId,
         author: botId,
         body: generated.body,
+        parts: generated.parts,
       });
       if (extras.harvest !== false && !isBareDmId(roomId)) {
         void harvestBotMemory({
@@ -1672,6 +1692,7 @@ async function generateReplies(
           botId,
           userMessage: turnAsked,
           reply: generated.body,
+          parts: generated.parts,
           env,
           prefer: store.getBot(botId)?.model ?? null,
         }).catch(() => {});
@@ -1742,6 +1763,7 @@ async function generateReplies(
         roomId,
         userMessage: asked,
         replies: harvested,
+        parts: harvested.flatMap((item) => item.parts),
         env,
         prefer: store.getBot(harvested[0].author)?.model ?? null,
       }).catch(() => {});

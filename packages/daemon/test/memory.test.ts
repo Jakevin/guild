@@ -7,12 +7,16 @@ import { fileURLToPath } from "node:url";
 import { chatTurnSystem } from "../src/handlers.ts";
 import { writeModelsFile } from "../src/llm.ts";
 import {
+  allowMemoryHarvest,
   applyMemoryUpdate,
   buildTidyPrompt,
   clipTidyAsk,
+  formatTurnEvidence,
   localMergeQuestMemory,
   parseTidyMemory,
+  parseVerifyVerdict,
   shouldHarvestMemory,
+  shouldVerifyMemory,
   stampMemoryUpdated,
 } from "../src/memory.ts";
 import { closeServer, listen as listenApp } from "./app.ts";
@@ -46,6 +50,95 @@ test("shouldHarvestMemory skips greetings and empty turns", () => {
     shouldHarvestMemory("之後這個專案用 pnpm，測試指令是 pnpm test"),
     true,
   );
+});
+
+test("act tools must pass an independent verdict before MEMORY harvest", () => {
+  assert.equal(shouldVerifyMemory([]), false);
+  assert.equal(
+    shouldVerifyMemory([{ type: "thinking", text: "I will ship it" }]),
+    false,
+  );
+  assert.equal(
+    shouldVerifyMemory([{ type: "tool", name: "read", detail: "a.ts", output: "ok" }]),
+    false,
+  );
+  assert.equal(
+    shouldVerifyMemory([
+      { type: "tool", name: "run", detail: "git push", output: "rejected", isError: true },
+    ]),
+    true,
+  );
+  const evidence = formatTurnEvidence([
+    { type: "thinking", text: "ship now" },
+    { type: "text", text: "Pushed v0.2.41" },
+    { type: "tool", name: "run", detail: "git push", output: "error: failed", isError: true },
+  ]);
+  assert.match(evidence, /git push/);
+  assert.match(evidence, /error: failed/);
+  assert.doesNotMatch(evidence, /ship now/);
+  assert.doesNotMatch(evidence, /Pushed v0\.2\.41/);
+  assert.equal(parseVerifyVerdict('{"verdict":"fail","why":"push rejected"}'), "fail");
+  assert.equal(parseVerifyVerdict("pass"), "pass");
+  assert.equal(parseVerifyVerdict("PASS"), "pass");
+  assert.equal(parseVerifyVerdict("PASS because tests ran"), null);
+  assert.equal(parseVerifyVerdict("Pass looks tempting, but the tool failed."), null);
+  assert.equal(parseVerifyVerdict('{"verdict":"pass",}'), null);
+  assert.equal(parseVerifyVerdict('{"why":"pass"}'), null);
+  assert.equal(parseVerifyVerdict(""), null);
+  assert.equal(allowMemoryHarvest(false, null), true);
+  assert.equal(allowMemoryHarvest(true, "pass"), true);
+  assert.equal(allowMemoryHarvest(true, "fail"), false);
+  assert.equal(allowMemoryHarvest(true, "unresolved"), false);
+  assert.equal(allowMemoryHarvest(true, null), false);
+});
+
+test("turn evidence keeps the run exit line and later act tools", () => {
+  const stdout = `${"ok\n".repeat(2000)}`;
+  const failed = formatTurnEvidence([
+    {
+      type: "tool",
+      name: "run",
+      detail: "npm test",
+      output: `${stdout}\n[stderr]\nassertion failed\n[exit code: 1]`,
+      isError: false,
+    },
+  ]);
+  assert.match(failed, /\[exit code: 1\]/);
+  assert.match(failed, /\[stderr\]/);
+  assert.match(failed, /assertion failed/);
+  assert.match(failed, /truncated/);
+
+  const reads = Array.from({ length: 8 }, (_, i) => ({
+    type: "tool" as const,
+    name: "read",
+    detail: `r${i}.ts`,
+    output: "x",
+  }));
+  const later = formatTurnEvidence([
+    ...reads,
+    {
+      type: "tool",
+      name: "write",
+      detail: "out.ts\nexport const n = 1;",
+      output: "wrote out.ts (18 bytes)",
+    },
+  ]);
+  assert.match(later, /write out\.ts/);
+  assert.match(later, /export const n = 1/);
+  assert.doesNotMatch(later, /r0\.ts/);
+  assert.match(later, /r7\.ts/);
+
+  const runs = Array.from({ length: 10 }, (_, i) => ({
+    type: "tool" as const,
+    name: "run",
+    detail: `cmd-${i}`,
+    output: `${"y".repeat(1500)}\n[exit code: ${i}]`,
+  }));
+  const block = formatTurnEvidence(runs);
+  assert.ok(block.length <= 12_000);
+  assert.match(block, /cmd-9/);
+  assert.match(block, /\[exit code: 9\]/);
+  assert.doesNotMatch(block, /cmd-0/);
 });
 
 test("localMergeQuestMemory appends a closed quest under a heading", () => {
