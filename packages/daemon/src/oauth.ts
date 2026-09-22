@@ -387,14 +387,105 @@ export function grokCliHeaders(): Record<string, string> {
   };
 }
 
+const grokCatalogAt = new Map<string, { at: number; models: ModelEntryLite[] }>();
+const GROK_CATALOG_TTL_MS = 5 * 60_000;
+
+function grokRowVisible(row: Record<string, unknown>): boolean {
+  if (row.hidden === true) return false;
+  if (row.supported_in_api === false) return false;
+  return true;
+}
+
+function grokEntry(id: unknown, name: unknown): ModelEntryLite | null {
+  const modelId = typeof id === "string" ? id.trim() : "";
+  if (!modelId) return null;
+  const modelName =
+    typeof name === "string" && name.trim() ? name.trim() : modelId;
+  return { id: modelId, name: modelName };
+}
+
+/** CLI cache (`models` + `info`) and OpenAI-style `{ data: [...] }`. */
+export function parseGrokModelCatalog(raw: unknown): ModelEntryLite[] {
+  const out: ModelEntryLite[] = [];
+  const push = (entry: ModelEntryLite | null) => {
+    if (!entry || out.some((row) => row.id === entry.id)) return;
+    out.push(entry);
+  };
+  const rec = asRecord(raw);
+  const data =
+    rec && Array.isArray(rec.data) ? rec.data : Array.isArray(raw) ? raw : null;
+  if (data) {
+    for (const item of data) {
+      const row = asRecord(item);
+      if (!row || !grokRowVisible(row)) continue;
+      push(grokEntry(row.id, row.name));
+    }
+    return out;
+  }
+  const bag = rec ? asRecord(rec.models) : undefined;
+  if (!bag) return out;
+  for (const [key, value] of Object.entries(bag)) {
+    const wrap = asRecord(value);
+    if (!wrap) continue;
+    const info = asRecord(wrap.info) ?? wrap;
+    if (!grokRowVisible(info)) continue;
+    push(grokEntry(info.id || info.model || key, info.name));
+  }
+  return out;
+}
+
+function readGrokCliModelCache(): ModelEntryLite[] {
+  try {
+    return parseGrokModelCatalog(
+      JSON.parse(
+        readFileSync(join(homedir(), ".grok", "models_cache.json"), "utf8"),
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function mergeGrokModels<T extends { id: string; name: string }>(
+  base: readonly T[],
+  extra: ModelEntryLite[],
+): T[] {
+  if (!extra.length) return [...base];
+  const template = base.find((model) => model.id === "grok-4.6") ?? base[0];
+  if (!template) return [...base];
+  const byId = new Map(base.map((model) => [model.id, model]));
+  const used = new Set<string>();
+  const merged: T[] = [];
+  for (const row of extra) {
+    if (!row.id || used.has(row.id)) continue;
+    used.add(row.id);
+    const existing = byId.get(row.id);
+    merged.push(
+      existing
+        ? { ...existing, name: row.name || existing.name }
+        : { ...template, id: row.id, name: row.name || row.id },
+    );
+  }
+  for (const model of base) {
+    if (!used.has(model.id)) merged.push(model);
+  }
+  return merged;
+}
+
 function withGrokSubscriptionProxy<T extends { id: string }>(
   provider: T,
+  dataDir = "",
 ): T {
   if (provider.id !== "xai") return provider;
   const stock = provider as T & {
     baseUrl?: string;
     headers?: Record<string, string>;
-    getModels?: () => readonly { baseUrl?: string; headers?: Record<string, string> }[];
+    getModels?: () => readonly {
+      id: string;
+      name: string;
+      baseUrl?: string;
+      headers?: Record<string, string>;
+    }[];
   };
   const headers = grokCliHeaders();
   const originalGetModels = stock.getModels?.bind(stock);
@@ -405,7 +496,8 @@ function withGrokSubscriptionProxy<T extends { id: string }>(
     headers: { ...stock.headers, ...headers },
     getModels() {
       const models = originalGetModels ? originalGetModels() : [];
-      return models.map((model) => ({
+      const extra = dataDir ? grokCatalogAt.get(dataDir)?.models ?? [] : [];
+      return mergeGrokModels(models, extra).map((model) => ({
         ...model,
         baseUrl: GROK_CLI_PROXY,
         headers: { ...headers, ...(model.headers ?? {}) },
@@ -414,11 +506,52 @@ function withGrokSubscriptionProxy<T extends { id: string }>(
   };
 }
 
-function catalogProviders() {
+/** Static pi-ai ids lag the subscription proxy. Pull `/v1/models`, then the CLI cache. */
+export async function refreshXaiCatalog(
+  dataDir: string,
+  opts: { force?: boolean; load?: () => Promise<unknown> } = {},
+): Promise<void> {
+  if (!oauthUsable(dataDir, "xai")) return;
+  const prev = grokCatalogAt.get(dataDir);
+  if (
+    !opts.force &&
+    prev &&
+    prev.models.length > 0 &&
+    Date.now() - prev.at < GROK_CATALOG_TTL_MS
+  ) {
+    return;
+  }
+  let models: ModelEntryLite[] = [];
+  try {
+    if (opts.load) {
+      models = parseGrokModelCatalog(await opts.load());
+    } else {
+      const token = (await piModels(dataDir).getAuth("xai"))?.auth.apiKey;
+      if (token) {
+        const response = await fetch(`${GROK_CLI_PROXY}/models`, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+            ...grokCliHeaders(),
+          },
+          signal: AbortSignal.timeout(4_000),
+        });
+        if (response.ok) models = parseGrokModelCatalog(await response.json());
+      }
+    }
+  } catch {
+    models = [];
+  }
+  if (!models.length) models = readGrokCliModelCache();
+  if (!models.length) return;
+  grokCatalogAt.set(dataDir, { at: Date.now(), models });
+}
+
+function catalogProviders(dataDir = "") {
   if (!providerCache) providerCache = builtinProviders();
   return CATALOG_IDS.map((id) => providerCache!.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    .map((p) => withGrokSubscriptionProxy(p));
+    .map((p) => withGrokSubscriptionProxy(p, dataDir));
 }
 
 function oauthSeedPaths(dataDir: string): string[] {
@@ -442,7 +575,7 @@ function piModels(dataDir: string): MutableModels {
   const hit = modelsByDir.get(dataDir);
   if (hit) return hit;
   const models = createModels({ credentials: getStore(dataDir) });
-  for (const provider of catalogProviders()) models.setProvider(provider);
+  for (const provider of catalogProviders(dataDir)) models.setProvider(provider);
   modelsByDir.set(dataDir, models);
   return models;
 }
@@ -1261,6 +1394,9 @@ export async function completeOAuth(input: {
   let copilotSessionToken = "";
   if (sub.id === "radius") {
     await refreshRadiusCatalog(input.dataDir, true);
+  }
+  if (sub.id === "xai") {
+    await refreshXaiCatalog(input.dataDir);
   }
   if (sub.id === "github-copilot") {
     await refreshCopilotCatalog(input.dataDir);

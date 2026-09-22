@@ -8,6 +8,8 @@ import {
   formatOAuthError,
   isCopilotAutoOnlySku,
   listSubscriptions,
+  parseGrokModelCatalog,
+  refreshXaiCatalog,
   oauthCredentialFromUnknown,
   oauthOmitsTemperature,
   parseCopilotPickerIds,
@@ -231,6 +233,62 @@ test("Radius reuses stored catalog ids before the gateway refresh", () => {
     { id: "pi-gpt", name: "pi-gpt" },
     { id: "pi-claude", name: "pi-claude" },
   ]);
+});
+
+test("parseGrokModelCatalog keeps visible proxy models", () => {
+  const ids = parseGrokModelCatalog({
+    models: {
+      "grok-4.7": {
+        info: { id: "grok-4.7", name: "Grok 4.7", hidden: false, supported_in_api: true },
+      },
+      "grok-hidden": { info: { id: "grok-hidden", name: "Hidden", hidden: true } },
+      "grok-api-off": {
+        info: { id: "grok-api-off", name: "Off", supported_in_api: false },
+      },
+    },
+  }).map((row) => row.id);
+  assert.deepEqual(ids, ["grok-4.7"]);
+  assert.deepEqual(
+    parseGrokModelCatalog({
+      data: [
+        { id: "grok-4.7", name: "Grok 4.7" },
+        { id: "grok-4.6" },
+      ],
+    }).map((row) => row.name),
+    ["Grok 4.7", "grok-4.6"],
+  );
+});
+
+test("xai catalog refresh adds Grok 4.7 without dropping the static list", async () => {
+  const dataDir = tempHome();
+  writeFileSync(
+    join(dataDir, "oauth.json"),
+    JSON.stringify({
+      xai: {
+        type: "oauth",
+        access: "tok",
+        refresh: "r",
+        expires: Date.now() + 3_600_000,
+      },
+    }),
+  );
+  await refreshXaiCatalog(dataDir, {
+    load: async () => ({
+      models: {
+        "grok-4.7": { info: { id: "grok-4.7", name: "Grok 4.7" } },
+        "grok-4.6": { info: { id: "grok-4.6", name: "Grok 4.6" } },
+        "grok-hidden": { info: { id: "grok-hidden", name: "Hidden", hidden: true } },
+      },
+    }),
+  });
+  const ids =
+    listSubscriptions(dataDir)
+      .find((item) => item.id === "xai")
+      ?.models?.map((row) => row.id) ?? [];
+  assert.equal(ids[0], "grok-4.7");
+  assert.ok(ids.includes("grok-4.6"));
+  assert.ok(ids.includes("grok-4.3"));
+  assert.equal(ids.includes("grok-hidden"), false);
 });
 
 test("xai stays ready when access is expired but refresh exists", () => {
