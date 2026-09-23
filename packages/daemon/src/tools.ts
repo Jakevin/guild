@@ -79,6 +79,10 @@ export type ToolContext = {
   spawnHandles?: Map<string, SpawnHandle>;
   /** Channel or DM this turn is in. Cron jobs default here. */
   roomId?: string;
+  /** Recent user texts for a stop-hook nudge. Not tool results. */
+  userAsks?: string[];
+  /** Inner imitation call must not ask Jev again. */
+  skipJevNudge?: boolean;
   /** Seat running this turn. cronjob create defaults here. */
   botId?: string;
   /** Hermes: cron child sessions cannot manage cron. */

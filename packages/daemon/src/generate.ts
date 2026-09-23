@@ -749,6 +749,10 @@ async function tryChatLlm(
       mcpTools,
       spawnHandles: new Map(),
       ...(input.roomId ? { roomId: input.roomId } : {}),
+      userAsks: packed.messages
+        .filter((item) => item.role === "user" && item.content.trim())
+        .map((item) => item.content.trim())
+        .slice(-6),
       ...(input.botId ? { botId: input.botId } : {}),
       ...(input.cronRun ? { cronRun: true } : {}),
       ...policy,

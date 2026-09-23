@@ -3,6 +3,7 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ToolContext, ToolOutcome, ToolTrace } from "./tools.ts";
+import { jevNudgeContinue, NUDGE_REASON, type NudgeMark } from "./jev-nudge.ts";
 
 /**
  * Codex-shaped sandbox names. Default is workspace_write (Codex workspace-write).
@@ -318,6 +319,12 @@ export async function runAgentLoop(input: {
   }) => Promise<LoopAsk | null>;
   onRetry?: (lateSteer: string) => void;
   onTools?: (calls: LoopCall[], outcomes: ToolOutcome[]) => void;
+  /** Test double. Production asks Jev through the Command Code key. */
+  nudge?: (input: {
+    text: string;
+    toolNames: string[];
+    marks: NudgeMark[];
+  }) => Promise<{ note: string } | null>;
   exhausted?: string;
   emptyAfterTools?: string;
   nullIfNoTraces?: boolean;
@@ -347,6 +354,8 @@ export async function runAgentLoop(input: {
       .filter(Boolean)
       .join("\n\n");
   const rounds: import("./tools.ts").ToolTrace[][] = [];
+  const nudgeMarks: NudgeMark[] = [];
+  let toolsAtNudge = 0;
   const progress = () =>
     emitProgress(input.toolCtx, traces, thinkingOf(), draftOf());
   const pushText = (raw: string) => {
@@ -411,6 +420,35 @@ export async function runAgentLoop(input: {
         continue;
       }
       pushText(asked.text);
+      if (draftOf() && input.onRetry && !input.toolCtx.skipJevNudge) {
+        if (nudgeMarks.length) {
+          nudgeMarks[nudgeMarks.length - 1]!.toolsAfter = traces.length - toolsAtNudge;
+        }
+        const judge = input.nudge ?? ((snap) => jevNudgeContinue({
+          ctx: input.toolCtx,
+          assistantText: snap.text,
+          toolNames: snap.toolNames,
+          marks: snap.marks,
+        }));
+        const continued = await judge({
+          text: asked.text,
+          toolNames: traces.map((row) => row.name).filter((name) => name !== "jev"),
+          marks: nudgeMarks,
+        }).catch(() => null);
+        if (continued) {
+          traces.push({
+            name: "jev",
+            args: {},
+            text: continued.note,
+            isError: false,
+          });
+          progress();
+          nudgeMarks.push({ text: asked.text, toolsAfter: 0 });
+          toolsAtNudge = traces.length;
+          input.onRetry(NUDGE_REASON);
+          continue;
+        }
+      }
       if (draftOf()) return finish("");
       if (traces.length) return finish(emptyAfterTools, true);
       if (input.nullIfNoTraces) return null;
