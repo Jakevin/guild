@@ -446,12 +446,16 @@ function readGrokCliModelCache(): ModelEntryLite[] {
   }
 }
 
-function mergeGrokModels<T extends { id: string; name: string }>(
+function mergeLiveModels<T extends { id: string; name: string }>(
   base: readonly T[],
   extra: ModelEntryLite[],
+  templateId?: string,
 ): T[] {
   if (!extra.length) return [...base];
-  const template = base.find((model) => model.id === "grok-4.6") ?? base[0];
+  const template =
+    (templateId ? base.find((model) => model.id === templateId) : undefined) ??
+    base.find((model) => model.id === "grok-4.6") ??
+    base[0];
   if (!template) return [...base];
   const byId = new Map(base.map((model) => [model.id, model]));
   const used = new Set<string>();
@@ -497,7 +501,7 @@ function withGrokSubscriptionProxy<T extends { id: string }>(
     getModels() {
       const models = originalGetModels ? originalGetModels() : [];
       const extra = dataDir ? grokCatalogAt.get(dataDir)?.models ?? [] : [];
-      return mergeGrokModels(models, extra).map((model) => ({
+      return mergeLiveModels(models, extra).map((model) => ({
         ...model,
         baseUrl: GROK_CLI_PROXY,
         headers: { ...headers, ...(model.headers ?? {}) },
@@ -547,11 +551,126 @@ export async function refreshXaiCatalog(
   grokCatalogAt.set(dataDir, { at: Date.now(), models });
 }
 
+const codexCatalogAt = new Map<string, { at: number; models: ModelEntryLite[] }>();
+const CODEX_MODELS_URL =
+  "https://chatgpt.com/backend-api/codex/models?client_version=0.155.0";
+
+export function parseCodexModelCatalog(raw: unknown): ModelEntryLite[] {
+  const rec = asRecord(raw);
+  const list = rec && Array.isArray(rec.models) ? rec.models : Array.isArray(raw) ? raw : null;
+  if (!list) return [];
+  const out: ModelEntryLite[] = [];
+  for (const item of list) {
+    const row = asRecord(item);
+    if (!row) continue;
+    if (row.visibility === "hide" || row.hidden === true) continue;
+    if (row.supported_in_api === false) continue;
+    const id =
+      typeof row.slug === "string"
+        ? row.slug.trim()
+        : typeof row.id === "string"
+          ? row.id.trim()
+          : "";
+    if (!id || out.some((entry) => entry.id === id)) continue;
+    const name =
+      typeof row.display_name === "string" && row.display_name.trim()
+        ? row.display_name.trim()
+        : id;
+    out.push({ id, name });
+  }
+  return out;
+}
+
+function readCodexCliModelCache(): ModelEntryLite[] {
+  try {
+    return parseCodexModelCatalog(
+      JSON.parse(readFileSync(join(homedir(), ".codex", "models_cache.json"), "utf8")),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function chatgptAccountIdFromToken(accessToken: string): string {
+  try {
+    const payload = accessToken.split(".")[1];
+    if (!payload) return "";
+    const rec = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    const auth = asRecord(rec["https://api.openai.com/auth"]);
+    const id = auth?.chatgpt_account_id;
+    return typeof id === "string" ? id : "";
+  } catch {
+    return "";
+  }
+}
+
+function withCodexCatalog<T extends { id: string }>(provider: T, dataDir = ""): T {
+  if (provider.id !== "openai-codex") return provider;
+  const stock = provider as T & {
+    getModels?: () => readonly { id: string; name: string }[];
+  };
+  const originalGetModels = stock.getModels?.bind(stock);
+  return {
+    ...stock,
+    getModels() {
+      const models = originalGetModels ? originalGetModels() : [];
+      const extra = dataDir ? codexCatalogAt.get(dataDir)?.models ?? [] : [];
+      return mergeLiveModels(models, extra, "gpt-5.6-sol");
+    },
+  };
+}
+
+/** Static pi-ai ids lag ChatGPT Codex. Pull `/codex/models`, then the CLI cache. */
+export async function refreshCodexCatalog(
+  dataDir: string,
+  opts: { force?: boolean; load?: () => Promise<unknown> } = {},
+): Promise<void> {
+  if (!oauthUsable(dataDir, "openai-codex")) return;
+  const prev = codexCatalogAt.get(dataDir);
+  if (
+    !opts.force &&
+    prev &&
+    prev.models.length > 0 &&
+    Date.now() - prev.at < GROK_CATALOG_TTL_MS
+  ) {
+    return;
+  }
+  let models: ModelEntryLite[] = [];
+  try {
+    if (opts.load) {
+      models = parseCodexModelCatalog(await opts.load());
+    } else {
+      const token = (await piModels(dataDir).getAuth("openai-codex"))?.auth.apiKey;
+      if (token) {
+        const account = chatgptAccountIdFromToken(token);
+        const response = await fetch(CODEX_MODELS_URL, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+            originator: "guild",
+            ...(account ? { "chatgpt-account-id": account } : {}),
+          },
+          signal: AbortSignal.timeout(4_000),
+        });
+        if (response.ok) models = parseCodexModelCatalog(await response.json());
+      }
+    }
+  } catch {
+    models = [];
+  }
+  if (!models.length) models = readCodexCliModelCache();
+  if (!models.length) return;
+  codexCatalogAt.set(dataDir, { at: Date.now(), models });
+}
+
 function catalogProviders(dataDir = "") {
   if (!providerCache) providerCache = builtinProviders();
   return CATALOG_IDS.map((id) => providerCache!.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    .map((p) => withGrokSubscriptionProxy(p, dataDir));
+    .map((p) => withCodexCatalog(withGrokSubscriptionProxy(p, dataDir), dataDir));
 }
 
 function oauthSeedPaths(dataDir: string): string[] {
@@ -1397,6 +1516,9 @@ export async function completeOAuth(input: {
   }
   if (sub.id === "xai") {
     await refreshXaiCatalog(input.dataDir);
+  }
+  if (sub.id === "openai-codex") {
+    await refreshCodexCatalog(input.dataDir);
   }
   if (sub.id === "github-copilot") {
     await refreshCopilotCatalog(input.dataDir);

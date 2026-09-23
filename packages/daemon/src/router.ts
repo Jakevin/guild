@@ -69,6 +69,7 @@ import {
   completeLogin,
   listSubscriptions,
   refreshCopilotCatalog,
+  refreshCodexCatalog,
   refreshXaiCatalog,
   logoutOAuth,
   pollLogin,
@@ -1345,6 +1346,7 @@ export async function handleRequest(
     if (method === "GET" && path === "/settings/models") {
       await refreshCopilotCatalog(store.dataDir);
       await refreshXaiCatalog(store.dataDir);
+      await refreshCodexCatalog(store.dataDir);
       await refreshOpenCodeFreeCatalog(store.dataDir);
       await refreshCommandCodeCatalog(store.dataDir, env).catch(() => {});
       await refreshReasoningCatalog().catch(() => {});
@@ -1394,6 +1396,7 @@ export async function handleRequest(
       }
       await refreshCopilotCatalog(store.dataDir);
       await refreshXaiCatalog(store.dataDir);
+      await refreshCodexCatalog(store.dataDir);
       json(res, 200, { subscriptions: listSubscriptions(store.dataDir) });
       return;
     }

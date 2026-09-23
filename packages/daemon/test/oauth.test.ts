@@ -8,7 +8,9 @@ import {
   formatOAuthError,
   isCopilotAutoOnlySku,
   listSubscriptions,
+  parseCodexModelCatalog,
   parseGrokModelCatalog,
+  refreshCodexCatalog,
   refreshXaiCatalog,
   oauthCredentialFromUnknown,
   oauthOmitsTemperature,
@@ -289,6 +291,47 @@ test("xai catalog refresh adds Grok 4.7 without dropping the static list", async
   assert.ok(ids.includes("grok-4.6"));
   assert.ok(ids.includes("grok-4.3"));
   assert.equal(ids.includes("grok-hidden"), false);
+});
+
+test("codex catalog refresh adds GPT-6 and hides reserve models", async () => {
+  assert.deepEqual(
+    parseCodexModelCatalog({
+      models: [
+        { slug: "gpt-6-sol", display_name: "GPT-6-Sol", visibility: "list", supported_in_api: true },
+        { slug: "gpt-reserve", display_name: "GPT-Reserve", visibility: "hide", supported_in_api: true },
+      ],
+    }).map((row) => row.id),
+    ["gpt-6-sol"],
+  );
+  const dataDir = tempHome();
+  writeFileSync(
+    join(dataDir, "oauth.json"),
+    JSON.stringify({
+      "openai-codex": {
+        type: "oauth",
+        access: "tok",
+        refresh: "r",
+        expires: Date.now() + 3_600_000,
+      },
+    }),
+  );
+  await refreshCodexCatalog(dataDir, {
+    load: async () => ({
+      models: [
+        { slug: "gpt-6-sol", display_name: "GPT-6-Sol", visibility: "list" },
+        { slug: "gpt-5.6-luna", display_name: "GPT-5.6-Luna", visibility: "list" },
+        { slug: "gpt-reserve", display_name: "GPT-Reserve", visibility: "hide" },
+      ],
+    }),
+  });
+  const ids =
+    listSubscriptions(dataDir)
+      .find((item) => item.id === "openai-codex")
+      ?.models?.map((row) => row.id) ?? [];
+  assert.equal(ids[0], "gpt-6-sol");
+  assert.ok(ids.includes("gpt-5.6-luna"));
+  assert.ok(ids.includes("gpt-5.4"));
+  assert.equal(ids.includes("gpt-reserve"), false);
 });
 
 test("xai stays ready when access is expired but refresh exists", () => {
