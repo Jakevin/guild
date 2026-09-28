@@ -67,6 +67,11 @@ import {
   type OpenCodeFreeProbe,
 } from "./opencode-free.ts";
 import {
+  CLINE_PASS_PROVIDER_ID,
+  clinePassProvider,
+  fetchClinePassModels,
+} from "./cline-pass.ts";
+import {
   FREEBUFF_CHAT_DEFAULT_MODEL,
   FREEBUFF_CHAT_HINT,
   FREEBUFF_CHAT_LOGIN_HINT,
@@ -176,6 +181,7 @@ export const DEFAULT_MODELS: ModelsFile = {
         { id: "openai/gpt-4.1-mini", name: "GPT-4.1 mini" },
       ],
     },
+    [CLINE_PASS_PROVIDER_ID]: clinePassProvider(),
   },
 };
 
@@ -198,10 +204,45 @@ export function readModelsFile(dataDir: string): ModelsFile {
       return structuredClone(DEFAULT_MODELS);
     }
     if (Object.keys(parsed.providers).length === 0) return parsed;
-    return withOpenCodeFree(parsed);
+    return withClinePass(withOpenCodeFree(parsed));
   } catch {
     return structuredClone(DEFAULT_MODELS);
   }
+}
+
+function withClinePass(file: ModelsFile): ModelsFile {
+  if (file.providers[CLINE_PASS_PROVIDER_ID]) return file;
+  return {
+    ...file,
+    providers: {
+      ...file.providers,
+      [CLINE_PASS_PROVIDER_ID]: clinePassProvider(),
+    },
+  };
+}
+
+export async function refreshClinePassCatalog(
+  dataDir: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ added: string[] }> {
+  const live = await fetchClinePassModels(fetchImpl);
+  if (!live.length) return { added: [] };
+  const file = readModelsFile(dataDir);
+  const prev = file.providers[CLINE_PASS_PROVIDER_ID] ?? clinePassProvider();
+  const seen = new Set(prev.models.map((model) => model.id));
+  const added = live.filter((model) => !seen.has(model.id));
+  if (!added.length && file.providers[CLINE_PASS_PROVIDER_ID]) return { added: [] };
+  writeModelsFile(dataDir, {
+    ...file,
+    providers: {
+      ...file.providers,
+      [CLINE_PASS_PROVIDER_ID]: {
+        ...prev,
+        models: [...prev.models, ...added],
+      },
+    },
+  });
+  return { added: added.map((model) => model.id) };
 }
 
 function pinOpenCodeFree(file: ModelsFile): ModelsFile {

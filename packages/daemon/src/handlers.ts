@@ -2133,6 +2133,7 @@ export {
   publicModels,
   mergeModelsFile,
   setShownModels,
+  refreshClinePassCatalog,
   refreshOpenCodeFreeCatalog,
   refreshReasoningCatalog,
 } from "./llm.ts";

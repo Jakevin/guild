@@ -32,6 +32,7 @@ const DEV_PROVIDER: Record<string, string> = {
   bai: "xiaomi",
   xiaomi: "xiaomi",
   minimax: "minimax",
+  "cline-pass": "cline-pass",
 };
 
 const OPENROUTER_PREFIX: Record<string, string> = {
@@ -62,6 +63,7 @@ const HOST_TO_DEV: Array<[string, string]> = [
   ["api.moonshot.ai", "moonshotai"],
   ["api.moonshot.cn", "moonshotai"],
   ["api.b.ai", "xiaomi"],
+  ["api.cline.bot", "cline-pass"],
 ];
 
 /** Sort key only — never used as the displayed list. */
@@ -506,6 +508,9 @@ export function reasoningPayload(
   effort: string | undefined,
 ): Record<string, unknown> {
   if (!effort) return {};
+  if (providerId === "cline-pass" || /api\.cline\.bot/i.test(baseUrl)) {
+    return { reasoning_effort: effort };
+  }
   const viaOpenRouter =
     providerId.includes("openrouter") ||
     /openrouter\.ai/i.test(baseUrl);

@@ -40,6 +40,7 @@ import {
   mergeModelsFile,
   publicModels,
   setShownModels,
+  refreshClinePassCatalog,
   refreshOpenCodeFreeCatalog,
   refreshReasoningCatalog,
   listBench,
@@ -1347,6 +1348,7 @@ export async function handleRequest(
       await refreshCopilotCatalog(store.dataDir);
       await refreshXaiCatalog(store.dataDir);
       await refreshCodexCatalog(store.dataDir);
+      await refreshClinePassCatalog(store.dataDir).catch(() => {});
       await refreshOpenCodeFreeCatalog(store.dataDir);
       await refreshCommandCodeCatalog(store.dataDir, env).catch(() => {});
       await refreshReasoningCatalog().catch(() => {});
