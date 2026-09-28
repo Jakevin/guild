@@ -1565,7 +1565,7 @@ html[lang="ja"] h1 { font-family: "YuMincho", "Hiragino Mincho ProN", "Hiragino 
       </span>
     </div>
     <h1 data-i18n-html="h1">A local guild.<br />@mention the one you want.</h1>
-    <p class="tagline lead" data-i18n-html="lead">Not another omniscient chat. Staff named seats. A channel is an open contract. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.</p>
+    <p class="tagline lead" data-i18n-html="lead">Not another omniscient chat. Staff named seats. A channel is an open contract. A turn that ran tools is verified before it writes to <code>MEMORY.md</code>. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.</p>
     <div class="hero-tokens">
       <span><b>Node ≥ 22.19</b> <i data-i18n="tok.engines">engines</i></span>
       <span><b>npx @kevin5251984/guild web</b> <i data-i18n="tok.npx">one line</i></span>
@@ -1776,6 +1776,10 @@ pnpm dev</pre>
         <summary data-i18n="faq.q5">Can I schedule a later hall turn?</summary>
         <p data-i18n-html="faq.a5">Yes. Ask a seat, or open the sidebar sheet. Times read like speech — every 2h, in 30m, <code>0 9 * * *</code> — and each job gets a sheet with pause, resume, and a test run that returns to that hall. A run cannot schedule another job.</p>
       </details>
+      <details class="faq-pair">
+        <summary data-i18n="faq.q6">What changed recently?</summary>
+        <p data-i18n-html="faq.a6">Incognito whisper keeps <code>MEMORY.md</code> untouched — clearing it wipes only that log. A turn that ran tools is verified before it writes to <code>MEMORY.md</code>, and an idle conversation can be compacted with memory restored. Cline Pass is available as an API-key provider in <code>/settings</code>.</p>
+      </details>
       <p class="faq-tail" data-i18n="faq.tail">Free. Open source under the MIT license.</p>
     </div>
   </section>
@@ -1811,7 +1815,7 @@ pnpm dev</pre>
         "lang.group": "Language",
         "kicker.hero": "A local guild of adventurers",
         "h1": "A local guild.<br />@mention the one you want.",
-        "lead": "Not another omniscient chat. Staff named seats. A channel is an open contract. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.",
+        "lead": "Not another omniscient chat. Staff named seats. A channel is an open contract. A turn that ran tools is verified before it writes to <code>MEMORY.md</code>. Next move is <code>npx @kevin5251984/guild web</code> — opens <code>http://127.0.0.1:7420</code>.",
         "cta.try": "Try the hall",
         "tok.engines": "engines",
         "tok.npx": "one line",
@@ -1899,6 +1903,8 @@ pnpm dev</pre>
         "faq.a4": "Your shell, gated to the workspace. Unset <code>GUILD_SANDBOX</code> = <code>workspace_write</code>. Read SECURITY.md before you point this at a machine you care about.",
         "faq.q5": "Can I schedule a later hall turn?",
         "faq.a5": "Yes. Ask a seat, or open the sidebar sheet. Times read like speech — every 2h, in 30m, <code>0 9 * * *</code> — and each job gets a sheet with pause, resume, and a test run that returns to that hall. A run cannot schedule another job.",
+        "faq.q6": "What changed recently?",
+        "faq.a6": "Incognito whisper keeps <code>MEMORY.md</code> untouched — clearing it wipes only that log. A turn that ran tools is verified before it writes to <code>MEMORY.md</code>, and an idle conversation can be compacted with memory restored. Cline Pass is available as an API-key provider in <code>/settings</code>.",
         "faq.tail": "Free. Open source under the MIT license."
       },
       "zh-TW": {
@@ -1909,7 +1915,7 @@ pnpm dev</pre>
         "lang.group": "語言",
         "kicker.hero": "本機冒險者工會",
         "h1": "本機冒險者工會。<br />用 @mention 點名你要的那個人。",
-        "lead": "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>。",
+        "lead": "不要再開一個什麼都會的聊天窗。用名字編制。頻道是一張沒結案的委託。跑過工具的回合，在寫入 <code>MEMORY.md</code> 前會先被驗證。下一步是 <code>npx @kevin5251984/guild web</code> — 打開 <code>http://127.0.0.1:7420</code>。",
         "cta.try": "進大廳",
         "tok.engines": "最低版本",
         "tok.npx": "一行",
@@ -1997,6 +2003,8 @@ pnpm dev</pre>
         "faq.a4": "你的 shell，鎖在 workspace。<code>GUILD_SANDBOX</code> 未設 = <code>workspace_write</code>。對你在意的機器動手之前，先讀 SECURITY.md。",
         "faq.q5": "之後的大廳回合要怎麼排？",
         "faq.a5": "可以。點名一席用 <code>cronjob</code>，或從側欄開一筆。時間照說話寫：每10分鐘、10分鐘後、每天9點、in 30m。每筆有自己的頁——暫停、恢復，測試執行會回到那個大廳。排程執行不能再排新的。",
+        "faq.q6": "近期有哪些更新？",
+        "faq.a6": "無痕密談不會動到 <code>MEMORY.md</code>；清掉只刪那筆紀錄。跑過工具的回合，在寫入 <code>MEMORY.md</code> 前會先被獨立驗證；閒置對話可以整理歷史並還原記憶。Cline Pass 可在 <code>/settings</code> 當 API key provider 用。",
         "faq.tail": "免費。MIT 開源。"
       },
       "zh-CN": {
@@ -2007,7 +2015,7 @@ pnpm dev</pre>
         "lang.group": "语言",
         "kicker.hero": "本地冒险者公会",
         "h1": "本地冒险者公会。<br />用 @mention 点名你要的那个人。",
-        "lead": "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>。",
+        "lead": "不要再开一个什么都会的聊天窗。用名字编制。频道是一张没结案的委托。跑过工具的回合，在写入 <code>MEMORY.md</code> 前会先被验证。下一步是 <code>npx @kevin5251984/guild web</code> — 打开 <code>http://127.0.0.1:7420</code>。",
         "cta.try": "进大厅",
         "tok.engines": "最低版本",
         "tok.npx": "一行",
@@ -2095,6 +2103,8 @@ pnpm dev</pre>
         "faq.a4": "你的 shell，锁在 workspace。<code>GUILD_SANDBOX</code> 未设 = <code>workspace_write</code>。对你在意的机器动手之前，先读 SECURITY.md。",
         "faq.q5": "之后的大厅回合要怎么排？",
         "faq.a5": "可以。点名一席用 <code>cronjob</code>，或从侧栏开一笔。时间照说话写：每10分钟、10分钟后、每天9点、in 30m。每笔有自己的页——暂停、恢复，测试执行会回到那个大厅。排程执行不能再排新的。",
+        "faq.q6": "近期有哪些更新？",
+        "faq.a6": "无痕密谈不会动到 <code>MEMORY.md</code>；清掉只删那笔记录。跑过工具的回合，在写入 <code>MEMORY.md</code> 前会先被独立验证；闲置对话可以整理历史并恢复记忆。Cline Pass 可在 <code>/settings</code> 当 API key provider 用。",
         "faq.tail": "免费。MIT 开源。"
       },
       "ja": {
@@ -2105,7 +2115,7 @@ pnpm dev</pre>
         "lang.group": "言語",
         "kicker.hero": "ローカルの冒険者ギルド",
         "h1": "ローカルの冒険者ギルド。<br />@mention で欲しい一人を指名。",
-        "lead": "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。",
+        "lead": "何でも屋のチャット窓は、もういらない。名前のある編成。チャンネルは結案していない依頼。ツールを実行したターンは、<code>MEMORY.md</code> に書き込む前に検証される。次は <code>npx @kevin5251984/guild web</code> — <code>http://127.0.0.1:7420</code> を開く。",
         "cta.try": "拠点をひらく",
         "tok.engines": "最低バージョン",
         "tok.npx": "1 行",
@@ -2193,6 +2203,8 @@ pnpm dev</pre>
         "faq.a4": "あなたのシェル。workspace に閉じる。<code>GUILD_SANDBOX</code> 未設定 = <code>workspace_write</code>。大事なマシンに向ける前に SECURITY.md を読む。",
         "faq.q5": "あとから拠点のターンを予約できる？",
         "faq.a5": "できる。席に <code>cronjob</code> を頼むか、サイドバーから。時間は in 30m、every 2h、0 9 * * * のように書ける。ジョブごとにシート——一時停止・再開、テスト実行はその拠点に戻る。cron 実行から cron は作れない。",
+        "faq.q6": "最近の更新内容は？",
+        "faq.a6": "無痕の密談は <code>MEMORY.md</code> に触れず、消去してもそのログだけが消える。ツールを実行したターンは、<code>MEMORY.md</code> へ書き込む前に検証される。アイドル中の会話は圧縮でき、メモリは復元される。Cline Pass は <code>/settings</code> で API key provider として選べる。",
         "faq.tail": "無料。MIT のオープンソース。"
       }
     };
