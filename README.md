@@ -48,6 +48,8 @@ Data: `GUILD_HOME` (default `~/.guild`). Rooms, messages, and trajectory live in
 
 **Branch a quest.** Open a branch from any message to explore a side task without cluttering the main contract. The child keeps the roster, `Channel.md`, and up to 20 recent messages. Closing a branch can optionally merge its `MEMORY.md` back into the parent channel.
 
+**Incognito whisper.** A whisper marked incognito runs with no `MEMORY.md` in context and no `Channel.md` — it is there to probe Soul, Agent, Position, and the harness. It writes nothing back: `MEMORY.md` is not updated, and the regular whisper and your files stay put. Clearing the incognito log deletes only that entry.
+
 **/m mobile hall.** Open `http://127.0.0.1:7420/m` (or your LAN/Tailscale address) from a mobile browser: read, reply, pause, stop, and steer over lightweight mobile HTTP without the desktop chrome. `/m` has no authentication; anyone with network access to the port can reach the hall.
 
 **Bring context.** Drag files into the composer, paste them, or pick them from the attachment menu — up to 12 per message. An image gets a hover preview; the preview is UI only, the model gets the text body. Too big to embed and Guild sends the path so the adventurer can `read` it.
