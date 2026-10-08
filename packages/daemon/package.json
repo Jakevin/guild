@@ -1,6 +1,6 @@
 {
   "name": "@kevin5251984/guild",
-  "version": "0.2.46",
+  "version": "0.2.47",
   "type": "module",
   "license": "MIT",
   "description": "A local guild of adventurers. npx @kevin5251984/guild web",
