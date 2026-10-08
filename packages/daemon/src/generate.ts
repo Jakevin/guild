@@ -354,6 +354,16 @@ function extractSkillIds(content: string): string[] | null {
   }
 }
 
+/** The guild master runs the guild. This seat is not on a roster. */
+export const MAIN_RULES = `# Guild Master
+You are the guild master (公會會長). You are not a seat on a channel roster, and you do not do a seat's job.
+You run the guild with three tools:
+- create_bot: hire a seat. It lands on #general. It is not a second guild master.
+- create_channel: open a channel. Do not name it general.
+- assign: put existing seats on a channel and give them the task. That starts their turn.
+Do not recruit by @handle. Do not use spawn to stand in for a seat. Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act only when the latest human message already asked.
+Stay quiet. After a tool succeeds, say what you created or who you assigned. When you name this role, say 公會會長.`;
+
 /** Seat exclusivity, spec handoffs, quiet unless blocked. */
 export const HALL_RULES = `# Hall
 Own this seat. Do not do another staffed bot's job.
@@ -423,6 +433,7 @@ export function buildChatSystem(input: {
   channelMemory?: string;
   whisper?: boolean;
   bare?: boolean;
+  main?: boolean;
   rosterHandles?: string[];
 }): string {
   const skills = input.skills ?? [];
@@ -512,13 +523,17 @@ export function buildChatSystem(input: {
     ? `# Channel MEMORY.md\nStanding notes for this channel, shared by everyone here. Auto-updated. ${MEMORY_LIVE_TASK_NOTE}\n\n${roomMem.slice(0, MEMORY_INJECT_CAP)}`
     : "";
   return [
-    `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
+    input.main
+      ? `You are ${input.botName} (@${input.handle}), the guild master (公會會長) of this Guild.`
+      : `You are ${input.botName} (@${input.handle}), a staffed bot in Guild.`,
     "Reply in the user's language. Be brief. Stay in character.",
-    input.whisper
-      ? input.bare
-        ? `${WHISPER_RULES}\n\n${BARE_WHISPER_NOTE}`
-        : WHISPER_RULES
-      : hallRulesFor(input.rosterHandles),
+    input.main
+      ? MAIN_RULES
+      : input.whisper
+        ? input.bare
+          ? `${WHISPER_RULES}\n\n${BARE_WHISPER_NOTE}`
+          : WHISPER_RULES
+        : hallRulesFor(input.rosterHandles),
     hostContext(),
     TOOL_SYSTEM,
     skillLine,
@@ -553,6 +568,7 @@ export async function chatReply(input: {
   channelMemory?: string;
   whisper?: boolean;
   bare?: boolean;
+  main?: boolean;
   rosterHandles?: string[];
   compact?: CompactCheckpoint | null;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
@@ -583,6 +599,7 @@ export async function chatReply(input: {
     channelMemory: input.channelMemory,
     whisper: input.whisper,
     bare: input.bare,
+    main: input.main,
     rosterHandles: input.rosterHandles,
   });
   const llm = input.dataDir
@@ -628,6 +645,7 @@ async function tryChatLlm(
     channelMemory?: string;
     whisper?: boolean;
     bare?: boolean;
+    main?: boolean;
     compact?: CompactCheckpoint | null;
     onCompact?: (checkpoint: CompactCheckpoint) => void;
     onProgress?: (update: ToolProgress) => void;
@@ -664,6 +682,7 @@ async function tryChatLlm(
     channelMemory: input.channelMemory,
     whisper: input.whisper,
     bare: input.bare,
+    main: input.main,
     rosterHandles: input.rosterHandles,
   });
   const peek = resolveLlm(dataDir, env, "chat", prefer);
@@ -720,9 +739,11 @@ async function tryChatLlm(
     botMemory: input.botMemory ?? "",
     channelMemory: input.channelMemory ?? "",
     userMessage: input.userMessage,
-    hallRules: input.whisper
-      ? WHISPER_RULES
-      : hallRulesFor(input.rosterHandles),
+    hallRules: input.main
+      ? MAIN_RULES
+      : input.whisper
+        ? WHISPER_RULES
+        : hallRulesFor(input.rosterHandles),
   };
   const result = await llmComplete({
     dataDir,
@@ -754,6 +775,7 @@ async function tryChatLlm(
         .map((item) => item.content.trim())
         .slice(-6),
       ...(input.botId ? { botId: input.botId } : {}),
+      ...(input.main ? { main: true } : {}),
       ...(input.cronRun ? { cronRun: true } : {}),
       ...policy,
       ...(input.dispatch ? { dispatch: input.dispatch } : {}),

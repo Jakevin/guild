@@ -8,8 +8,8 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 大廳</title>
-    <link rel="stylesheet" href="/chat.css?v=memory-log" />
-    <script src="/i18n.js?v=memory-log"></script>
+    <link rel="stylesheet" href="/chat.css?v=main-bot" />
+    <script src="/i18n.js?v=dm-clear"></script>
     <script src="/md.js?v=file-chip"></script>
   </head>
   <body class="grok" data-i18n-page="chat">
@@ -33,6 +33,20 @@
           </button>
         </div>
         <ul class="navlist" id="cron-nav"></ul>
+      </div>
+      <div class="nav-sec" data-nav-sec="main">
+        <div class="section-h">
+          <button type="button" class="sec-fold" data-fold="main" aria-expanded="true" aria-controls="main-nav">
+            <span class="sec-chev" aria-hidden="true"></span>
+            <span class="sec-ico" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <path d="M8 2.2 9.4 5.8l3.8.3-2.9 2.4.9 3.7L8 10.4 4.8 12.2l.9-3.7L2.8 6.1l3.8-.3L8 2.2Z"/>
+              </svg>
+            </span>
+            <span data-i18n="mainBot">公會會長</span>
+          </button>
+        </div>
+        <ul class="navlist" id="main-nav"></ul>
       </div>
       <div class="nav-sec" data-nav-sec="channels">
         <div class="section-h">
@@ -519,9 +533,10 @@
               channels: Boolean(raw.channels),
               dms: Boolean(raw.dms),
               cron: raw.cron == null ? true : Boolean(raw.cron),
+              main: raw.main == null ? false : Boolean(raw.main),
             };
           } catch {
-            return { channels: false, dms: false, cron: true };
+            return { channels: false, dms: false, cron: true, main: false };
           }
         })(),
       };
@@ -1734,7 +1749,7 @@
         return Boolean(state.navFold[sec]);
       }
       function applyNavFold() {
-        ["channels", "dms", "cron"].forEach((sec) => {
+        ["channels", "dms", "cron", "main"].forEach((sec) => {
           const el = document.querySelector('[data-nav-sec="' + sec + '"]');
           if (!el) return;
           const folded = navSecFolded(sec);
@@ -1871,8 +1886,44 @@
             );
           })
           .join("");
+        const mainBox = document.getElementById("main-nav");
+        const mainBot = (state.bots || []).find((bot) => bot.main);
+        if (mainBox) {
+          if (!mainBot) {
+            mainBox.innerHTML = q
+              ? ""
+              : '<li class="nav-empty"><a class="main-empty" href="/studio">' +
+                escapeHtml(t("mainBot.empty")) +
+                "</a></li>";
+          } else {
+            const hay = (mainBot.name + " " + mainBot.handle).toLowerCase();
+            const show = !q || hay.includes(q);
+            mainBox.innerHTML = show
+              ? navRowHtml({
+                  href: "#d/" + encodeURIComponent(mainBot.id),
+                  on: state.kind === "dm" && !state.bare && state.id === mainBot.id,
+                  av:
+                    '<span class="avatar" style="background:' +
+                    hue(mainBot.handle) +
+                    '">' +
+                    avatarFace(mainBot) +
+                    "</span>",
+                  name: "★ " + mainBot.name,
+                  updatedAt: mainBot.updatedAt,
+                  preview: botModelMeta(mainBot),
+                  busy: Boolean(
+                    state.busyBots[mainBot.id] ||
+                      (state.serverLive || []).some((row) => row.botId === mainBot.id),
+                  ),
+                  unread: state.unread.has(roomKey("dm", mainBot.id)),
+                  chip: t("mainBot.badge"),
+                })
+              : "";
+          }
+        }
         const bots = state.bots
           .filter((bot) => {
+            if (bot.main) return false;
             const hay = (bot.name + " " + bot.handle).toLowerCase();
             return !q || hay.includes(q);
           })
@@ -2038,9 +2089,14 @@
           "</div>"
         );
       }
-      function setBareClearVisible(on) {
+      function setBareClearVisible() {
         const btn = document.getElementById("bare-clear");
-        if (btn) btn.hidden = !on;
+        if (!btn) return;
+        const on = state.kind === "dm" && !isPeerDm();
+        btn.hidden = !on;
+        const help = state.bare ? "bare.clearHelp" : "dm.clearHelp";
+        btn.setAttribute("data-i18n-title", help);
+        btn.title = t(help);
       }
       function setBareToggleVisible(on) {
         const wrap = document.getElementById("bare-toggle");
@@ -2065,7 +2121,7 @@
             peerSub.textContent = "";
             peerSub.classList.remove("bare");
             setBareToggleVisible(false);
-            setBareClearVisible(false);
+            setBareClearVisible();
             wrap.hidden = true;
             document.getElementById("members-pop").hidden = true;
             av.style.background = "transparent";
@@ -2090,12 +2146,14 @@
             return;
           } else {
           const bot = botById(state.id);
-          document.getElementById("title").textContent = bot ? bot.name : t("dm");
+          document.getElementById("title").textContent = bot
+            ? (bot.main ? "★ " : "") + bot.name
+            : t("dm");
           const sub = document.getElementById("subtitle");
           sub.textContent = state.bare ? t("bare.subtitle") : "";
           sub.classList.toggle("bare", Boolean(state.bare));
           setBareToggleVisible(true);
-          setBareClearVisible(Boolean(state.bare));
+          setBareClearVisible();
           wrap.hidden = true;
           document.getElementById("members-pop").hidden = true;
           av.style.background = bot ? hue(bot.handle) : "#333";
@@ -2124,7 +2182,7 @@
         chSub.textContent = "";
         chSub.classList.remove("bare");
         setBareToggleVisible(false);
-        setBareClearVisible(false);
+        setBareClearVisible();
         av.textContent = "#";
         av.style.background = "";
         av.classList.add("hash-av");
@@ -2151,7 +2209,9 @@
               max: CHANNEL_ROSTER_CAP,
             });
         const taken = new Set((ch && ch.memberIds) || members.map((b) => b.id));
-        const outsiders = (state.bots || []).filter((bot) => !taken.has(bot.id));
+        const outsiders = (state.bots || []).filter(
+          (bot) => !bot.main && !taken.has(bot.id),
+        );
         const full = rosterFull(ch);
         document.getElementById("members-in").innerHTML = members.length
           ? members.map((bot) => memberRowHtml(bot, "in", locked, full)).join("")
@@ -3465,10 +3525,11 @@
         });
       }
       async function clearBareDm() {
-        if (!state.bare) return;
+        if (state.kind !== "dm" || isPeerDm() || !state.id) return;
+        const bare = Boolean(state.bare);
         const sure = await askConfirm({
           title: t("bare.clear"),
-          body: t("bare.clearConfirm"),
+          body: t(bare ? "bare.clearConfirm" : "dm.clearConfirm"),
           danger: true,
           ok: t("bare.clear"),
         });
@@ -3483,7 +3544,7 @@
         if (state.editingId) state.editingId = null;
         if (state.statsId) state.statsId = null;
         renderThread();
-        showToast(t("bare.cleared"));
+        showToast(t(bare ? "bare.cleared" : "dm.cleared"));
       }
       async function deleteChatMessage(id) {
         if (!id) return;
@@ -4680,7 +4741,7 @@
         if (state.kind !== "channel") return;
         const ch = currentChannel();
         const taken = new Set((ch && ch.memberIds) || []);
-        const available = state.bots.filter((bot) => !taken.has(bot.id));
+        const available = state.bots.filter((bot) => !bot.main && !taken.has(bot.id));
         const open = Math.max(
           0,
           CHANNEL_ROSTER_CAP - ((ch && ch.memberIds && ch.memberIds.length) || 0),
@@ -5584,7 +5645,7 @@
         (state.bots || []).forEach((bot) => {
           rows.push({
             id: "d:" + bot.id,
-            label: bot.name,
+            label: (bot.main ? "★ " : "") + bot.name,
             hint: "@" + bot.handle,
           });
         });
@@ -6667,6 +6728,7 @@
           );
         });
         const bots = (state.bots || []).filter((bot) => {
+          if (bot.main) return false;
           if (!needle) return true;
           return (
             bot.handle.toLowerCase().includes(needle) ||

@@ -850,7 +850,16 @@ export async function llmComplete(input: {
         : target.transport === "antigravity"
           ? "Antigravity"
           : "";
-    if (!traces.length && !label) return null;
+    if (!traces.length && !label) {
+      return {
+        text: `模型請求失敗：${message}`,
+        provider: target.providerId,
+        model: target.model,
+        traces,
+        thinking: "",
+        usage: { provider: target.providerId, model: target.model },
+      };
+    }
     return {
       text: label ? `模型請求失敗：${label}: ${message}` : `模型請求失敗：${message}`,
       provider: target.providerId,
@@ -872,6 +881,68 @@ type DispatchResult = {
 
 function llmFetch(target: LlmTarget): typeof fetch {
   return target.fetch ?? fetch;
+}
+
+function clineGateway(target: LlmTarget): boolean {
+  return target.providerId === "cline-pass" || /api\.cline\.bot/i.test(target.baseUrl);
+}
+
+export type OpenAiStreamMessage = {
+  content: string;
+  reasoning: string;
+  toolCalls: { id: string; name: string; arguments: string }[];
+};
+
+/** Join OpenAI chat-completion SSE into one assistant message. */
+export function assembleOpenAiChatStream(raw: string): OpenAiStreamMessage {
+  const calls = new Map<number, { id: string; name: string; arguments: string }>();
+  let content = "";
+  let reasoning = "";
+  for (const line of raw.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let event: {
+      choices?: {
+        delta?: {
+          content?: string;
+          reasoning?: string;
+          reasoning_content?: string;
+          tool_calls?: {
+            index?: number;
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }[];
+        };
+      }[];
+    };
+    try {
+      event = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    const delta = event.choices?.[0]?.delta;
+    if (!delta) continue;
+    if (typeof delta.content === "string") content += delta.content;
+    if (typeof delta.reasoning_content === "string") reasoning += delta.reasoning_content;
+    else if (typeof delta.reasoning === "string") reasoning += delta.reasoning;
+    for (const call of delta.tool_calls ?? []) {
+      const index = call.index ?? 0;
+      const current = calls.get(index) ?? { id: "", name: "", arguments: "" };
+      if (call.id) current.id = call.id;
+      if (call.function?.name) current.name += call.function.name;
+      if (call.function?.arguments) current.arguments += call.function.arguments;
+      calls.set(index, current);
+    }
+  }
+  return {
+    content,
+    reasoning,
+    toolCalls: [...calls.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, call]) => call)
+      .filter((call) => call.id && call.name),
+  };
 }
 
 async function commandCodeAwareFetch(
@@ -1042,9 +1113,13 @@ async function completeOpenAiTools(
       const response = await withTransientRetries(
         async () => {
           throwIfAborted(ctx);
+          const stream = clineGateway(target);
           const res = await llmFetch(target)(`${target.baseUrl}/chat/completions`, {
             method: "POST",
-            headers: llmRequestHeaders(target),
+            headers: {
+              ...llmRequestHeaders(target),
+              ...(stream ? { accept: "text/event-stream" } : {}),
+            },
             body: JSON.stringify({
               model: target.model,
               temperature,
@@ -1054,6 +1129,7 @@ async function completeOpenAiTools(
                 ? {}
                 : { tools: catalog, tool_choice: "auto" }),
               ...reasoningPayload(target.providerId, target.baseUrl, effort),
+              ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
             }),
             signal: roundSignal(ctx),
           });
@@ -1074,6 +1150,32 @@ async function completeOpenAiTools(
           calls: [],
           text: `模型請求失敗：HTTP ${response.status}`,
           thinking: "",
+        };
+      }
+      if (clineGateway(target)) {
+        const assembled = assembleOpenAiChatStream(await response.text());
+        const message: ChatMsg = {
+          role: "assistant",
+          content: assembled.content,
+          reasoning_content: assembled.reasoning,
+          tool_calls: assembled.toolCalls.map((call) => ({
+            id: call.id,
+            type: "function",
+            function: { name: call.name, arguments: call.arguments },
+          })),
+        };
+        lastAssistant = message;
+        const calls = assembled.toolCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          args: parseToolArgs(call.arguments || "{}", false),
+        }));
+        const text = assembled.content.trim();
+        const thinking = assembled.reasoning.trim();
+        return {
+          calls,
+          text: text || (calls.length ? "" : thinking),
+          thinking,
         };
       }
       const data = (await response.json()) as {
@@ -1508,18 +1610,27 @@ async function completeOpenAi(
   effort?: string,
 ): Promise<string | null> {
   const url = `${target.baseUrl}/chat/completions`;
+  const stream = clineGateway(target);
   const response = await llmFetch(target)(url, {
     method: "POST",
-    headers: llmRequestHeaders(target),
+    headers: {
+      ...llmRequestHeaders(target),
+      ...(stream ? { accept: "text/event-stream" } : {}),
+    },
     body: JSON.stringify({
       model: target.model,
       temperature,
       messages: [{ role: "system", content: system }, ...messages],
       ...reasoningPayload(target.providerId, target.baseUrl, effort),
+      ...(stream ? { stream: true } : {}),
     }),
     signal: AbortSignal.timeout(STREAM_IDLE_TIMEOUT_MS),
   });
   if (!response.ok) return null;
+  if (stream) {
+    const assembled = assembleOpenAiChatStream(await response.text());
+    return assembled.content.trim() || assembled.reasoning.trim() || null;
+  }
   const data = (await response.json()) as {
     choices?: { message?: { content?: string } }[];
   };

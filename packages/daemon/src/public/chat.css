@@ -405,6 +405,11 @@ body.grok .nav-scroll {
   color: var(--muted);
   font-size: 0.78rem;
 }
+a.main-empty {
+  color: var(--signal);
+  text-decoration: none;
+}
+a.main-empty:hover { text-decoration: underline; }
 .add-ch {
   margin: 0;
   width: 22px;
@@ -847,6 +852,7 @@ body.grok .sidebar .section-h {
 }
 body.grok .sidebar .sec-fold:hover { color: #F4E3A4; }
 body.grok .sidebar .nav-empty { color: #B08960; }
+body.grok .sidebar a.main-empty { color: var(--signal); }
 body.grok .sidebar .add-ch {
   color: var(--pin);
   border-radius: 2px;

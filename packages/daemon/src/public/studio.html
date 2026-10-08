@@ -8,7 +8,7 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 編制</title>
-    <script src="/i18n.js"></script>
+    <script src="/i18n.js?v=guild-master"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -1008,12 +1008,25 @@
         }
       }
       function npcActs(bot) {
+        const mainAct = bot.main
+          ? '<button type="button" data-clear-main="' +
+            encodeURIComponent(bot.id) +
+            '">' +
+            t("mainBot.clear") +
+            "</button>"
+          : '<button type="button" data-set-main="' +
+            encodeURIComponent(bot.id) +
+            '">' +
+            t("mainBot.set") +
+            "</button>";
         return (
           '<a href="/#d/' +
           encodeURIComponent(bot.id) +
           '">' +
           t("dm") +
-          '</a><a href="/edit/' +
+          "</a>" +
+          mainAct +
+          '<a href="/edit/' +
           encodeURIComponent(bot.id) +
           '">' +
           t("bot.settings") +
@@ -1097,7 +1110,7 @@
               '" href="/edit/' +
               encodeURIComponent(bot.id) +
               '"><strong>' +
-              esc(bot.name || bot.handle) +
+              esc((bot.main ? "★ " : "") + (bot.name || bot.handle)) +
               "</strong><em>@" +
               esc(bot.handle) +
               "</em></a>"
@@ -1140,7 +1153,7 @@
               "</span>" +
               npcSprite(bot) +
               '<span class="tag">' +
-              esc(bot.name) +
+              esc((bot.main ? "★ " : "") + bot.name) +
               "</span></button>",
           );
         });
@@ -1179,11 +1192,52 @@
         if (!bot) return;
         talk(bot.name, bot.oneLiner || t("studio.drink"), npcActs(bot), bot.portrait);
       });
+      async function markMain(id, on) {
+        const bot = barBots.find((item) => item.id === id);
+        try {
+          const res = await fetch("/main-bot", on
+            ? {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ botId: id }),
+              }
+            : { method: "DELETE" });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            if (bot) talk(bot.name, body.error || t("saveFailed"), npcActs(bot), bot.portrait);
+            return;
+          }
+          barBots = barBots.map((item) =>
+            Object.assign({}, item, { main: on && item.id === id }),
+          );
+          await renderBar(barBots);
+          document.querySelectorAll(".rpg-npc").forEach((el) => {
+            el.classList.toggle("on", el.getAttribute("data-id") === id);
+          });
+          const next = barBots.find((item) => item.id === id);
+          if (next) {
+            talk(
+              next.name,
+              on ? t("mainBot.done") : t("mainBot.cleared"),
+              npcActs(next),
+              next.portrait,
+            );
+          }
+        } catch (err) {
+          if (bot) talk(bot.name, (err && err.message) || t("saveFailed"), npcActs(bot), bot.portrait);
+        }
+      }
       document.getElementById("rpg-acts").addEventListener("click", (event) => {
         const link = event.target.closest('a[href="#hire"]');
         if (link) document.getElementById("hire").hidden = false;
         const look = event.target.closest("[data-look]");
         if (look) requestLook(look.getAttribute("data-look"));
+        const setMain = event.target.closest("[data-set-main]");
+        if (setMain) markMain(decodeURIComponent(setMain.getAttribute("data-set-main")), true);
+        const clearMain = event.target.closest("[data-clear-main]");
+        if (clearMain) {
+          markMain(decodeURIComponent(clearMain.getAttribute("data-clear-main")), false);
+        }
       });
       document.getElementById("gen-look").addEventListener("click", () => {
         if (EDIT_ID) requestLook(EDIT_ID);

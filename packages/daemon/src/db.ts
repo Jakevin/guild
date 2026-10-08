@@ -529,6 +529,25 @@ export class GuildDb {
     }
   }
 
+  getMeta(key: string): string {
+    const row = this.sqlite
+      .prepare("SELECT value FROM meta WHERE key = ?")
+      .get(key) as { value?: unknown } | undefined;
+    return typeof row?.value === "string" ? row.value : "";
+  }
+
+  setMeta(key: string, value: string): void {
+    this.sqlite
+      .prepare(
+        "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run(key, value);
+  }
+
+  deleteMeta(key: string): void {
+    this.sqlite.prepare("DELETE FROM meta WHERE key = ?").run(key);
+  }
+
   close(): void {
     try {
       this.sqlite.close();

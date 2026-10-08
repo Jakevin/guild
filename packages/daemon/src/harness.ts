@@ -178,6 +178,9 @@ export function gateTool(
 ): SandboxRefusal | null {
   const sandbox = parseSandbox(input.sandbox);
   if (sandbox === "full_access") return null;
+  if (name === "create_bot" || name === "create_channel" || name === "assign") {
+    return null;
+  }
 
   if (sandbox === "read_only") {
     if (

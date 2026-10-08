@@ -46,6 +46,11 @@ export type Bot = {
   portrait?: string;
   /** Chat model for this bot. Missing → guild default. */
   model?: ModelRef | null;
+  /**
+   * The one guild master (公會會長). Stored in guild meta, not on the seat file.
+   * Absent on ordinary seats.
+   */
+  main?: boolean;
   createdAt: string;
 };
 

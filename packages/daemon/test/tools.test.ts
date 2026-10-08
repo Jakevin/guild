@@ -160,6 +160,30 @@ test("tool prompt claims local access", () => {
   assert.ok(props?.delivery);
 });
 
+test("guild master create_bot is not collapsed to a path argument", () => {
+  const tools = openaiTools([], { main: true });
+  const bot = tools.find((tool) => tool.function.name === "create_bot");
+  assert.ok(bot);
+  const params = bot.function.parameters as {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+  assert.deepEqual(params.required, ["name", "handle"]);
+  assert.equal(params.properties?.path, undefined);
+  const channel = tools.find((tool) => tool.function.name === "create_channel");
+  const assign = tools.find((tool) => tool.function.name === "assign");
+  assert.ok(channel);
+  assert.ok(assign);
+  assert.deepEqual(
+    (channel.function.parameters as { required?: string[] }).required,
+    ["name"],
+  );
+  assert.deepEqual(
+    (assign.function.parameters as { required?: string[] }).required,
+    ["channel", "handles", "task"],
+  );
+});
+
 test("SubAgent aux role is on the models page and resolveLlm uses it", () => {
   assert.ok(AUX_ROLES.some((role) => role.id === "spawn" && role.name === "SubAgent"));
   assert.ok(

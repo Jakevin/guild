@@ -30,6 +30,7 @@ import {
   pickBotSkills,
   generateBotLook,
   getBotDetail,
+  getMainBot,
   getLiveTurn,
   abortLiveTurn,
   pauseLiveTurn,
@@ -40,6 +41,7 @@ import {
   mergeModelsFile,
   publicModels,
   setShownModels,
+  setMainBot,
   refreshClinePassCatalog,
   refreshOpenCodeFreeCatalog,
   refreshReasoningCatalog,
@@ -1554,6 +1556,26 @@ export async function handleRequest(
         ...modelsPayload(store.dataDir, extras, env),
         synced: models.length,
       });
+      return;
+    }
+
+    if (path === "/main-bot" && method === "GET") {
+      json(res, 200, getMainBot(store));
+      return;
+    }
+    if (path === "/main-bot" && method === "PUT") {
+      const body = asRecord(await readJson(req));
+      const botId = str(body, "botId");
+      if (!botId) {
+        json(res, 400, { error: "botId required" });
+        return;
+      }
+      json(res, 200, setMainBot(store, botId));
+      return;
+    }
+    if (path === "/main-bot" && method === "DELETE") {
+      store.clearMainBot();
+      json(res, 200, getMainBot(store));
       return;
     }
 

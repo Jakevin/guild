@@ -87,7 +87,7 @@
           '"></canvas>' +
           '<div class="desk-sprite"><span class="monitor"></span></div>' +
           '<span class="nameplate">' +
-          escapeHtml(bot.name) +
+          escapeHtml((bot.main ? "★ " : "") + bot.name) +
           "</span></a>"
         );
       }

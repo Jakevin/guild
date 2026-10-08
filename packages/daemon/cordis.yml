@@ -14,6 +14,8 @@
   name: './src/plugins/llm.ts'
 - id: tools
   name: './src/plugins/tools.ts'
+- id: mainBot
+  name: './src/plugins/main-bot.ts'
 - id: cron
   name: './src/plugins/cron.ts'
 - id: mcp

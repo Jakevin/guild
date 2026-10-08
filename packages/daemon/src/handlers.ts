@@ -107,7 +107,21 @@ export function healthPayload(): HealthResponse {
 }
 
 export function listBench(store: GuildStore): BenchListing {
-  return store.listBots();
+  const main = store.mainBotId();
+  return store.listBots().map((bot) =>
+    bot.id === main ? { ...bot, main: true } : bot,
+  );
+}
+
+export function getMainBot(store: GuildStore) {
+  const id = store.mainBotId();
+  const bot = id ? store.getBot(id) : null;
+  return { bot: bot ? { ...bot, main: true as const } : null };
+}
+
+export function setMainBot(store: GuildStore, botId: string) {
+  const bot = store.setMainBot(botId);
+  return { ...bot, main: true as const };
 }
 
 export function listLibrary(store: GuildStore, kind: LibraryKind) {
@@ -272,7 +286,7 @@ export function createBot(
 }
 
 export function getBotDetail(store: GuildStore, id: string) {
-  return store.botDetail(id);
+  return { ...store.botDetail(id), main: store.isMainBot(id) };
 }
 
 export function updateBot(
@@ -527,10 +541,12 @@ export function workspace(store: GuildStore) {
       lastMessage: last ?? null,
     };
   });
+  const mainId = store.mainBotId();
   const listed = bots.map((bot) => {
     const last = store.lastMessagePreview(`dm-${bot.id}`);
     return {
       ...bot,
+      ...(bot.id === mainId ? { main: true as const } : {}),
       updatedAt: last?.createdAt,
       lastMessage: last ?? null,
     };
@@ -1133,6 +1149,7 @@ export function chatTurnForBot(
           : "",
     whisper: room?.kind === "dm" || isBareDmId(roomId),
     bare: isBareDmId(roomId),
+    main: store.isMainBot(botId),
     rosterHandles,
     compact: store.readCompact(roomId),
     onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),

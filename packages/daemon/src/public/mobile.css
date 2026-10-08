@@ -339,6 +339,11 @@ textarea:focus-visible {
   font-size: 0.9rem;
   padding: 1.2rem 0.4rem;
 }
+a.main-empty {
+  color: #C9A227;
+  text-decoration: none;
+}
+a.main-empty:hover { text-decoration: underline; }
 .msg {
   display: flex;
   gap: 0.65rem;

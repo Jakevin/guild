@@ -53,6 +53,7 @@ const MARKDOWN: Record<LibraryKind, string> = {
 };
 
 const GENERAL_CHANNEL_ID = "channel-general";
+const MAIN_BOT_META = "mainBotId";
 const NAV_PREVIEW_CAP = 120;
 /** Incognito whisper. kind stays dm — SCHEMA_VERSION 2 additive. */
 export const BARE_DM_PREFIX = "bare-";
@@ -687,7 +688,60 @@ export class GuildStore {
     }
     this.removeBotDir(bot.id);
     this.markRetired(bot.handle);
+    if (this.db.getMeta(MAIN_BOT_META) === id) this.db.deleteMeta(MAIN_BOT_META);
     return { ok: true, id: bot.id };
+  }
+
+  /** The guild master. Empty when unset or the seat is gone. */
+  mainBotId(): string {
+    const id = this.db.getMeta(MAIN_BOT_META).trim();
+    if (!id || !this.getBot(id)) return "";
+    return id;
+  }
+
+  isMainBot(id: string): boolean {
+    return Boolean(id) && this.mainBotId() === id;
+  }
+
+  /** A former guild master is a normal seat again, so #general takes them back. */
+  private seatOnGeneral(botId: string): void {
+    if (!botId || !this.getBot(botId)) return;
+    const room = this.getRoom(GENERAL_CHANNEL_ID);
+    if (!room || room.memberIds.includes(botId)) return;
+    this.writeRoom({ ...room, memberIds: [...room.memberIds, botId] });
+  }
+
+  /**
+   * Mark one seat as guild master and pull it out of every channel roster.
+   * The guild master runs the guild and is not a seat on a quest.
+   */
+  setMainBot(botId: string): Bot {
+    const bot = this.getBot(botId);
+    if (!bot) throw new StoreError(404, "bot not found");
+    const prev = this.mainBotId();
+    this.db.setMeta(MAIN_BOT_META, bot.id);
+    for (const channel of this.listChannels()) {
+      const memberIds = channel.memberIds.filter((id) => id !== bot.id);
+      const assign = channel.assign
+        ?.map((wave) => wave.filter((id) => id !== bot.id))
+        .filter((wave) => wave.length > 0);
+      const membersChanged = memberIds.length !== channel.memberIds.length;
+      const assignChanged = Boolean(channel.assign?.some((wave) => wave.includes(bot.id)));
+      if (!membersChanged && !assignChanged) continue;
+      this.writeRoom({
+        ...channel,
+        memberIds,
+        assign: assign?.length ? assign : undefined,
+      });
+    }
+    if (prev && prev !== bot.id) this.seatOnGeneral(prev);
+    return bot;
+  }
+
+  clearMainBot(): void {
+    const prev = this.mainBotId();
+    this.db.deleteMeta(MAIN_BOT_META);
+    if (prev) this.seatOnGeneral(prev);
   }
 
   deleteChannel(id: string): { ok: true; id: string } {
@@ -870,7 +924,10 @@ export class GuildStore {
   }
 
   private syncGeneralMembers(room: Room): void {
-    const botIds = this.listBots().map((bot) => bot.id);
+    const main = this.mainBotId();
+    const botIds = this.listBots()
+      .map((bot) => bot.id)
+      .filter((id) => id !== main);
     const same =
       botIds.length === room.memberIds.length &&
       botIds.every((id) => room.memberIds.includes(id));
@@ -1089,12 +1146,13 @@ export class GuildStore {
     return room;
   }
 
-  /** Wipe an incognito whisper. Regular DM and MEMORY.md stay. */
+  /** Wipe one 1:1 whisper log. The other whisper and MEMORY.md stay. */
   clearBareRoom(roomId: string): { ok: true; id: string } {
-    if (!isBareDmId(roomId)) {
-      throw new StoreError(400, "can only clear incognito whispers");
-    }
-    if (!this.getRoom(roomId)) throw new StoreError(404, "room not found");
+    const room = this.getRoom(roomId);
+    if (!room) throw new StoreError(404, "room not found");
+    const whisper =
+      room.kind === "dm" && (roomId.startsWith("dm-") || isBareDmId(roomId));
+    if (!whisper) throw new StoreError(400, "can only clear a whisper");
     this.abortTurn(roomId);
     this.db.clearRoomHistory(roomId);
     return { ok: true, id: roomId };
@@ -1161,6 +1219,9 @@ export class GuildStore {
       throw new StoreError(400, "can only add bots to a channel");
     }
     if (!this.getBot(botId)) throw new StoreError(400, "bot not found");
+    if (this.isMainBot(botId)) {
+      throw new StoreError(400, "公會會長不進據點編制。");
+    }
     if (room.memberIds.includes(botId)) return room;
     if (
       !isGeneralChannel(room) &&

@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parseClinePassModels } from "../src/cline-pass.ts";
-import { readModelsFile, refreshClinePassCatalog, writeModelsFile } from "../src/llm.ts";
+import {
+  assembleOpenAiChatStream,
+  readModelsFile,
+  refreshClinePassCatalog,
+  writeModelsFile,
+} from "../src/llm.ts";
 import { reasoningPayload } from "../src/reasoning-catalog.ts";
 
 test("parseClinePassModels keeps subscription ids", () => {
@@ -55,6 +60,20 @@ test("catalog refresh adds a newly published Cline Pass model", async () => {
   const ids = readModelsFile(dir).providers["cline-pass"]?.models.map((row) => row.id) ?? [];
   assert.ok(ids.includes("cline-pass/glm-5.3-flash"));
   assert.ok(ids.includes("cline-pass/new-model"));
+});
+
+test("Cline chat SSE keeps text and tool call fragments", () => {
+  const message = assembleOpenAiChatStream(
+    [
+      'data: {"choices":[{"delta":{"content":"pong"}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":"{\\"path\\":"}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"a.ts\\"}"}}]}}]}',
+      "data: [DONE]",
+    ].join("\n"),
+  );
+  assert.equal(message.content, "pong");
+  assert.equal(message.toolCalls[0]?.name, "read");
+  assert.equal(message.toolCalls[0]?.arguments, '{"path":"a.ts"}');
 });
 
 test("Cline Pass sends reasoning_effort only", () => {

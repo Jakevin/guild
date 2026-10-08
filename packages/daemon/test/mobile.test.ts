@@ -74,6 +74,7 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /id="bare-clear"/);
   assert.match(html, /bare\.subtitle/);
   assert.match(html, /bare\.clearConfirm/);
+  assert.match(html, /dm\.clearConfirm/);
   assert.match(css, /\.bare-switch/);
   assert.match(html, /payload\.mentions/);
   assert.match(html, /deepDiving/);

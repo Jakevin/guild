@@ -85,6 +85,8 @@ export type ToolContext = {
   skipJevNudge?: boolean;
   /** Seat running this turn. cronjob create defaults here. */
   botId?: string;
+  /** This turn is the guild master. Unlocks create_bot, create_channel, assign. */
+  main?: boolean;
   /** Hermes: cron child sessions cannot manage cron. */
   cronRun?: boolean;
   /** Pause the live row until the user allows computer use. */
@@ -352,6 +354,40 @@ export function guildTools(
       name: Type.String({ description: "Skill name or slug" }),
     }),
   });
+  if (ctx.main) {
+    tools.push(
+      {
+        name: "create_bot",
+        description:
+          "Hire a guild seat. It joins #general. It does not become the guild master. Needs a name and a unique @handle.",
+        parameters: Type.Object({
+          name: Type.String({ description: "Display name" }),
+          handle: Type.String({ description: "Handle without @" }),
+          one_liner: Type.Optional(Type.String({ description: "One-line job" })),
+        }),
+      },
+      {
+        name: "create_channel",
+        description:
+          "Open a channel. The roster starts empty. Cannot be named general.",
+        parameters: Type.Object({
+          name: Type.String({ description: "Channel name without #" }),
+        }),
+      },
+      {
+        name: "assign",
+        description:
+          "Add existing seats to a channel and hand them the task. Handles must already exist. This starts their turn.",
+        parameters: Type.Object({
+          channel: Type.String({ description: "Channel name or id" }),
+          handles: Type.String({
+            description: "Seat handles, separated by spaces. Example: infra pm",
+          }),
+          task: Type.String({ description: "What those seats should do" }),
+        }),
+      },
+    );
+  }
   if ((ctx.spawnDepth ?? 0) < 1) {
     const agents = ctx.subagents ?? [];
     const listed = agents
@@ -593,6 +629,40 @@ function openaiParameters(name: string): {
       required: ["action"],
     };
   }
+  if (name === "create_bot") {
+    return {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Display name" },
+        handle: { type: "string", description: "Handle without @" },
+        one_liner: { type: "string", description: "One-line job" },
+      },
+      required: ["name", "handle"],
+    };
+  }
+  if (name === "create_channel") {
+    return {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Channel name without #" },
+      },
+      required: ["name"],
+    };
+  }
+  if (name === "assign") {
+    return {
+      type: "object",
+      properties: {
+        channel: { type: "string", description: "Channel name or id" },
+        handles: {
+          type: "string",
+          description: "Seat handles, separated by spaces. Example: infra pm",
+        },
+        task: { type: "string", description: "What those seats should do" },
+      },
+      required: ["channel", "handles", "task"],
+    };
+  }
   return {
     type: "object",
     properties: { path: { type: "string" } },
@@ -677,6 +747,7 @@ export function suggestToolName(name: string, known: string[]): string | null {
 
 export function knownToolNames(ctx: ToolContext = {}): string[] {
   const names: string[] = [...BUILTIN_TOOL_NAMES];
+  if (ctx.main) names.push("create_bot", "create_channel", "assign");
   for (const tool of ctx.mcpTools ?? []) {
     if (tool.callName) names.push(tool.callName);
   }

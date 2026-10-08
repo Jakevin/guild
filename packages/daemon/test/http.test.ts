@@ -770,6 +770,7 @@ test("home is chat and studio is the roster", () => {
   assert.match(home, /id="bot-card-bare"[\s\S]*id="bot-card-dm"/);
   assert.match(home, /id="bare-clear"/);
   assert.match(home, /function clearBareDm/);
+  assert.match(home, /dm\.clearConfirm/);
   assert.match(home, /startsWith\("b\/"\)/);
   assert.match(home, /function dmApiId/);
   assert.match(home, /sameRoom\(sent, currentRoomRef\(\)\)/);
