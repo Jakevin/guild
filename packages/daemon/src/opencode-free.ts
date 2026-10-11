@@ -1,11 +1,12 @@
 import type { ModelEntry, ProviderEntry } from "@guild/protocol";
+import { isFreeProvider } from "./free-model.ts";
 import { guildUserAgent } from "./version.ts";
 
-/** Built-in alias `free` → this provider, matching Hermes Agent (2026-08). */
+/** Zen's keyless catalog. The picker id `free` is a separate one-row route. */
 export const OPENCODE_FREE_PROVIDER_ID = "opencode-free";
 export const OPENCODE_FREE_BASE_URL = "https://opencode.ai/zen/v1";
 
-const ALIASES = new Set(["opencode-free", "free", "opencode_free"]);
+const ALIASES = new Set(["opencode-free", "opencode_free"]);
 
 /**
  * Offline floor — Hermes Agent's curated catalog.
@@ -90,7 +91,7 @@ export function llmRequestHeaders(target: {
   headers?: Record<string, string>;
 }): Record<string, string> {
   const extra = { ...(target.headers ?? {}) };
-  if (isKeylessProvider(target.providerId)) {
+  if (isKeylessProvider(target.providerId) || isFreeProvider(target.providerId)) {
     const headers: Record<string, string> = {
       "content-type": "application/json",
       "http-referer": "https://github.com/Jakevin/guild",

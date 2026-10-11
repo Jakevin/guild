@@ -67,6 +67,23 @@ import {
   type OpenCodeFreeProbe,
 } from "./opencode-free.ts";
 import {
+  FREE_MODEL_ID,
+  FREE_PROVIDER_ID,
+  freeProvider,
+  freeWireModel,
+  isFreeProvider,
+} from "./free-model.ts";
+import { readFreeScan, summarizeFreeScan } from "./free-scan.ts";
+import {
+  GROUP_PROVIDER_ID,
+  isRouteFailure,
+  isRouteMode,
+  noteRouteRest,
+  noteRouteSuccess,
+  planRouteSteps,
+  readRouteState,
+} from "./route-group.ts";
+import {
   CLINE_PASS_PROVIDER_ID,
   clinePassProvider,
   fetchClinePassModels,
@@ -136,6 +153,7 @@ export const DEFAULT_MODELS: ModelsFile = {
   recent: [],
   providers: {
     [OPENCODE_FREE_PROVIDER_ID]: openCodeFreeProvider(),
+    [FREE_PROVIDER_ID]: freeProvider(),
     openai: {
       name: "OpenAI",
       baseUrl: "https://api.openai.com/v1",
@@ -204,7 +222,7 @@ export function readModelsFile(dataDir: string): ModelsFile {
       return structuredClone(DEFAULT_MODELS);
     }
     if (Object.keys(parsed.providers).length === 0) return parsed;
-    return withClinePass(withOpenCodeFree(parsed));
+    return withFreeModel(withClinePass(withOpenCodeFree(parsed)));
   } catch {
     return structuredClone(DEFAULT_MODELS);
   }
@@ -262,6 +280,23 @@ function pinOpenCodeFree(file: ModelsFile): ModelsFile {
       ...rest,
     },
   };
+}
+
+function withFreeModel(file: ModelsFile): ModelsFile {
+  const providers: ModelsFile["providers"] = {};
+  let placed = false;
+  for (const [id, provider] of Object.entries(file.providers)) {
+    if (isFreeProvider(id) && id !== FREE_PROVIDER_ID) continue;
+    providers[id] = id === FREE_PROVIDER_ID ? freeProvider() : provider;
+    if (id === OPENCODE_FREE_PROVIDER_ID && !file.providers[FREE_PROVIDER_ID]) {
+      providers[FREE_PROVIDER_ID] = freeProvider();
+      placed = true;
+    }
+  }
+  if (!providers[FREE_PROVIDER_ID]) {
+    if (!placed) providers[FREE_PROVIDER_ID] = freeProvider();
+  }
+  return { ...file, providers };
 }
 
 function withOpenCodeFree(file: ModelsFile): ModelsFile {
@@ -324,6 +359,7 @@ export function mergeModelsFile(
     recent: incoming.recent !== undefined ? incoming.recent : existing.recent,
     providers: incoming.providers ? {} : existing.providers,
     shown: incoming.shown !== undefined ? incoming.shown : existing.shown,
+    groups: incoming.groups !== undefined ? incoming.groups : existing.groups,
   };
   if (incoming.default) {
     next.recent = pushRecent(existing.recent, incoming.default);
@@ -340,10 +376,29 @@ export function mergeModelsFile(
       !incomingKey || (prevKey && incomingKey === maskApiKey(prevKey))
         ? prevKey || incomingKey
         : incomingKey;
-    providersIn[id] = { ...provider, apiKey };
+    const { keys: incomingKeys, ...rest } = provider;
+    const keys = mergeSpareKeys(incomingKeys, prev?.keys);
+    providersIn[id] = { ...rest, apiKey, ...(keys ? { keys } : {}) };
   }
   next.providers = providersIn;
-  return writeModelsFile(dataDir, withOpenCodeFree(next));
+  return writeModelsFile(dataDir, withFreeModel(withOpenCodeFree(next)));
+}
+
+function mergeSpareKeys(
+  incoming: string[] | undefined,
+  prev: string[] | undefined,
+): string[] | undefined {
+  if (incoming === undefined) return prev?.length ? prev : undefined;
+  const previous = prev ?? [];
+  const merged: string[] = [];
+  for (const raw of incoming) {
+    const trimmed = String(raw ?? "").trim();
+    if (!trimmed) continue;
+    const kept = previous.find((key) => key === trimmed || maskApiKey(key) === trimmed);
+    const next = kept || trimmed;
+    if (!merged.includes(next)) merged.push(next);
+  }
+  return merged.length ? merged : undefined;
 }
 
 function pushRecent(list: ModelRef[] | undefined, ref: ModelRef): ModelRef[] {
@@ -360,6 +415,7 @@ export type PublicProvider = ProviderEntry & {
   id: string;
   stored: "empty" | "env" | "literal";
   apiKeyPreview: string;
+  keysPreview?: string[];
 };
 
 export function maskApiKey(value: string): string {
@@ -411,18 +467,38 @@ export async function refreshOpenCodeFreeCatalog(
   return { models, updated: !same, probe };
 }
 
+function groupPicker(file: ModelsFile) {
+  const groups = file.groups ?? {};
+  const models = Object.entries(groups).map(([id, group]) => ({
+    id,
+    name: group.name || id,
+  }));
+  if (!models.length) return [];
+  return [
+    {
+      id: GROUP_PROVIDER_ID,
+      name: "路由組",
+      kind: "group" as const,
+      ready: models.some((model) => (groups[model.id]?.members.length ?? 0) > 0),
+      models,
+    },
+  ];
+}
+
 export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.env) {
   const file = withOpenCodeFree(readModelsFile(dataDir));
   const providers: PublicProvider[] = Object.entries(file.providers).map(
     ([id, provider]) => {
       const key = provider.apiKey ?? "";
       const stored = !key ? "empty" : key.startsWith("$") ? "env" : "literal";
+      const { keys: spare, ...rest } = provider;
       return {
         id,
-        ...provider,
+        ...rest,
         models: annotateKeyModels(id, provider.models, provider.baseUrl),
         apiKey: stored === "literal" ? "" : key,
         apiKeyPreview: key ? maskApiKey(key) : "",
+        keysPreview: (spare ?? []).map((item) => maskApiKey(item)),
         stored,
       };
     },
@@ -468,9 +544,12 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
     ...providers.map((p) => ({
       id: p.id,
       name: p.name || p.id,
-      kind: (isKeylessProvider(p.id) ? "keyless" : "key") as "key" | "keyless",
+      kind: (isKeylessProvider(p.id) || isFreeProvider(p.id) ? "keyless" : "key") as
+        | "key"
+        | "keyless",
       ready:
         isKeylessProvider(p.id) ||
+        isFreeProvider(p.id) ||
         Boolean(resolveApiKey(p.apiKey, env) || p.stored === "literal"),
       models: attachReasoning(p.id, p.models, p.baseUrl),
     })),
@@ -529,7 +608,9 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       models: filterShownModels(antigravity.catalog, shownIdsOf(file, ANTIGRAVITY_PICKER_ID)),
     },
     webBridges,
-    picker,
+    picker: picker.concat(groupPicker(file)),
+    groups: file.groups ?? {},
+    freeScan: summarizeFreeScan(readFreeScan(dataDir)),
     active: target
       ? {
           provider: target.providerId,
@@ -610,7 +691,11 @@ export function resolveLlm(
     modelId: string | undefined,
     callSite: "selected" | "fallback",
   ): LlmTarget | null => {
-    const providerId = isKeylessProvider(id) ? OPENCODE_FREE_PROVIDER_ID : id;
+    const providerId = isFreeProvider(id)
+      ? FREE_PROVIDER_ID
+      : isKeylessProvider(id)
+        ? OPENCODE_FREE_PROVIDER_ID
+        : id;
     if (WEB_BRIDGE_PICKER_IDS.has(id) || WEB_BRIDGE_PICKER_IDS.has(providerId)) {
       if (!isChatRole(role)) return null;
       if (callSite !== "selected") return null;
@@ -660,8 +745,12 @@ export function resolveLlm(
     const provider = file.providers[providerId];
     if (!provider) return null;
     const apiKey = resolveApiKey(provider.apiKey, env);
-    if (!apiKey && !isKeylessProvider(providerId)) return null;
-    const model = modelId || provider.models[0]?.id || "";
+    if (!apiKey && !isKeylessProvider(providerId) && !isFreeProvider(providerId)) {
+      return null;
+    }
+    const model = isFreeProvider(providerId)
+      ? FREE_MODEL_ID
+      : modelId || provider.models[0]?.id || "";
     if (!model) return null;
     return {
       providerId,
@@ -671,6 +760,21 @@ export function resolveLlm(
       api: provider.api,
     };
   };
+  if (selected?.provider === GROUP_PROVIDER_ID) {
+    const steps = planRouteSteps({
+      file,
+      state: readRouteState(dataDir),
+      ref: selected,
+      resolveKey: (raw) => resolveApiKey(raw, env),
+    });
+    for (const step of steps) {
+      const hit = tryProvider(step.ref.provider, step.ref.model, "selected");
+      if (!hit) continue;
+      if (step.apiKey) hit.apiKey = step.apiKey;
+      return hit;
+    }
+    return null;
+  }
   if (selected?.provider) {
     if (isAntigravityProvider(selected.provider) && !isAgyReady()) return null;
     const hit = tryProvider(selected.provider, selected.model, "selected");
@@ -715,7 +819,7 @@ function envFallback(env: NodeJS.ProcessEnv): LlmTarget | null {
   return null;
 }
 
-export async function llmComplete(input: {
+async function completeResolved(input: {
   dataDir: string;
   env?: NodeJS.ProcessEnv;
   system: string;
@@ -731,7 +835,7 @@ export async function llmComplete(input: {
   skills?: SkillRef[];
   toolCtx?: ToolContext;
   lease?: FreebuffLeaseParts;
-}): Promise<{
+}, keyOverride?: string): Promise<{
   text: string;
   provider: string;
   model: string;
@@ -743,6 +847,7 @@ export async function llmComplete(input: {
   const env = input.env ?? process.env;
   const target = resolveLlm(input.dataDir, env, input.role, input.prefer);
   if (!target) return null;
+  if (keyOverride) target.apiKey = keyOverride;
   const useTools = input.tools ?? input.role === "chat";
   const toolCtx: ToolContext = input.toolCtx ?? {
     skills: input.skills,
@@ -817,8 +922,11 @@ export async function llmComplete(input: {
     }
   }
   try {
+    const wire = isFreeProvider(target.providerId)
+      ? { ...target, model: freeWireModel(target.providerId, target.model) }
+      : target;
     const done = await dispatchComplete(
-      target,
+      wire,
       input.system,
       input.messages,
       input.temperature ?? 0.4,
@@ -869,6 +977,82 @@ export async function llmComplete(input: {
       usage: { provider: target.providerId, model: target.model },
     };
   }
+}
+
+type LlmResult = Awaited<ReturnType<typeof completeResolved>>;
+
+export async function llmComplete(input: {
+  dataDir: string;
+  env?: NodeJS.ProcessEnv;
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  temperature?: number;
+  role?: AuxRole | "chat";
+  prefer?: ModelRef | null;
+  laneEffort?: string;
+  tools?: boolean;
+  fast?: boolean;
+  skills?: SkillRef[];
+  toolCtx?: ToolContext;
+  lease?: FreebuffLeaseParts;
+}): Promise<LlmResult> {
+  const env = input.env ?? process.env;
+  const file = readModelsFile(input.dataDir);
+  const selected =
+    input.prefer ??
+    (input.role && CONFIGURABLE_AUX.has(input.role as AuxRole)
+      ? file.aux?.[input.role as AuxRole]
+      : undefined) ??
+    file.default;
+  const steps = selected?.provider
+    ? planRouteSteps({
+        file,
+        state: readRouteState(input.dataDir),
+        ref: selected,
+        roomId: input.toolCtx?.roomId,
+        resolveKey: (raw) => resolveApiKey(raw, env),
+      })
+    : [];
+  const failover = steps.length > 1 || selected?.provider === GROUP_PROVIDER_ID;
+  if (failover) {
+    let last: LlmResult = null;
+    for (let index = 0; index < steps.length; index += 1) {
+      const step = steps[index]!;
+      try {
+        const done = await completeResolved({ ...input, prefer: step.ref }, step.apiKey);
+        if (!done) continue;
+        const failed = isRouteFailure(done.text, done.traces);
+        if (failed && index < steps.length - 1) {
+          noteRouteRest(input.dataDir, step.slot);
+          last = done;
+          continue;
+        }
+        if (!failed) {
+          noteRouteSuccess(
+            input.dataDir,
+            step,
+            input.toolCtx?.roomId,
+            step.groupId ? (file.groups?.[step.groupId]?.members.length ?? 0) : 0,
+          );
+        }
+        return done;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") throw error;
+        noteRouteRest(input.dataDir, step.slot);
+        const message = error instanceof Error ? error.message : String(error);
+        last = {
+          text: `模型請求失敗：${message}`,
+          provider: step.ref.provider,
+          model: step.ref.model,
+          traces: input.toolCtx?.traces ?? [],
+          thinking: "",
+          usage: { provider: step.ref.provider, model: step.ref.model },
+        };
+      }
+    }
+    if (last || selected?.provider === GROUP_PROVIDER_ID) return last;
+  }
+  return completeResolved(input);
 }
 
 type DispatchResult = {
@@ -1839,14 +2023,15 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
       baseUrl: baseUrl.replace(/\/+$/, ""),
       api,
       apiKey: provider.apiKey?.trim() || undefined,
+      ...spareKeys(provider.apiKey, provider.keys),
       models,
     };
   }
   const oauthModels = (provider: string, model: string): boolean => {
     return OAUTH_PICKER_IDS.has(provider) && Boolean(model);
   };
-  const validRef = (ref: ModelRef | null | undefined): ModelRef | null => {
-    if (!ref?.provider || !ref.model) return null;
+  const memberRef = (ref: ModelRef | null | undefined): ModelRef | null => {
+    if (!ref?.provider || !ref.model || ref.provider === GROUP_PROVIDER_ID) return null;
     if (OAUTH_PICKER_IDS.has(ref.provider) && oauthModels(ref.provider, ref.model)) {
       return { provider: ref.provider, model: ref.model };
     }
@@ -1856,10 +2041,38 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
     if (isCommandCodeProvider(ref.provider) && Boolean(ref.model)) {
       return { provider: COMMANDCODE_PICKER_ID, model: ref.model };
     }
-    if (providers[ref.provider]?.models.some((m) => m.id === ref.model)) {
+    if (isAntigravityProvider(ref.provider) && Boolean(ref.model)) {
+      return { provider: ANTIGRAVITY_PICKER_ID, model: ref.model };
+    }
+    if (providers[ref.provider]?.models.some((model) => model.id === ref.model)) {
       return { provider: ref.provider, model: ref.model };
     }
     return null;
+  };
+  const groups: NonNullable<ModelsFile["groups"]> = {};
+  for (const [rawId, group] of Object.entries(file.groups ?? {})) {
+    const id = rawId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (!id || !group || typeof group !== "object") continue;
+    const members = (group.members ?? [])
+      .map((ref) => memberRef(ref))
+      .filter((ref): ref is ModelRef => Boolean(ref));
+    if (!members.length) continue;
+    groups[id] = {
+      name: group.name?.trim() || id,
+      routing: group.routing && isRouteMode(group.routing) ? group.routing : "smart",
+      members,
+    };
+  }
+  const validRef = (ref: ModelRef | null | undefined): ModelRef | null => {
+    if (!ref?.provider || !ref.model) return null;
+    if (ref.provider === GROUP_PROVIDER_ID && groups[ref.model]) {
+      return { provider: GROUP_PROVIDER_ID, model: ref.model };
+    }
+    return memberRef(ref);
   };
   const aux: ModelsFile["aux"] = {};
   for (const [role, ref] of Object.entries(file.aux ?? {})) {
@@ -1878,7 +2091,20 @@ function sanitizeModels(file: ModelsFile): ModelsFile {
     recent,
     providers,
     shown: sanitizeShown(file.shown),
+    ...(Object.keys(groups).length ? { groups } : {}),
   };
+}
+
+function spareKeys(
+  apiKey: string | undefined,
+  keys: string[] | undefined,
+): { keys: string[] } | Record<string, never> {
+  const primary = apiKey?.trim() || "";
+  const spare = (keys ?? [])
+    .map((item) => String(item ?? "").trim())
+    .filter((item) => item && item !== primary)
+    .filter((item, index, all) => all.indexOf(item) === index);
+  return spare.length ? { keys: spare } : {};
 }
 
 function sanitizeShown(raw: ModelsFile["shown"]): ModelsFile["shown"] {

@@ -41,9 +41,10 @@ function clip(text: string): string {
 function unit(value: unknown): number | null {
   if (typeof value === "number" && value >= 0 && value <= 1) return value;
   if (!value || typeof value !== "object") return null;
-  const noul = (value as { noul?: unknown }).noul;
-  if (typeof noul !== "number" || noul < 0 || noul > 1) return null;
-  return noul;
+  const rec = value as { noul?: unknown; probability?: unknown };
+  const raw = typeof rec.noul === "number" ? rec.noul : rec.probability;
+  if (typeof raw !== "number" || raw < 0 || raw > 1) return null;
+  return raw;
 }
 
 function answersFromRecord(rec: Record<string, unknown>): NudgeAnswers | null {
@@ -67,17 +68,45 @@ export function parseNudgeAnswers(raw: unknown): NudgeAnswers | null {
   }
   if (!raw || typeof raw !== "object") return null;
   const rec = raw as Record<string, unknown>;
+  const wrapped = rec.result;
+  if (
+    wrapped &&
+    wrapped !== rec &&
+    typeof wrapped === "object" &&
+    "answers" in (wrapped as object)
+  ) {
+    return parseNudgeAnswers(wrapped);
+  }
   const nested = rec.answers;
+  if (Array.isArray(nested)) {
+    const map: Record<string, unknown> = {};
+    for (const item of nested) {
+      if (!item || typeof item !== "object") continue;
+      const name = (item as { name?: unknown }).name;
+      if (typeof name === "string" && name) map[name] = item;
+    }
+    return answersFromRecord(map);
+  }
   if (nested && typeof nested === "object") {
     return answersFromRecord(nested as Record<string, unknown>);
   }
   return answersFromRecord(rec);
 }
 
-/** Real System One when the selected id is Jev. Anything else imitates it. */
+/** Real System One when the selected id is Jev. */
 export function isJevModel(id: string): boolean {
   const name = id.trim().toLowerCase();
   return /(^|\/)jev($|[-.])/.test(name);
+}
+
+type DecisionKind = "systemone" | "openai" | "clef";
+
+function decisionKind(model: string): DecisionKind | null {
+  const name = model.trim().toLowerCase();
+  if (/(^|\/)gpt-6-luna(-decisions)?$/.test(name)) return "openai";
+  if (/(^|\/)clef(-flash)?$/.test(name)) return "clef";
+  if (isJevModel(model)) return "systemone";
+  return null;
 }
 
 export function systemOneUrl(baseUrl: string): string {
@@ -85,6 +114,61 @@ export function systemOneUrl(baseUrl: string): string {
   if (base.endsWith("/systemone")) return base;
   if (base.endsWith("/v1")) return `${base}/systemone`;
   return `${base}/v1/systemone`;
+}
+
+function openaiQuestions(hasPrevious: boolean): Array<Record<string, string>> {
+  return Object.entries(questions(hasPrevious)).map(([name, value]) => {
+    const item = value as {
+      instructions: string;
+      criteria?: { true?: string; false?: string };
+    };
+    const criteria = item.criteria
+      ? `\n\nTrue: ${item.criteria.true}\n\nFalse: ${item.criteria.false}`
+      : "";
+    return { type: "predicate", name, instructions: `${item.instructions}${criteria}` };
+  });
+}
+
+function clefUrl(base: string, wire: string): string {
+  if (base.includes("/ai/run/")) return base;
+  if (base.endsWith("/ai/run")) return `${base}/@cf/cloudflare/${wire}`;
+  if (base.includes("api.cloudflare.com")) return `${base}/ai/run/@cf/cloudflare/${wire}`;
+  return systemOneUrl(base);
+}
+
+function decisionCall(
+  kind: DecisionKind,
+  target: { baseUrl: string; model: string },
+  state: Record<string, unknown>,
+  hasPrevious: boolean,
+): { url: string; body: Record<string, unknown> } {
+  const base = target.baseUrl.replace(/\/+$/, "");
+  const asked = questions(hasPrevious);
+  if (kind === "openai") {
+    const url = base.endsWith("/decisions")
+      ? base
+      : base.endsWith("/v1")
+        ? `${base}/decisions`
+        : `${base}/v1/decisions`;
+    return {
+      url,
+      body: {
+        model: target.model.includes("/") ? target.model.trim() : "gpt-6-luna",
+        input: JSON.stringify(state),
+        questions: openaiQuestions(hasPrevious),
+      },
+    };
+  }
+  if (kind === "clef") {
+    const wire = /clef-flash/i.test(target.model) ? "clef-flash" : "clef";
+    return { url: clefUrl(base, wire), body: { model: wire, state, questions: asked } };
+  }
+  // ponytail: Cloudflare's catalog id is typesafe/jev. A pinned jev-1.x stays on that provider's /systemone.
+  if (base.includes("api.cloudflare.com")) {
+    const url = base.endsWith("/ai/run") || base.includes("/ai/run/") ? base : `${base}/ai/run`;
+    return { url, body: { model: "typesafe/jev", input: { state, questions: asked } } };
+  }
+  return { url: systemOneUrl(base), body: { model: target.model, state, questions: asked } };
 }
 
 export function decideNudge(answers: NudgeAnswers): { nudge: boolean; why: string } {
@@ -186,15 +270,18 @@ export async function jevNudgeContinue(input: {
   const target = resolveLlm(input.ctx.dataDir, input.ctx.env, "classifier");
   if (!target) return null;
   const state = nudgeState({ ...input, assistantText: text });
-  const real = isJevModel(target.model) && usableJevKey(target.apiKey, target.transport);
+  const kind = usableJevKey(target.apiKey, target.transport)
+    ? decisionKind(target.model)
+    : null;
   try {
-    const answers = real
-      ? await askSystemOne(target, state, input.marks.length > 0, input.fetch)
+    const answers = kind
+      ? await askDecision(target, kind, state, input.marks.length > 0, input.fetch)
       : await askImitation(input, state);
     if (!answers) return null;
     const decision = decideNudge(answers);
     if (!decision.nudge) return null;
-    return { note: `${real ? "jev" : "llm"} ${decision.why}` };
+    const prefix = kind === "openai" ? "openai" : kind === "clef" ? "clef" : kind ? "jev" : "llm";
+    return { note: `${prefix} ${decision.why}` };
   } catch {
     return null;
   }
@@ -228,23 +315,21 @@ export async function jevNudgeContinue(input: {
   }
 }
 
-async function askSystemOne(
+async function askDecision(
   target: { baseUrl: string; apiKey: string; model: string },
+  kind: DecisionKind,
   state: Record<string, unknown>,
   hasPrevious: boolean,
   fetchImpl: typeof fetch | undefined,
 ): Promise<NudgeAnswers | null> {
-  const response = await (fetchImpl ?? fetch)(systemOneUrl(target.baseUrl), {
+  const call = decisionCall(kind, target, state, hasPrevious);
+  const response = await (fetchImpl ?? fetch)(call.url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${target.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: target.model,
-      state,
-      questions: questions(hasPrevious),
-    }),
+    body: JSON.stringify(call.body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) return null;

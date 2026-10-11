@@ -24,6 +24,22 @@ test("parseNudgeAnswers reads noul probabilities", () => {
     { nudge: 0.78, waiting: 0.1 },
   );
   assert.equal(parseNudgeAnswers({ answers: { nudge: { noul: 2 } } }), null);
+  assert.deepEqual(
+    parseNudgeAnswers({
+      answers: [
+        { type: "predicate", name: "nudge", probability: 0.8 },
+        { type: "predicate", name: "waiting", probability: 0.1 },
+      ],
+    }),
+    { nudge: 0.8, waiting: 0.1 },
+  );
+  assert.deepEqual(
+    parseNudgeAnswers({
+      success: true,
+      result: { answers: { nudge: { noul: 0.6 }, waiting: { noul: 0.2 } } },
+    }),
+    { nudge: 0.6, waiting: 0.2 },
+  );
 });
 
 test("decideNudge lets waiting and a stalled follow-up veto", () => {
@@ -101,6 +117,151 @@ test("a selected Jev model calls that provider's system one", async () => {
   assert.equal(auth, "Bearer ts-key");
   assert.equal(model, "jev-latest");
   assert.match(result?.note ?? "", /^jev nudge 80%/);
+});
+
+test("gpt-6-luna posts OpenAI decisions, and a gateway keeps its model id", async () => {
+  const home = seatHome({
+    provider: "openai",
+    id: "gpt-6-luna",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
+  });
+  let body: Record<string, unknown> = {};
+  const result = await jevNudgeContinue({
+    ctx: { dataDir: home, env: {}, userAsks: ["say hi five times"] },
+    assistantText: "Hola! 1 of 5",
+    toolNames: [],
+    marks: [],
+    fetch: async (input, init) => {
+      assert.equal(String(input), "https://api.openai.com/v1/decisions");
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          answers: [
+            { type: "predicate", name: "nudge", probability: 0.8 },
+            { type: "predicate", name: "waiting", probability: 0.1 },
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+  });
+  assert.equal(body.model, "gpt-6-luna");
+  assert.match(String(body.input), /Hola/);
+  const names = (body.questions as Array<{ name: string; type: string }>).map((q) => q.name);
+  assert.deepEqual(names, ["nudge", "waiting"]);
+  assert.equal((body.questions as Array<{ type: string }>)[0]?.type, "predicate");
+  assert.match(result?.note ?? "", /^openai nudge 80%/);
+
+  const gateway = seatHome({
+    provider: "vercel",
+    id: "openai/gpt-6-luna-decisions",
+    baseUrl: "https://ai-gateway.vercel.sh/v1",
+    apiKey: "gw-key",
+  });
+  let gatewayModel = "";
+  await jevNudgeContinue({
+    ctx: { dataDir: gateway, env: {}, userAsks: ["say hi"] },
+    assistantText: "done enough to ask",
+    toolNames: [],
+    marks: [],
+    fetch: async (input, init) => {
+      assert.equal(String(input), "https://ai-gateway.vercel.sh/v1/decisions");
+      gatewayModel = JSON.parse(String(init?.body)).model;
+      return new Response(
+        JSON.stringify({
+          answers: [
+            { type: "predicate", name: "nudge", probability: 0.2 },
+            { type: "predicate", name: "waiting", probability: 0.1 },
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+  });
+  assert.equal(gatewayModel, "openai/gpt-6-luna-decisions");
+});
+
+test("clef posts the Workers AI run body, and Cloudflare Jev wraps input", async () => {
+  const clefHome = seatHome({
+    provider: "cloudflare",
+    id: "@cf/cloudflare/clef",
+    baseUrl: "https://api.cloudflare.com/client/v4/accounts/acc/ai/run",
+    apiKey: "cf-token",
+  });
+  let clefBody: Record<string, unknown> = {};
+  const clef = await jevNudgeContinue({
+    ctx: { dataDir: clefHome, env: {}, userAsks: ["say hi five times"] },
+    assistantText: "Hola! 1 of 5",
+    toolNames: [],
+    marks: [],
+    fetch: async (input, init) => {
+      assert.equal(
+        String(input),
+        "https://api.cloudflare.com/client/v4/accounts/acc/ai/run/@cf/cloudflare/clef",
+      );
+      clefBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: { answers: { nudge: { noul: 0.8 }, waiting: { noul: 0.1 } } },
+        }),
+        { status: 200 },
+      );
+    },
+  });
+  assert.equal(clefBody.model, "clef");
+  assert.equal((clefBody.questions as { nudge: { type: string } }).nudge.type, "noul");
+  assert.equal(clefBody.input, undefined);
+  assert.match(clef?.note ?? "", /^clef nudge 80%/);
+
+  const jevHome = seatHome({
+    provider: "cloudflare",
+    id: "typesafe/jev",
+    baseUrl: "https://api.cloudflare.com/client/v4/accounts/acc/ai/run",
+    apiKey: "cf-token",
+  });
+  let jevBody: Record<string, unknown> = {};
+  const hosted = await jevNudgeContinue({
+    ctx: { dataDir: jevHome, env: {}, userAsks: ["say hi five times"] },
+    assistantText: "Hola! 1 of 5",
+    toolNames: [],
+    marks: [],
+    fetch: async (input, init) => {
+      assert.equal(String(input), "https://api.cloudflare.com/client/v4/accounts/acc/ai/run");
+      jevBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          result: { answers: { nudge: { noul: 0.8 }, waiting: { noul: 0.1 } } },
+        }),
+        { status: 200 },
+      );
+    },
+  });
+  assert.equal(jevBody.model, "typesafe/jev");
+  assert.equal(jevBody.state, undefined);
+  assert.match(JSON.stringify(jevBody.input), /Hola/);
+  assert.match(hosted?.note ?? "", /^jev nudge 80%/);
+});
+
+test("an OAuth Codex seat imitates instead of posting decisions", async () => {
+  const home = seatHome({
+    provider: "openai-codex",
+    id: "gpt-6-luna",
+    baseUrl: "https://chatgpt.com/backend-api/codex",
+    apiKey: "oauth",
+  });
+  const result = await jevNudgeContinue({
+    ctx: { dataDir: home, env: {}, userAsks: ["say hi five times"] },
+    assistantText: "Hola! 1 of 5",
+    toolNames: [],
+    marks: [],
+    fetch: async () => {
+      throw new Error("codex oauth must not call decisions");
+    },
+    complete: async () => '{"nudge":0.7,"waiting":0.1}',
+  });
+  assert.match(result?.note ?? "", /^llm nudge 70%/);
 });
 
 test("a selected LLM imitates Jev instead of calling system one", async () => {

@@ -72,6 +72,9 @@ test("away page is a lite client: list, live, @ send, large taps", () => {
   assert.match(html, /id="bare-toggle-input"/);
   assert.match(html, /role="switch"/);
   assert.match(html, /id="bare-clear"/);
+  assert.match(html, /id="bot-del"/);
+  assert.match(html, /function deleteSeat/);
+  assert.match(html, /bot\.deleteConfirm/);
   assert.match(html, /bare\.subtitle/);
   assert.match(html, /bare\.clearConfirm/);
   assert.match(html, /dm\.clearConfirm/);

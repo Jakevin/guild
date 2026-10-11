@@ -191,11 +191,38 @@ body.app.bar-page #side-roster {
   flex-direction: column;
   gap: 2px;
 }
-body.settings-page [data-sec-panel] { display: none; }
-body.settings-page[data-section="main"] [data-sec-panel="main"],
-body.settings-page[data-section="subs"] [data-sec-panel="subs"],
-body.settings-page[data-section="keys"] [data-sec-panel="keys"] {
-  display: block;
+.settings-page .panel + .panel { margin-top: 1.4rem; }
+.settings-page .row.pick { grid-template-columns: minmax(0, 1fr) auto; }
+.settings-page #pick { width: 100%; }
+.settings-page #roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.settings-page .prov-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-page .prov-row.on {
+  background: var(--lift);
+  border-color: color-mix(in srgb, var(--steel) 55%, var(--line));
+}
+.settings-page .aux-fold { margin: 1.4rem 0; }
+.settings-page .aux-fold > summary {
+  cursor: pointer;
+  font-weight: 560;
 }
 body.library-page [data-lib-panel],
 body.library-page [data-lib-action] { display: none; }
@@ -287,6 +314,32 @@ h2 { font-weight: 560; font-size: 1.05rem; margin: 0 0 0.35rem; }
 .muted { color: var(--muted); }
 .health { color: var(--ok); }
 .error { color: var(--err); }
+.toast {
+  position: fixed;
+  left: calc(var(--sidebar-w, 292px) + (100vw - var(--sidebar-w, 292px)) / 2);
+  bottom: 1.35rem;
+  z-index: 80;
+  transform: translateX(-50%) translateY(6px);
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 560;
+  box-shadow: 0 8px 28px #0008;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+}
+.toast.on {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; transform: translateX(-50%); }
+}
 .lede { color: var(--muted); margin: 0 0 1.4rem; }
 
 .empty {

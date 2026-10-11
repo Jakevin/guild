@@ -672,6 +672,12 @@ export class GuildStore {
   deleteBot(id: string): { ok: true; id: string } {
     const bot = this.getBot(id);
     if (!bot) throw new StoreError(404, "bot not found");
+    const rooms = new Set<string>([...this.liveTurns.keys(), ...this.botAborts.keys()]);
+    for (const roomId of rooms) {
+      if (this.liveTurns.get(roomId)?.has(id) || this.botAborts.get(roomId)?.has(id)) {
+        this.abortTurn(roomId, id);
+      }
+    }
     for (const channel of this.listChannels()) {
       if (!channel.memberIds.includes(id)) continue;
       this.writeRoom({

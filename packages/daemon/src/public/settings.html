@@ -8,31 +8,17 @@
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 模型</title>
-    <link rel="stylesheet" href="/style.css?v=model-gold" />
-    <script src="/i18n.js?v=classifier"></script>
+    <link rel="stylesheet" href="/style.css?v=aux" />
+    <script src="/i18n.js?v=decide"></script>
   </head>
-  <body class="app settings-page" data-i18n-page="settings" data-section="main">
-    <script>
-      (function () {
-        var p = location.pathname;
-        document.body.setAttribute(
-          "data-section",
-          /\/keys\/?$/.test(p) ? "keys" : /\/subs\/?$/.test(p) ? "subs" : "main",
-        );
-      })();
-    </script>
+  <body class="app settings-page" data-i18n-page="settings">
     <aside class="sidebar">
       <div class="side-brand"><a class="logo" href="/">Guild</a></div>
       <nav class="side-nav">
         <a href="/" data-i18n="nav.chat">大廳</a>
         <a href="/studio" data-i18n="nav.studio">編制</a>
         <a href="/library" data-i18n="nav.library">工坊</a>
-        <div class="side-group">
-          <span class="side-group-label" data-i18n="nav.settings">模型</span>
-          <a class="side-sub" href="/settings" data-sec="main" data-i18n="settings.sub.main">主模型</a>
-          <a class="side-sub" href="/settings/subs" data-sec="subs" data-i18n="settings.sub.subs">訂閱</a>
-          <a class="side-sub" href="/settings/keys" data-sec="keys" data-i18n="settings.sub.keys">API Key</a>
-        </div>
+        <a class="on" href="/settings" data-i18n="nav.settings">模型</a>
       </nav>
       <div class="sidebar-resizer" data-i18n-title="sidebar.resize" title="拖曳調整寬度"></div>
     </aside>
@@ -46,19 +32,15 @@
       </header>
       <div class="page-body">
       <p id="flash" class="muted"></p>
-      <p class="sub" data-i18n="settings.lede">第一次：先連訂閱或填 API key，再套用主模型。沒有模型就不能用。訂閱走 OAuth；API key 寫入 ~/.guild/models.json。</p>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <p class="sub" data-i18n="settings.lede">供應商可以是 API key，也可以是登入的訂閱。大廳選一個 provider/model。路由組也是一個模型，額度用完就換下一個。</p>
 
-      <section class="panel" data-sec-panel="main">
-        <h2 data-i18n="settings.main">主模型</h2>
-        <p class="sub" data-i18n="settings.mainHint">新對話預設用這個。下面每一列會寫出實際在跑的模型。</p>
+      <section class="panel">
+        <h2 data-i18n="settings.now">現在用的模型</h2>
         <div class="row pick">
           <div>
-            <label data-i18n="settings.provider">供應商</label>
-            <select id="provider"></select>
-          </div>
-          <div>
-            <label data-i18n="model">模型</label>
-            <select id="model"></select>
+            <label>provider / model</label>
+            <select id="pick"></select>
           </div>
           <button type="button" id="apply" data-i18n="settings.apply">套用</button>
         </div>
@@ -71,22 +53,31 @@
           </span>
           <label><input type="checkbox" id="fast" /> Fast</label>
         </div>
-        <div class="panel-head" style="margin-top:1rem">
-          <h2 data-i18n="settings.aux">輔助模型</h2>
-          <button type="button" class="linkish" id="reset-aux" data-i18n="settings.auxReset">全部改回主模型</button>
-        </div>
-        <p class="sub" data-i18n="settings.auxHint">只有 Vision、Web extract、SubAgent、Classifier 可以另選模型。其餘用途一律跟主模型。</p>
-        <div id="aux"></div>
       </section>
 
-      <section class="panel" data-sec-panel="subs">
+      <details class="aux-fold">
+        <summary data-i18n="settings.aux">輔助模型</summary>
+        <div class="panel-head">
+          <p class="sub" data-i18n="settings.auxHint">只有 Vision、Web extract、SubAgent、Classifier 可以另選模型。其餘用途一律跟主模型。</p>
+          <button type="button" class="linkish" id="reset-aux" data-i18n="settings.auxReset">全部改回主模型</button>
+        </div>
+        <div id="aux"></div>
+      </details>
+
+      <section class="panel">
         <div class="panel-head">
           <div>
-            <h2 data-i18n="settings.accounts">連接帳號</h2>
-            <p class="sub" data-i18n="settings.accountsHint">點名稱切換訂閱。勾選的模型會出現在大廳；主模型仍在「主模型」頁套用。</p>
+            <h2 data-i18n="settings.providers">供應商</h2>
+            <p class="sub" data-i18n="settings.providersHint">點一列展開。訂閱按連接，API key 貼上金鑰。路由組也是一列。</p>
+          </div>
+          <div>
+            <button type="button" class="linkish" id="add-decide" data-i18n="settings.decide" data-i18n-title="settings.decideHint" title="核對這一輪有沒有做完，以及要不要再推一把。沒選就跟主模型。">決策模型</button>
+            <button type="button" class="linkish" id="add-group" data-i18n="settings.addGroup">路由組</button>
+            <button type="button" class="linkish" id="add-provider-open" data-add-provider="1" data-i18n="settings.addChip">＋ 新增</button>
           </div>
         </div>
-        <div class="key-tabs" id="account-tabs"></div>
+        <p class="sub" id="decide-now"></p>
+        <div id="roster"></div>
         <div id="accounts"></div>
         <div id="oauth-panel" hidden>
           <p id="oauth-copy" data-i18n="settings.oauthCode">在瀏覽器開啟授權頁，輸入代碼：</p>
@@ -98,17 +89,8 @@
             <button type="button" id="paste-go" data-i18n="settings.finishLogin">完成登入</button>
           </div>
         </div>
-      </section>
-
-      <section class="panel" id="keys" data-sec-panel="keys">
-        <div class="panel-head">
-          <div>
-            <h2 data-i18n="settings.keys">API 金鑰供應商</h2>
-            <p class="sub" data-i18n="settings.keysHint">點名稱切換供應商。要加新的，點「＋ 新增」。金鑰可用 $ENV 或直接貼上。</p>
-          </div>
-        </div>
-        <div class="key-tabs" id="provider-tabs"></div>
         <div id="providers"></div>
+        <div id="groups"></div>
       </section>
       </div>
     </section>
@@ -143,6 +125,8 @@
         webBridges: [],
         picker: [],
         recent: [],
+        groups: {},
+        freeScan: null,
         active: null,
       };
       let pendingOauth = null;
@@ -150,6 +134,8 @@
       let auxRole = null;
       let keyTab = 0;
       let subTab = "";
+      let openKind = "";
+      let openGroup = "";
       const PRESETS = {
         "opencode-free": {
           id: "opencode-free",
@@ -237,8 +223,23 @@
         },
       };
 
+      let toastTimer = 0;
+      function showToast(text) {
+        const el = document.getElementById("toast");
+        if (!el || !text) return;
+        el.textContent = text;
+        el.classList.add("on");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("on"), 2200);
+      }
       function flash(kind, text) {
         const el = document.getElementById("flash");
+        if (kind === "health" || kind === "ok") {
+          el.className = "muted";
+          el.textContent = "";
+          showToast(text);
+          return;
+        }
         el.className = kind;
         el.textContent = text;
       }
@@ -303,9 +304,11 @@
         updatePickerHint(psel);
       }
       function updatePickerHint(psel) {
+        if (psel && psel.id && psel.id !== "pick") return;
         const hint = document.getElementById("picker-hint");
-        if (!hint || !psel || psel.id !== "provider") return;
-        const group = pickerGroups().find((p) => p.id === psel.value);
+        if (!hint) return;
+        const ref = currentRef();
+        const group = pickerGroups().find((p) => p.id === (ref && ref.provider));
         if (group && group.kind === "web-bridge") {
           hint.hidden = false;
           hint.textContent = t("settings.freebuffChatHint");
@@ -315,6 +318,12 @@
         } else if (group && group.kind === "antigravity") {
           hint.hidden = false;
           hint.textContent = t("settings.antigravityHint");
+        } else if (group && group.kind === "group") {
+          hint.hidden = false;
+          hint.textContent = t("settings.groupsHint");
+        } else if (group && group.id === "free") {
+          hint.hidden = false;
+          hint.textContent = freeHintText();
         } else {
           hint.hidden = true;
           hint.textContent = "";
@@ -369,10 +378,49 @@
         if (wrap) wrap.hidden = !choices.length;
       }
       function currentRef() {
-        const provider = document.getElementById("provider").value;
-        const model = document.getElementById("model").value;
-        if (!provider || !model) return null;
-        return { provider, model };
+        const sel = document.getElementById("pick");
+        if (!sel) return null;
+        const parts = String(sel.value || "").split("\u001f");
+        if (!parts[0] || !parts[1]) return null;
+        return { provider: parts[0], model: parts[1] };
+      }
+      function fillPick() {
+        const sel = document.getElementById("pick");
+        if (!sel) return;
+        const current = data.default;
+        sel.innerHTML = pickerGroups()
+          .map((p) => {
+            const models = p.models || [];
+            if (!models.length) {
+              return (
+                '<option value="' +
+                escapeHtml(p.id) +
+                '\u001f" disabled>' +
+                escapeHtml(pickerLabel(p) + t("settings.notLoggedIn")) +
+                "</option>"
+              );
+            }
+            return models
+              .map((m) => {
+                const on = current && current.provider === p.id && current.model === m.id;
+                const name = prettyModelName(m.id, m.name);
+                const label = p.id === "free" ? name : pickerLabel(p) + " / " + name;
+                return (
+                  '<option value="' +
+                  escapeHtml(p.id + "\u001f" + m.id) +
+                  '"' +
+                  (on ? " selected" : "") +
+                  ">" +
+                  escapeHtml(label) +
+                  (p.ready ? "" : escapeHtml(t("settings.notLoggedIn"))) +
+                  "</option>"
+                );
+              })
+              .join("");
+          })
+          .join("");
+        fillReasoning();
+        updatePickerHint();
       }
       function groupReady(id) {
         return Boolean((data.picker || []).find((p) => p.id === id && p.ready));
@@ -569,39 +617,8 @@
           "</div>"
         );
       }
-      function renderAccounts() {
-        const list = accountList();
-        if (!list.some((item) => accountTabId(item) === subTab)) {
-          const preferred = data.default && data.default.provider;
-          const hit =
-            list.find((item) => accountTabId(item) === preferred) ||
-            list.find((item) => item.s.connected || item.s.ready) ||
-            list[0];
-          subTab = accountTabId(hit);
-        }
-        document.getElementById("account-tabs").innerHTML = list
-          .map((item) => {
-            const id = accountTabId(item);
-            return (
-              '<button type="button" class="key-tab' +
-              (id === subTab ? " on" : "") +
-              '" data-sub-tab="' +
-              escapeHtml(id) +
-              '">' +
-              escapeHtml(accountTabTitle(item)) +
-              accountTabBadge(item) +
-              "</button>"
-            );
-          })
-          .join("");
-        const current = list.find((item) => accountTabId(item) === subTab);
-        document.getElementById("accounts").innerHTML = current
-          ? accountCard(current.s, current.kind)
-          : "";
-        document.querySelectorAll("[data-shown-box]").forEach((box) => syncShownBar(box));
-      }
       function renderPicker() {
-        fillSelect(document.getElementById("provider"), pickerGroups(), data.default);
+        fillPick();
         fillReasoning();
         document.getElementById("fast").checked = Boolean(data.fast);
         const mainNow = document.getElementById("main-now");
@@ -610,9 +627,18 @@
             name: modelLabel(data.default),
           });
         }
+        const decideNow = document.getElementById("decide-now");
+        if (decideNow) {
+          const own = (data.aux || {}).classifier;
+          decideNow.textContent = t("settings.decideNow", {
+            name: own && own.provider && own.model ? modelLabel(own) : t("settings.decideInherit"),
+          });
+        }
         const rows = (data.auxRoles || [])
           .map((role) => {
             const eff = effectiveAux(role.id);
+            const title = role.id === "classifier" ? t("settings.decide") : role.name;
+            const hint = role.id === "classifier" ? t("settings.decideShort") : role.hint;
             const revert = eff.inherited
               ? ""
               : '<button type="button" class="linkish" data-aux-main="' +
@@ -627,9 +653,9 @@
             return (
               '<div class="aux-row">' +
               '<div class="aux-task"><strong>' +
-              escapeHtml(role.name) +
+              escapeHtml(title) +
               '</strong><span class="tag">' +
-              escapeHtml(role.hint) +
+              escapeHtml(hint) +
               "</span></div>" +
               '<div class="aux-now"><b>' +
               escapeHtml(modelLabel(eff.ref)) +
@@ -660,8 +686,40 @@
         if (key.length <= 10) return key;
         return key.slice(0, 5) + "…" + key.slice(-5);
       }
+      function freeScanLine() {
+        const scan = data && data.freeScan;
+        if (!scan || !scan.checkedAt) return "";
+        const when = new Date(scan.checkedAt);
+        const label = Number.isNaN(when.getTime())
+          ? String(scan.checkedAt)
+          : when.toLocaleString();
+        let line = t("settings.freeScan", {
+          when: label,
+          free: scan.freeCount || 0,
+          eligible: scan.eligibleCount || 0,
+        });
+        if (typeof scan.added === "number" && typeof scan.removed === "number") {
+          line +=
+            " " +
+            t("settings.freeScanChanges", {
+              added: scan.added,
+              removed: scan.removed,
+            });
+        }
+        return line;
+      }
+      function freeHintText() {
+        const extra = freeScanLine();
+        return extra ? t("settings.freeHint") + " " + extra : t("settings.freeHint");
+      }
+      function isOpenCodeFree(id) {
+        return id === "opencode-free" || id === "opencode_free";
+      }
+      function isFree(id) {
+        return id === "free" || id === "kilo-free" || id === "kilo" || id === "kilo_free";
+      }
       function isKeylessProvider(id) {
-        return id === "opencode-free" || id === "free" || id === "opencode_free";
+        return isOpenCodeFree(id) || isFree(id);
       }
       function storedBadge(p) {
         if (isKeylessProvider(p.id)) {
@@ -683,8 +741,9 @@
         if (row.ok) return '<span class="badge probe-flag">' + t("settings.probeOk") + "</span>";
         return '<span class="badge empty probe-flag">' + t("settings.probeFail") + "</span>";
       }
-      function probeHint() {
-        const probe = data.probe || [];
+      function probeHint(provider) {
+        const ids = new Set(((provider && provider.models) || []).map((model) => model.id));
+        const probe = (data.probe || []).filter((row) => ids.has(row.id));
         if (!probe.length) return "";
         const skip = probe.filter((row) => !row.ok);
         if (!skip.length) return "";
@@ -737,17 +796,20 @@
       function cardHtml(p, index) {
         const lock = isKeylessProvider(p.id);
         const ro = lock ? " readonly" : "";
+        const modelRo = isFree(p.id) ? " readonly" : "";
         const models = (p.models || [])
           .map((m, i) => {
             return (
               '<div class="model-row"><input data-p="' + index + '" data-m="' + i +
               '" data-f="id" value="' + escapeHtml(m.id || "") +
-              '" placeholder="model id" /><input data-p="' + index + '" data-m="' + i +
+              '" placeholder="model id"' + modelRo + ' /><input data-p="' + index + '" data-m="' + i +
               '" data-f="name" value="' + escapeHtml(m.name || "") +
-              '" placeholder="' + t("settings.displayName") + '" />' +
+              '" placeholder="' + t("settings.displayName") + '"' + modelRo + " />" +
               probeBadge(m.id) +
-              '<button type="button" class="secondary" data-del-model="' +
-              index + ":" + i + '">×</button>' +
+              (isFree(p.id)
+                ? ""
+                : '<button type="button" class="secondary" data-del-model="' +
+                  index + ":" + i + '">×</button>') +
               effortField(p, m, index, i) +
               "</div>"
             );
@@ -775,10 +837,23 @@
               escapeHtml(p.apiKeyPreview || "") + '" placeholder="$ENV_VAR 或 sk-…" /></div>') +
           "</div>" +
           (isKeylessProvider(p.id)
+            ? ""
+            : "<label>" +
+              t("settings.spareKeys") +
+              '</label><textarea data-p="' +
+              index +
+              '" data-f="keys" rows="2" spellcheck="false" autocomplete="off">' +
+              escapeHtml((p.keysPreview || []).join("\n")) +
+              '</textarea><p class="hint">' +
+              t("settings.spareKeysHint") +
+              "</p>") +
+          (isOpenCodeFree(p.id)
             ? '<p class="hint">' + t("settings.opencodeFreeHint") + "</p>"
-            : "") +
+            : isFree(p.id)
+              ? '<p class="hint">' + escapeHtml(freeHintText()) + "</p>"
+              : "") +
           '<div class="model-head"><label>' + t("model") + "</label>" +
-          (isKeylessProvider(p.id)
+          (isOpenCodeFree(p.id)
             ? '<button type="button" class="sync-free" data-sync-free="1"><span class="sync-ico" aria-hidden="true">↻</span>' + t("settings.sync") + "</button>"
             : "") +
           "</div>" +
@@ -786,8 +861,10 @@
           (lock
             ? ""
             : '<p class="hint effort-hint">' + t("settings.effortsHint") + "</p>") +
-          (lock ? probeHint() : "") +
-          '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>" +
+          (isOpenCodeFree(p.id) ? probeHint(p) : "") +
+          (isFree(p.id)
+            ? ""
+            : '<button type="button" class="secondary" data-add-model="' + index + '" style="margin-top:0.55rem">' + t("settings.addModel") + "</button>") +
           '<div class="card-foot"><p class="hint">' +
           t(isKeylessProvider(p.id) ? "settings.saveKeylessHint" : "settings.saveKeyHint") +
           "</p>" +
@@ -797,17 +874,24 @@
         );
       }
       function flushVisibleCard() {
-        const card = document.querySelector(".provider-card");
+        const card = document.querySelector("#providers .provider-card");
         if (!card) return;
         const index = Number(card.getAttribute("data-index"));
         const p = (data.providers || [])[index];
         if (!p) return;
         const id = card.querySelector('[data-f="id"]').value.trim();
-        if (isKeylessProvider(p.id) || isKeylessProvider(id)) {
+        if (isOpenCodeFree(p.id) || isOpenCodeFree(id)) {
           p.id = "opencode-free";
           p.name = "OpenCode Free";
           p.baseUrl = "https://opencode.ai/zen/v1";
           p.api = "openai-completions";
+        } else if (isFree(p.id) || isFree(id)) {
+          p.id = "free";
+          p.name = "Free";
+          p.baseUrl = "https://api.kilo.ai/api/gateway";
+          p.api = "openai-completions";
+          p.models = [{ id: "free", name: "Free" }];
+          return;
         } else {
           if (id) p.id = id;
           p.name = card.querySelector('[data-f="name"]').value.trim();
@@ -819,6 +903,14 @@
         if (key && key !== (p.apiKeyPreview || "")) {
           p.apiKey = key;
           p.apiKeyPreview = maskApiKey(key);
+        }
+        const keysEl = card.querySelector('[data-f="keys"]');
+        if (keysEl) {
+          const blob = keysEl.value.replace(/\r/g, "").trim();
+          const preview = (p.keysPreview || []).join("\n");
+          if (blob !== preview) {
+            p.keys = blob ? blob.split("\n").map((line) => line.trim()).filter(Boolean) : [];
+          }
         }
         const models = [];
         card.querySelectorAll(".model-row").forEach((row) => {
@@ -846,6 +938,7 @@
             baseUrl: p.baseUrl || "",
             api: p.api || "openai-completions",
             apiKey: p.apiKey || "",
+            ...(Array.isArray(p.keys) ? { keys: p.keys } : {}),
             models: (p.models || []).map((m) => {
               const reasoning = m.reasoning && m.reasoning.supportedEfforts
                 ? { supportedEfforts: m.reasoning.supportedEfforts }
@@ -907,61 +1000,222 @@
           : "empty";
         data.providers.push(copy);
         keyTab = data.providers.length - 1;
+        openKind = "key";
         render();
       }
-      function renderKeys() {
-        const list = data.providers || [];
-        if (keyTab < 0 || keyTab >= list.length) keyTab = Math.max(0, list.length - 1);
-        const chips = list
-          .map((p, i) => {
+      function groupSlug(name, fallback) {
+        const slug = String(name || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return slug || fallback;
+      }
+      function memberOptions(selected, kind) {
+        return pickerGroups()
+          .filter((item) => item.id !== "group")
+          .map((item) => {
+            const value = kind === "provider" ? item.id : "";
+            if (kind === "provider") {
+              return (
+                '<option value="' +
+                escapeHtml(item.id) +
+                '"' +
+                (item.id === selected ? " selected" : "") +
+                ">" +
+                escapeHtml(pickerLabel(item)) +
+                "</option>"
+              );
+            }
+            return value;
+          })
+          .join("");
+      }
+      function memberModelOptions(providerId, selected) {
+        const group = pickerGroups().find((item) => item.id === providerId);
+        return ((group && group.models) || [])
+          .map(
+            (model) =>
+              '<option value="' +
+              escapeHtml(model.id) +
+              '"' +
+              (model.id === selected ? " selected" : "") +
+              ">" +
+              escapeHtml(prettyModelName(model.id, model.name)) +
+              "</option>",
+          )
+          .join("");
+      }
+      function renderGroups() {
+        const box = document.getElementById("groups");
+        if (!box) return;
+        const groups = data.groups || {};
+        const ids = openKind === "group" && openGroup && groups[openGroup] ? [openGroup] : [];
+        if (!ids.length) {
+          box.innerHTML = "";
+          return;
+        }
+        box.innerHTML = ids
+          .map((id) => {
+            const group = groups[id] || {};
+            const routing = group.routing || "smart";
+            const members = group.members && group.members.length ? group.members : [{ provider: "", model: "" }];
+            const rows = members
+              .map((member, index) => {
+                return (
+                  '<div class="model-row" data-member="' +
+                  index +
+                  '"><select data-g="provider" data-member="' +
+                  index +
+                  '">' +
+                  '<option value="">' +
+                  t("settings.provider") +
+                  "</option>" +
+                  memberOptions(member.provider, "provider") +
+                  '</select><select data-g="model" data-member="' +
+                  index +
+                  '">' +
+                  memberModelOptions(member.provider, member.model) +
+                  '</select><button type="button" class="secondary" data-del-member="' +
+                  escapeHtml(id) +
+                  ":" +
+                  index +
+                  '">×</button></div>'
+                );
+              })
+              .join("");
+            const mode = (value) =>
+              '<option value="' +
+              value +
+              '"' +
+              (routing === value ? " selected" : "") +
+              ">" +
+              t("settings.route." + value) +
+              "</option>";
             return (
-              '<button type="button" class="key-tab' +
-              (i === keyTab ? " on" : "") +
-              '" data-key-tab="' +
-              i +
+              '<div class="provider-card" data-group="' +
+              escapeHtml(id) +
+              '"><div class="card-head"><h3>' +
+              escapeHtml(group.name || id) +
+              '</h3><button type="button" class="secondary" data-del-group="' +
+              escapeHtml(id) +
               '">' +
-              escapeHtml(p.name || p.id) +
-              storedBadge(p) +
-              "</button>"
+              t("settings.delete") +
+              "</button></div><label>" +
+              t("settings.name") +
+              '</label><input data-g="name" value="' +
+              escapeHtml(group.name || "") +
+              '" /><label>' +
+              t("settings.routing") +
+              '</label><select data-g="routing">' +
+              mode("smart") +
+              mode("order") +
+              mode("rotate") +
+              mode("usage") +
+              mode("pace") +
+              "</select><label>" +
+              t("settings.members") +
+              "</label>" +
+              rows +
+              '<button type="button" class="secondary" data-add-member="' +
+              escapeHtml(id) +
+              '" style="margin-top:0.55rem">' +
+              t("settings.addMember") +
+              '</button><p style="margin-top:0.6rem"><button type="button" data-save-groups="1">' +
+              t("settings.saveGroups") +
+              "</button></p></div>"
             );
           })
           .join("");
-        document.getElementById("provider-tabs").innerHTML =
-          chips +
-          '<button type="button" class="key-tab add" data-add-provider="1">' +
-          t("settings.addChip") +
-          "</button>";
-        const current = list[keyTab];
-        document.getElementById("providers").innerHTML = current
-          ? cardHtml(current, keyTab)
-          : '<p class="sub">' + t("settings.noProviders") + "</p>";
       }
-      function settingsSection() {
-        const path = location.pathname.replace(/\/$/, "") || "/";
-        if (path.endsWith("/keys")) return "keys";
-        if (path.endsWith("/subs")) return "subs";
-        return "main";
-      }
-      function showSection() {
-        const sec = settingsSection();
-        document.body.setAttribute("data-section", sec);
-        document.querySelectorAll(".side-sub").forEach((a) => {
-          a.classList.toggle("on", a.getAttribute("data-sec") === sec);
+      function flushGroups() {
+        if (!data.groups) data.groups = {};
+        document.querySelectorAll("#groups [data-group]").forEach((card) => {
+          const id = card.getAttribute("data-group");
+          if (!id) return;
+          const name = (card.querySelector('[data-g="name"]') || {}).value || "";
+          const routing = (card.querySelector('[data-g="routing"]') || {}).value || "smart";
+          const members = [];
+          card.querySelectorAll("[data-member]").forEach((row) => {
+            if (!row.querySelector) return;
+            const providerEl = row.querySelector('[data-g="provider"]');
+            const modelEl = row.querySelector('[data-g="model"]');
+            if (!providerEl || !modelEl) return;
+            members.push({ provider: providerEl.value, model: modelEl.value });
+          });
+          data.groups[id] = { name: name.trim() || id, routing, members };
         });
-        const titles = {
-          main: t("settings.sub.main"),
-          subs: t("settings.sub.subs"),
-          keys: t("settings.sub.keys"),
-        };
-        const h1 = document.querySelector(".pane-head h1");
-        if (h1) h1.textContent = titles[sec] || t("settings.title");
-        document.title = "Guild — " + (titles[sec] || t("settings.title"));
+      }
+      function rosterRow(attrs, title, badge, on) {
+        return (
+          '<button type="button" class="prov-row' +
+          (on ? " on" : "") +
+          '" ' +
+          attrs +
+          "><span>" +
+          escapeHtml(title) +
+          "</span>" +
+          (badge || "") +
+          "</button>"
+        );
+      }
+      function renderRoster() {
+        const box = document.getElementById("roster");
+        if (!box) return;
+        const parts = [];
+        accountList().forEach((item) => {
+          const id = accountTabId(item);
+          parts.push(
+            rosterRow(
+              'data-sub-tab="' + escapeHtml(id) + '"',
+              accountTabTitle(item),
+              accountTabBadge(item),
+              openKind === "sub" && subTab === id,
+            ),
+          );
+        });
+        (data.providers || []).forEach((p, i) => {
+          parts.push(
+            rosterRow(
+              'data-key-tab="' + i + '"',
+              p.name || p.id,
+              storedBadge(p),
+              openKind === "key" && keyTab === i,
+            ),
+          );
+        });
+        Object.keys(data.groups || {}).forEach((id) => {
+          const group = data.groups[id] || {};
+          const n = (group.members || []).filter((member) => member.provider && member.model).length;
+          parts.push(
+            rosterRow(
+              'data-group-tab="' + escapeHtml(id) + '"',
+              group.name || id,
+              '<span class="badge">' + escapeHtml(t("settings.groups")) + " · " + n + "</span>",
+              openKind === "group" && openGroup === id,
+            ),
+          );
+        });
+        box.innerHTML = parts.join("") || '<p class="sub">' + t("settings.noProviders") + "</p>";
+        const accounts = document.getElementById("accounts");
+        const providers = document.getElementById("providers");
+        accounts.innerHTML = "";
+        providers.innerHTML = "";
+        if (openKind === "sub") {
+          const current = accountList().find((item) => accountTabId(item) === subTab);
+          accounts.innerHTML = current ? accountCard(current.s, current.kind) : "";
+          document.querySelectorAll("[data-shown-box]").forEach((shown) => syncShownBar(shown));
+        } else if (openKind === "key") {
+          const list = data.providers || [];
+          if (keyTab < 0 || keyTab >= list.length) keyTab = Math.max(0, list.length - 1);
+          const current = list[keyTab];
+          providers.innerHTML = current ? cardHtml(current, keyTab) : "";
+        }
+        renderGroups();
       }
       function render() {
-        showSection();
-        renderAccounts();
+        renderRoster();
         renderPicker();
-        renderKeys();
         renderPresetGrid();
       }
       async function load() {
@@ -995,18 +1249,27 @@
         render();
         flash("health", t("settings.applied", { name: ref ? ref.provider + " / " + ref.model : t("settings.appliedDefault") }));
       }
-      document.getElementById("provider").addEventListener("change", () => {
-        fillModels(
-          document.getElementById("provider"),
-          document.getElementById("model"),
-          data.default,
-        );
+      document.getElementById("pick").addEventListener("change", () => {
+        fillReasoning();
+        updatePickerHint();
       });
-      document.getElementById("model").addEventListener("change", fillReasoning);
       document.getElementById("apply").addEventListener("click", () => applyPicker());
       document.getElementById("reset-aux").addEventListener("click", async () => {
         await applyPicker({ aux: {} });
       });
+      function openAux(roleId) {
+        auxRole = roleId;
+        const role = (data.auxRoles || []).find((r) => r.id === roleId);
+        const title = roleId === "classifier" ? t("settings.decide") : (role && role.name) || roleId;
+        document.getElementById("aux-title").textContent = t("settings.auxChangeName", { name: title });
+        fillSelect(
+          document.getElementById("aux-provider"),
+          pickerGroups(),
+          (data.aux || {})[roleId] || data.default,
+        );
+        document.getElementById("aux-dialog").showModal();
+      }
+      document.getElementById("add-decide").addEventListener("click", () => openAux("classifier"));
       document.getElementById("aux").addEventListener("click", async (event) => {
         const main = event.target.closest("[data-aux-main]");
         if (main) {
@@ -1018,15 +1281,7 @@
         }
         const change = event.target.closest("[data-aux-change]");
         if (!change) return;
-        auxRole = change.getAttribute("data-aux-change");
-        const role = (data.auxRoles || []).find((r) => r.id === auxRole);
-        document.getElementById("aux-title").textContent = t("settings.auxChangeName", { name: (role && role.name) || auxRole });
-        fillSelect(
-          document.getElementById("aux-provider"),
-          pickerGroups(),
-          (data.aux || {})[auxRole] || data.default,
-        );
-        document.getElementById("aux-dialog").showModal();
+        openAux(change.getAttribute("data-aux-change"));
       });
       document.getElementById("aux-provider").addEventListener("change", () => {
         fillModels(
@@ -1337,23 +1592,42 @@
         flash("health", t("settings.connectedId", { id: pendingOauth }));
         await load();
       });
-      document.getElementById("account-tabs").addEventListener("click", (event) => {
-        const tab = event.target.closest("[data-sub-tab]");
-        if (!tab) return;
-        subTab = tab.getAttribute("data-sub-tab") || "";
-        renderAccounts();
+      document.getElementById("add-provider-open").addEventListener("click", () => {
+        renderPresetGrid();
+        document.getElementById("add-provider-dialog").showModal();
       });
-      document.getElementById("provider-tabs").addEventListener("click", (event) => {
-        if (event.target.closest("[data-add-provider]")) {
-          renderPresetGrid();
-          document.getElementById("add-provider-dialog").showModal();
-          return;
-        }
-        const tab = event.target.closest("[data-key-tab]");
-        if (!tab) return;
+      document.getElementById("roster").addEventListener("click", (event) => {
+        const target = event.target.closest ? event.target : event.target.parentElement;
+        if (!target || !target.closest) return;
+        const sub = target.closest("[data-sub-tab]");
+        const key = target.closest("[data-key-tab]");
+        const group = target.closest("[data-group-tab]");
+        if (!sub && !key && !group) return;
         flushVisibleCard();
-        keyTab = Number(tab.getAttribute("data-key-tab"));
-        renderKeys();
+        flushGroups();
+        if (sub) {
+          const id = sub.getAttribute("data-sub-tab") || "";
+          if (openKind === "sub" && subTab === id) openKind = "";
+          else {
+            openKind = "sub";
+            subTab = id;
+          }
+        } else if (key) {
+          const index = Number(key.getAttribute("data-key-tab"));
+          if (openKind === "key" && keyTab === index) openKind = "";
+          else {
+            openKind = "key";
+            keyTab = index;
+          }
+        } else if (group) {
+          const id = group.getAttribute("data-group-tab") || "";
+          if (openKind === "group" && openGroup === id) openKind = "";
+          else {
+            openKind = "group";
+            openGroup = id;
+          }
+        }
+        render();
       });
       document.getElementById("preset-grid").addEventListener("click", (event) => {
         const btn = event.target.closest("[data-preset]");
@@ -1364,12 +1638,12 @@
       document.getElementById("add-provider-cancel").addEventListener("click", () => {
         document.getElementById("add-provider-dialog").close();
       });
-      async function syncOpenCodeFree() {
-        const btn = document.querySelector("[data-sync-free]");
+      async function syncKeyless(id, btn) {
         if (btn) btn.disabled = true;
         flash("", t("settings.syncing"));
+        const path = "/settings/models/opencode-free/sync";
         try {
-          const res = await fetch("/settings/models/opencode-free/sync", {
+          const res = await fetch(path, {
             method: "POST",
           });
           const body = await res.json().catch(() => ({}));
@@ -1395,7 +1669,7 @@
           } else {
             const n =
               ok ||
-              (((data.picker || []).find((p) => p.id === "opencode-free") || {}).models || [])
+              (((data.picker || []).find((p) => p.id === id) || {}).models || [])
                 .length;
             flash("ok", t("settings.synced", { n: n }));
           }
@@ -1465,8 +1739,12 @@
           saveProviderCard(i);
           return;
         }
-        if (el.closest("[data-sync-free]")) {
-          syncOpenCodeFree();
+        const syncBtn = el.closest("[data-sync-free]");
+        if (syncBtn) {
+          const card = syncBtn.closest(".provider-card");
+          const index = card ? Number(card.getAttribute("data-index")) : -1;
+          const id = ((data.providers || [])[index] || {}).id || "opencode-free";
+          syncKeyless(id, syncBtn);
           return;
         }
         if (el.closest("[data-del-provider]")) {
@@ -1477,13 +1755,92 @@
         if (el.closest("[data-add-model]")) {
           flushVisibleCard();
           const i = Number(el.closest("[data-add-model]").getAttribute("data-add-model"));
+          if (isFree(((data.providers || [])[i] || {}).id)) return;
           data.providers[i].models.push({ id: "", name: "" });
           render();
         }
         if (el.closest("[data-del-model]")) {
           flushVisibleCard();
           const [pi, mi] = el.closest("[data-del-model]").getAttribute("data-del-model").split(":").map(Number);
+          if (isFree(((data.providers || [])[pi] || {}).id)) return;
           data.providers[pi].models.splice(mi, 1);
+          render();
+        }
+      });
+      async function saveGroups() {
+        flushGroups();
+        const res = await fetch("/settings/models", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+          groups: Object.fromEntries(
+            Object.entries(data.groups)
+              .map(([id, group]) => [
+                id,
+                {
+                  ...group,
+                  members: (group.members || []).filter((member) => member.provider && member.model),
+                },
+              ])
+              .filter(([, group]) => group.members.length),
+          ),
+        }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          flash("error", body.error || "save failed");
+          return;
+        }
+        data = body;
+        render();
+        flash("health", t("settings.groupsSaved"));
+      }
+      document.getElementById("add-group").addEventListener("click", () => {
+        flushGroups();
+        if (!data.groups) data.groups = {};
+        const id = "g" + Date.now().toString(36);
+        data.groups[id] = { name: "", routing: "smart", members: [{ provider: "", model: "" }] };
+        openKind = "group";
+        openGroup = id;
+        render();
+      });
+      document.getElementById("groups").addEventListener("change", (event) => {
+        const provider = event.target.closest('[data-g="provider"]');
+        if (!provider) return;
+        const row = provider.closest(".model-row");
+        const model = row && row.querySelector('[data-g="model"]');
+        if (model) model.innerHTML = memberModelOptions(provider.value, "");
+      });
+      document.getElementById("groups").addEventListener("click", (event) => {
+        const el = event.target.closest ? event.target : event.target.parentElement;
+        if (!el || !el.closest) return;
+        if (el.closest("[data-save-groups]")) {
+          saveGroups().catch((err) => flash("error", err.message));
+          return;
+        }
+        const del = el.closest("[data-del-group]");
+        if (del) {
+          flushGroups();
+          const id = del.getAttribute("data-del-group");
+          delete data.groups[id];
+          if (openGroup === id) openKind = "";
+          render();
+          return;
+        }
+        const add = el.closest("[data-add-member]");
+        if (add) {
+          flushGroups();
+          const id = add.getAttribute("data-add-member");
+          if (!data.groups[id]) return;
+          data.groups[id].members.push({ provider: "", model: "" });
+          render();
+          return;
+        }
+        const drop = el.closest("[data-del-member]");
+        if (drop) {
+          flushGroups();
+          const [id, index] = drop.getAttribute("data-del-member").split(":");
+          if (data.groups[id]) data.groups[id].members.splice(Number(index), 1);
           render();
         }
       });

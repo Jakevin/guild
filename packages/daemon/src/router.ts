@@ -1388,6 +1388,14 @@ export async function handleRequest(
       if (Object.hasOwn(body, "aux") && body.aux && typeof body.aux === "object") {
         patch.aux = body.aux as ModelsFile["aux"];
       }
+      if (
+        Object.hasOwn(body, "groups") &&
+        body.groups &&
+        typeof body.groups === "object" &&
+        !Array.isArray(body.groups)
+      ) {
+        patch.groups = body.groups as ModelsFile["groups"];
+      }
       mergeModelsFile(store.dataDir, patch);
       json(res, 200, modelsPayload(store.dataDir, extras, env));
       return;

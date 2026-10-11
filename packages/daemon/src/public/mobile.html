@@ -10,7 +10,7 @@
     <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <title>Guild — 外出</title>
     <link rel="stylesheet" href="/mobile.css?v=main-bot" />
-    <script src="/i18n.js?v=dm-clear"></script>
+    <script src="/i18n.js?v=bot-del"></script>
     <script src="/md.js?v=file-chip"></script>
   </head>
   <body class="m-away" data-i18n-page="mobile">
@@ -38,6 +38,7 @@
           <span data-i18n="bot.bare">無痕密談</span>
         </label>
         <button type="button" class="bare-clear" id="bare-clear" hidden data-i18n="bare.clear" data-i18n-title="bare.clearHelp" title="清掉這次無痕紀錄。Soul、Agent、Position 和一般密談不會動。">清除</button>
+        <button type="button" class="bare-clear bot-del" id="bot-del" hidden data-i18n="bot.delete">刪除</button>
       </header>
       <div class="thread" id="thread"></div>
       <form class="composer" id="composer">
@@ -761,6 +762,7 @@
           const sub = document.getElementById("subtitle");
           const toggle = document.getElementById("bare-toggle");
           const clearBtn = document.getElementById("bare-clear");
+          const delBtn = document.getElementById("bot-del");
           if (state.kind === "dm") {
             const bot = botById(state.id);
             title.textContent = bot ? (bot.main ? "★ " : "") + bot.name : state.id;
@@ -782,8 +784,10 @@
               clearBtn.setAttribute("data-i18n-title", help);
               clearBtn.title = t(help);
             }
+            if (delBtn) delBtn.hidden = !bot;
             return;
           }
+          if (delBtn) delBtn.hidden = true;
           if (toggle) toggle.hidden = true;
           const input = document.getElementById("bare-toggle-input");
           if (input) {
@@ -1099,6 +1103,18 @@
           syncComposer();
           schedule();
         }
+        async function deleteSeat() {
+          if (state.kind !== "dm" || !state.id) return;
+          const bot = botById(state.id);
+          if (!bot) return;
+          if (!window.confirm(t("bot.deleteConfirm", { handle: bot.handle || state.id }))) return;
+          if (isBusy()) stopTurn();
+          const res = await fetch("/bots/" + encodeURIComponent(bot.id), { method: "DELETE" });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || t("deleteFailed"));
+          toast(t("bot.deleted", { handle: bot.handle || state.id }), { ok: true });
+          showList();
+        }
         async function clearBareDm() {
           if (state.kind !== "dm" || !state.id) return;
           const bare = Boolean(state.bare);
@@ -1169,6 +1185,9 @@
         });
         document.getElementById("bare-clear").addEventListener("click", () => {
           clearBareDm().catch((err) => toast(err.message || String(err)));
+        });
+        document.getElementById("bot-del").addEventListener("click", () => {
+          deleteSeat().catch((err) => toast(err.message || String(err)));
         });
         document.getElementById("composer").addEventListener("submit", (event) => {
           event.preventDefault();

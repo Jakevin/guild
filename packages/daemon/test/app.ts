@@ -15,15 +15,14 @@ export async function listen(
   env?: NodeJS.ProcessEnv,
   options?: CreateGuildContextOptions,
 ) {
-  const ctx = await createGuildContext(
-    {
-      ...(env ?? process.env),
-      GUILD_HOME: dataDir,
-      GUILD_HOST: "127.0.0.1",
-      GUILD_PORT: "0",
-    },
-    options,
-  );
+  const base = {
+    ...(env ?? process.env),
+    GUILD_HOME: dataDir,
+    GUILD_HOST: "127.0.0.1",
+    GUILD_PORT: "0",
+  };
+  if (!base.GUILD_FREE_SCAN) base.GUILD_FREE_SCAN = "0";
+  const ctx = await createGuildContext(base, options);
   return {
     ctx,
     server: ctx.server.node,

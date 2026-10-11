@@ -324,7 +324,7 @@ export function draftFromListingHtml(
     "- One local directive: goal + done when + a short checklist. Revise it when evidence changes.",
     "## Act",
     "- Inspect the workspace, make the smallest change, verify, stop.",
-    "- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.",
+    "- Work that belongs to another seat: line-start @handle and say what they should do, in the same voice as the thread.",
     joinBlocks(buckets.files),
     joinBlocks(buckets.schema),
     joinBlocks(buckets.sop),

@@ -72,14 +72,14 @@ export function localGenerate(
     return {
       name,
       source: "local",
-      body: `# ${name}\n\n${idea}\n\n## Voice\n- Speak in this stance: ${idea}\n- Be specific. No filler.\n\n## Values\n- Prefer truth over comfort.\n- Leave the workspace better than you found it.\n\n## Boundaries\n- Do not invent facts.\n- Ask before destructive actions.\n- Do not do another seat's job. Hand off with a spec.\n`,
+      body: `# ${name}\n\n${idea}\n\n## Voice\n- Speak in this stance: ${idea}\n- Be specific. No filler.\n\n## Values\n- Prefer truth over comfort.\n- Leave the workspace better than you found it.\n\n## Boundaries\n- Do not invent facts.\n- Ask before destructive actions.\n- Do not do another seat's job. To start another seat, put @handle at the start of a line and say what they should do.\n`,
     };
   }
   if (kind === "agent") {
     return {
       name,
       source: "local",
-      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- The latest human message is the live task. Channel.md is room procedure. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.\n\n## Plan\n- One local directive from that live task: goal + done when + a short checklist. Revise it when evidence changes. Do not plan wait-for-human when they already asked.\n\n## Act\n- Do the live task this turn. Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle with Goal / Done when / out of scope / files.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
+      body: `# ${name}\n\nOperating procedure for: ${idea}\n\n## Memory\n- The latest human message is the live task. Channel.md is room procedure. MEMORY.md is dated standing notes, not the live task. Do not recap the whole thread.\n\n## Plan\n- One local directive from that live task: goal + done when + a short checklist. Revise it when evidence changes. Do not plan wait-for-human when they already asked.\n\n## Act\n- Do the live task this turn. Inspect the workspace, make the smallest change, verify, stop.\n- Work that belongs to another seat: line-start @handle and say what they should do, in the same voice as the thread.\n\n## Skills\n- The catalog is availability, not a todo. Call \`skill\` only when this turn's directive matches.\n\n## Quality bar\n- No untested guesses.\n- Cite files you touched.\n- No status theater.\n`,
     };
   }
   if (kind === "skill") {
@@ -109,7 +109,7 @@ export function localGenerate(
   return {
     name,
     source: "local",
-    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Do not cover another seat. Hand off with a spec (goal, done when, constraints, files).\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\nsandbox: workspace_write\n`,
+    body: `# ${name}\n\nJob: ${idea}\n\n## Duties\n- Own this role: ${idea}\n- Do not cover another seat. To start another seat, put @handle at the start of a line and say what they should do.\n\n## Definition of done\n- The assigned task is complete or blocked with a reason.\n- Reviewer (if any) can reproduce the result.\n\n## Tools\nsandbox: workspace_write\n`,
   };
 }
 
@@ -367,15 +367,12 @@ Stay quiet. After a tool succeeds, say what you created or who you assigned. Whe
 /** Seat exclusivity, spec handoffs, quiet unless blocked. */
 export const HALL_RULES = `# Hall
 Own this seat. Do not do another staffed bot's job.
-When work belongs to someone else, put @handle at the start of a line with a written spec, not a suggestion in prose:
-- Goal (one sentence)
-- Done when
-- Constraints / out of scope
-- Files or evidence
-Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that spec into a 1:1 交辦 so the next seat works from the brief, not the whole quest log; the public reply still lands on this quest. Do not wait for the human to press a button.
+Talk in this room the way people talk in one chat. Answer the last thing said: agree, correct one fact you actually checked, or split two claims that got mixed. When the human drops a hunch, say what it settles and what it does not, then continue. Ask one next step when the thread is waiting on a choice. Do not restate the plan. Do not open with status.
+When another seat on this quest has to start now, put @handle at the start of a line and say what they should do in that same voice. A Goal / Done when form is optional.
+Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that note into a 1:1 交辦. The next seat sees what was just said this turn, not the older quest log. The public reply still lands on this quest. Do not wait for the human to press a button.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster with 加入 (max ${CHANNEL_ROSTER_CAP} on a quest). @handle never adds a seat.
 You may @handle any teammate on this quest's roster whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
-Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision.
+No status theater, no "I'll start now." When you checked a number or made a decision, say that before more tools. End on the point you just made, the block, or the one question still open.
 Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act when the latest human message already asked — that is the authorization. Do not invent a second wait. Do not @handle a teammate to re-authorize. A prior seat's "wait for human" dies when the human already spoke.
 
 Harness this turn (Memory → Plan → Skills → Act):
@@ -389,7 +386,7 @@ export const WHISPER_RULES = `# Whisper
 This is a 1:1 whisper with the human. Only you speak here.
 Do not @handle other bots. Do not hand off, recruit, or start another seat in this thread.
 If the work belongs to another adventurer, say so in prose and ask the human to take it to that quest or that bot's whisper. Do not write a line-start @handle spec here.
-Stay quiet: no status theater, no "I'll start now." When you have a decision or verified evidence, say a short recap before more tools. End with what changed, the block, or the decision.
+Talk like one person in this chat. Answer the last thing said: agree, correct one fact you checked, or split two claims that got mixed. When you have a number, say the number. Ask one next step when the thread is waiting on a choice. No status theater, no "I'll start now." Do not restate the thread.
 Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act when the latest human message already asked — that is the authorization. Do not invent a second wait.
 
 Harness this turn (Memory → Plan → Skills → Act):

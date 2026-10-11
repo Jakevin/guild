@@ -1457,6 +1457,7 @@ test("bot handoff files a 1:1 交辦 and hops without the quest log", async () =
   store.addMember(room.id, marketing.id);
   store.appendMessage(room.id, "you", "這則是既有委託紀錄，交棒時不該整份帶進下一席。");
   const hopHistory: number[] = [];
+  const hopText: string[] = [];
   const posted = await postUserMessage(
     store,
     room.id,
@@ -1470,6 +1471,11 @@ test("bot handoff files a 1:1 交辦 and hops without the quest log", async () =
       mcp: false,
       turn: stubTurn((input) => {
         hopHistory.push((input.history || []).length);
+        hopText.push(
+          [...(input.history || []).map((row) => row.body), input.userMessage].join(
+            "\n",
+          ),
+        );
         if (input.handle === "pm") {
           return "@marketing\nGoal: 改 README\nDone when: 文案過關";
         }
@@ -1482,7 +1488,11 @@ test("bot handoff files a 1:1 交辦 and hops without the quest log", async () =
   assert.equal(posted.replies[1].author, marketing.id);
   assert.equal(posted.replies[1].replyTo, posted.replies[0].id);
   assert.ok(hopHistory[0] >= 1);
-  assert.equal(hopHistory[1], 0);
+  assert.ok(hopHistory[1] >= 1);
+  assert.match(hopText[0], /既有委託紀錄/);
+  assert.match(hopText[1], /把文案交給行銷/);
+  assert.match(hopText[1], /Goal: 改 README/);
+  assert.doesNotMatch(hopText[1], /既有委託紀錄/);
   const peer = store.openPeer(pm.id, marketing.id);
   const peerMsgs = store.listMessages(peer.id);
   assert.ok(peerMsgs.some((msg) => msg.author === pm.id));

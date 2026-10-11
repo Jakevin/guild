@@ -164,11 +164,22 @@ export type ModelEntry = {
   reasoning?: ModelReasoning;
 };
 
+export type RouteMode = "smart" | "order" | "rotate" | "usage" | "pace";
+
+export type RouteGroup = {
+  name?: string;
+  /** How members are ordered. A conversation stays with the member that answered it. */
+  routing?: RouteMode;
+  members: ModelRef[];
+};
+
 export type ProviderEntry = {
   name?: string;
   baseUrl: string;
   api: LlmApi;
   apiKey?: string;
+  /** Spare keys. The next one is used when the current key is refused or rate-limited. */
+  keys?: string[];
   models: ModelEntry[];
 };
 
@@ -193,6 +204,8 @@ export type ModelsFile = {
   providers: Record<string, ProviderEntry>;
   /** Picker id → model ids shown in the hall. Missing key = all. */
   shown?: Record<string, string[]>;
+  /** A routing group is one picker model whose members fail over. */
+  groups?: Record<string, RouteGroup>;
 };
 
 export const DEFAULT_GUILD_HOST = "127.0.0.1";

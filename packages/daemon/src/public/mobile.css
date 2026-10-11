@@ -323,6 +323,9 @@ textarea:focus-visible {
 .bare-clear[hidden] {
   display: none;
 }
+.bot-del {
+  color: #fca5a5;
+}
 .thread {
   flex: 1;
   min-height: 0;

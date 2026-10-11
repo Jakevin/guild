@@ -751,11 +751,34 @@ function filePeerHandoff(
   return { peerId: peer.id, history };
 }
 
+/** What was just said this turn. The older quest log stays out of a hop. */
+function thisTurnHistory(
+  asked: string,
+  fresh: ChatMessage[],
+  bots: { id: string; handle: string }[],
+): HistoryItem[] {
+  const out: HistoryItem[] = [];
+  const human = asked.trim();
+  if (human) out.push({ author: "you", body: human });
+  for (const reply of fresh) {
+    const text = reply.body.trim();
+    if (!text) continue;
+    if (reply.author === "you") {
+      out.push({ author: "you", body: text });
+      continue;
+    }
+    const handle = bots.find((bot) => bot.id === reply.author)?.handle;
+    const label = handle ? `@${handle}` : reply.author;
+    out.push({ author: "you", body: `（${label}）\n${text}` });
+  }
+  return out;
+}
+
 function handoffTargets(
   store: GuildStore,
   memberIds: string[],
   replies: ChatMessage[],
-  _asked: string,
+  asked: string,
   _history: HistoryItem[],
   fresh: ChatMessage[],
 ): {
@@ -768,6 +791,7 @@ function handoffTargets(
 }[] {
   const bots = store.listBots();
   const handles = bots.map((bot) => bot.handle);
+  const tail = thisTurnHistory(asked, replies, bots);
   const spoke = new Map<string, number>();
   for (const row of replies) {
     spoke.set(row.author, (spoke.get(row.author) || 0) + 1);
@@ -802,7 +826,7 @@ function handoffTargets(
         fromMessageId: reply.id,
         peerId: filed.peerId,
         asked: `（@${fromHandle} 交棒給 @${bot.handle}）\n${spec}`,
-        history: filed.history,
+        history: [...tail, ...filed.history],
       });
     }
   }

@@ -27,7 +27,7 @@ function tempHome(): string {
 
 test("opencode-free is a keyless Zen provider with an offline floor", () => {
   assert.equal(isKeylessProvider("opencode-free"), true);
-  assert.equal(isKeylessProvider("free"), true);
+  assert.equal(isKeylessProvider("free"), false);
   assert.equal(isKeylessProvider("opencode_free"), true);
   assert.equal(isKeylessProvider("openai"), false);
   const provider = openCodeFreeProvider();

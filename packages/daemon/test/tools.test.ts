@@ -331,7 +331,7 @@ test("chat system lists spawnable subagents", () => {
   assert.match(system, /Skipping spawn and reading the whole tree yourself is the wrong default/);
 });
 
-test("chat system owns a seat and hands off with a spec", () => {
+test("chat system owns a seat and talks in the thread", () => {
   const system = buildChatSystem({
     botName: "RD",
     handle: "rd",
@@ -340,11 +340,11 @@ test("chat system owns a seat and hands off with a spec", () => {
     position: "# Position",
   });
   assert.match(system, /# Hall/);
-  assert.match(system, /written spec/);
+  assert.match(system, /Answer the last thing said/);
   assert.match(system, /start of a line/);
-  assert.match(system, /Stay quiet/);
-  assert.match(system, /short recap before more tools/);
-  assert.match(system, /End with what changed/);
+  assert.match(system, /A Goal \/ Done when form is optional/);
+  assert.match(system, /not the older quest log/);
+  assert.match(system, /one question still open/);
   assert.match(system, /Do not @all/);
   assert.match(system, /even if the human only named you this turn/);
   assert.match(system, /latest human message is the live task/);

@@ -490,7 +490,7 @@ test("chat and settings pickers fill efforts from the model, not four hardcoded 
   assert.match(settings, /data-f="efforts"/);
   assert.match(settings, /settings.effortsPlaceholder/);
   assert.match(settings, /settings.effortsHint/);
-  assert.match(settings, /style\.css\?v=model-gold/);
+  assert.match(settings, /style\.css\?v=aux/);
   assert.doesNotMatch(settings, /<option value="minimal">Minimal<\/option>/);
   const settingsCss = readFileSync(SETTINGS_CSS, "utf8");
   assert.match(

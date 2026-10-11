@@ -325,7 +325,7 @@ test("settings hall copy: Command Code card, Connect, not a Freebuff web-bridge"
   assert.match(settings, /data-shown-box/);
   assert.match(settings, /data-shown-all/);
   assert.match(settings, /data-sub-tab/);
-  assert.match(settings, /account-tabs/);
+  assert.match(settings, /id="roster"/);
   assert.match(settings, /account-models/);
   assert.match(settings, /account-models-count/);
   assert.match(settings, /orderShownRows/);
