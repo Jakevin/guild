@@ -1159,9 +1159,34 @@
           "</button>"
         );
       }
+      let shouldScrollDetail = false;
+      function parkDetails(roster) {
+        const panel = roster.parentElement;
+        ["accounts", "oauth-panel", "providers", "groups"].forEach((id) => {
+          const node = document.getElementById(id);
+          if (node && node.parentElement !== panel) panel.append(node);
+        });
+      }
+      function seatOpenDetail(roster) {
+        const row = roster.querySelector(".prov-row.on");
+        if (!row) return;
+        const id = openKind === "sub" ? "accounts" : openKind === "key" ? "providers" : openKind === "group" ? "groups" : "";
+        const node = id ? document.getElementById(id) : null;
+        if (!node || !node.innerHTML) return;
+        row.after(node);
+        if (openKind === "sub") {
+          const oauth = document.getElementById("oauth-panel");
+          if (oauth && !oauth.hidden) node.after(oauth);
+        }
+        if (shouldScrollDetail) {
+          shouldScrollDetail = false;
+          node.scrollIntoView({ block: "nearest" });
+        }
+      }
       function renderRoster() {
         const box = document.getElementById("roster");
         if (!box) return;
+        parkDetails(box);
         const parts = [];
         accountList().forEach((item) => {
           const id = accountTabId(item);
@@ -1212,6 +1237,7 @@
           providers.innerHTML = current ? cardHtml(current, keyTab) : "";
         }
         renderGroups();
+        seatOpenDetail(box);
       }
       function render() {
         renderRoster();
@@ -1536,20 +1562,28 @@
         paste.hidden = body.flow !== "pkce";
         document.getElementById("paste-code").value = "";
       }
+      let oauthPollTimer = null;
+      let webPollTimer = null;
       async function poll(id) {
+        if (pendingOauth !== id) return;
         const res = await fetch("/settings/oauth/" + id + "/poll", { method: "POST" });
         const body = await res.json();
         if (body.connected || body.ready) {
+          pendingOauth = null;
           document.getElementById("oauth-panel").hidden = true;
           flash("health", t("settings.connectedId", { id: id }));
           await load();
           return;
         }
         if (body.error) {
+          pendingOauth = null;
           flash("error", body.error);
           return;
         }
-        if (body.pending) setTimeout(() => poll(id), 3000);
+        if (body.pending && pendingOauth === id) {
+          clearTimeout(oauthPollTimer);
+          oauthPollTimer = setTimeout(() => poll(id), 3000);
+        }
       }
       async function pollWeb(id) {
         if (pendingWeb !== id) return;
@@ -1571,13 +1605,17 @@
             (body.pending || pendingWeb === id) &&
             (body.error === "freebuff_login_required" || body.error === "freebuff_ui_drift")
           ) {
-            setTimeout(() => pollWeb(id), 3000);
+            clearTimeout(webPollTimer);
+            webPollTimer = setTimeout(() => pollWeb(id), 3000);
             return;
           }
           flash("error", webBridgeError(body.error) || body.error);
           return;
         }
-        if (body.pending || pendingWeb === id) setTimeout(() => pollWeb(id), 3000);
+        if ((body.pending || pendingWeb === id) && pendingWeb === id) {
+          clearTimeout(webPollTimer);
+          webPollTimer = setTimeout(() => pollWeb(id), 3000);
+        }
       }
       document.getElementById("paste-go").addEventListener("click", async () => {
         if (!pendingOauth) return;
@@ -1627,6 +1665,7 @@
             openGroup = id;
           }
         }
+        shouldScrollDetail = Boolean(openKind);
         render();
       });
       document.getElementById("preset-grid").addEventListener("click", (event) => {
@@ -1802,6 +1841,7 @@
         data.groups[id] = { name: "", routing: "smart", members: [{ provider: "", model: "" }] };
         openKind = "group";
         openGroup = id;
+        shouldScrollDetail = true;
         render();
       });
       document.getElementById("groups").addEventListener("change", (event) => {
@@ -1823,8 +1863,10 @@
           flushGroups();
           const id = del.getAttribute("data-del-group");
           delete data.groups[id];
+          const card = del.closest("[data-group]");
+          if (card) card.remove();
           if (openGroup === id) openKind = "";
-          render();
+          saveGroups().catch((err) => flash("error", err.message));
           return;
         }
         const add = el.closest("[data-add-member]");

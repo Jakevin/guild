@@ -1,3 +1,4 @@
+import "cordis";
 import type { StoreService } from "./plugins/store.ts";
 import type { HarnessService } from "./plugins/harness.ts";
 import type { OAuthService } from "./plugins/oauth.ts";

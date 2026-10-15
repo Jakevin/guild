@@ -302,7 +302,7 @@ export function freebuffWebStatus(dataDir: string): FreebuffWebStatus {
     pending,
     ready,
     accessTier: state.accessTier,
-    models: liveOrFloorModels(dataDir),
+    models: liveOrFloorModels(dataDir).map((m) => ({ id: m.id, name: m.name ?? m.id })),
     window: "closed",
     ...(pendingLogin && !ready ? { loginUrl: pendingLogin.loginUrl } : {}),
     error: lastError,
@@ -650,7 +650,7 @@ async function runSdkPrompt(input: {
   token: string;
   toolCtx: ToolContext;
   traces: ToolTrace[];
-  parent: AbortSignal;
+  parent?: AbortSignal;
   idle: ReturnType<typeof startStreamIdle>;
 }): Promise<{ text: string; thinking: string }> {
   emitProgress(input.toolCtx, input.traces, FREEBUFF_PROGRESS_WAIT);

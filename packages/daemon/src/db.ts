@@ -194,6 +194,7 @@ function cronRunFromRow(row: Record<string, unknown>): CronRunRow {
 }
 
 function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
+  const rawKind = asString(row.kind);
   const job: CronJobRow = {
     id: asString(row.id),
     name: asString(row.name),
@@ -201,13 +202,12 @@ function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
     botId: asString(row.bot_id),
     prompt: asString(row.prompt),
     schedule: asString(row.schedule),
-    kind:
-      asString(row.kind) === "once" || asString(row.kind) === "cron"
-        ? asString(row.kind)
-        : "every",
+    kind: rawKind === "once" || rawKind === "cron" ? rawKind : "every",
     nextRunAt: asString(row.next_run_at),
     paused: asNumber(row.paused) === 1,
     createdAt: asString(row.created_at),
+    scope: asString(row.scope) === "bot" ? "bot" : "channel",
+    delivery: asString(row.delivery) === "sheet" ? "sheet" : "hall",
   };
   if (row.every_ms != null) job.everyMs = asNumber(row.every_ms);
   const cronExpr = asString(row.cron_expr);
@@ -219,8 +219,6 @@ function cronJobFromRow(row: Record<string, unknown>): CronJobRow {
   if (lastStatus) job.lastStatus = lastStatus;
   const lastError = asString(row.last_error);
   if (lastError) job.lastError = lastError;
-  job.scope = asString(row.scope) === "bot" ? "bot" : "channel";
-  job.delivery = asString(row.delivery) === "sheet" ? "sheet" : "hall";
   const sessionRoomId = asString(row.session_room_id);
   if (sessionRoomId) job.sessionRoomId = sessionRoomId;
   return job;
@@ -425,6 +423,11 @@ function migrateRoomsCronKind(sqlite: DatabaseSync): void {
     .get() as { sql?: unknown } | undefined;
   const sql = typeof row?.sql === "string" ? row.sql : "";
   if (sql.includes("'cron'")) return;
+  try {
+    sqlite.exec("ALTER TABLE rooms ADD COLUMN assign TEXT");
+  } catch {
+    /* column already exists */
+  }
   sqlite.exec("PRAGMA foreign_keys = OFF");
   sqlite.exec("BEGIN");
   try {
@@ -440,7 +443,7 @@ CREATE TABLE rooms_new (
   assign TEXT
 )`);
     sqlite.exec(
-      "INSERT INTO rooms_new (id, kind, name, member_ids, created_at, parent_id, branch_from_id) SELECT id, kind, name, member_ids, created_at, parent_id, branch_from_id FROM rooms",
+      "INSERT INTO rooms_new (id, kind, name, member_ids, created_at, parent_id, branch_from_id, assign) SELECT id, kind, name, member_ids, created_at, parent_id, branch_from_id, assign FROM rooms",
     );
     sqlite.exec("DROP TABLE rooms");
     sqlite.exec("ALTER TABLE rooms_new RENAME TO rooms");
@@ -714,6 +717,11 @@ export class GuildDb {
       .prepare("SELECT seq FROM messages WHERE room_id = ? AND id = ?")
       .get(roomId, messageId) as { seq?: number } | undefined;
     if (!row || typeof row.seq !== "number") return null;
+    this.sqlite
+      .prepare(
+        "DELETE FROM trajectory WHERE room_id = ? AND turn_id IN (SELECT id FROM messages WHERE room_id = ? AND seq > ?)",
+      )
+      .run(roomId, roomId, row.seq);
     this.sqlite
       .prepare("DELETE FROM messages WHERE room_id = ? AND seq > ?")
       .run(roomId, row.seq);

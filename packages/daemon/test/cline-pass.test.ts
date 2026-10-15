@@ -76,6 +76,25 @@ test("Cline chat SSE keeps text and tool call fragments", () => {
   assert.equal(message.toolCalls[0]?.arguments, '{"path":"a.ts"}');
 });
 
+test("shared tool-call indexes keep argument deltas on the call that owns the id", () => {
+  const message = assembleOpenAiChatStream(
+    [
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"read","arguments":""}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\"a.ts\\"}"}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_b","function":{"name":"list","arguments":""}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\".\\"}"}}]}}]}',
+      "data: [DONE]",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    message.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+    [
+      { id: "call_a", name: "read", arguments: '{"path":"a.ts"}' },
+      { id: "call_b", name: "list", arguments: '{"path":"."}' },
+    ],
+  );
+});
+
 test("Cline Pass sends reasoning_effort only", () => {
   assert.deepEqual(
     reasoningPayload("cline-pass", "https://api.cline.bot/api/v1", "high"),

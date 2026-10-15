@@ -146,7 +146,7 @@ describe("routing groups", { concurrency: 1 }, () => {
     assert.deepEqual(provider?.keysPreview, [spare.slice(0, 5) + "…" + spare.slice(-5)]);
     const group = listed.picker.find((item) => item.id === GROUP_PROVIDER_ID);
     assert.equal(group?.kind, "group");
-    assert.deepEqual(group?.models.map((model) => model.id), ["daily"]);
+    assert.deepEqual(group?.models.map((model) => model.id), ["daily", "free"]);
     assert.equal(listed.picker.filter((item) => item.id === "free").length, 1);
   });
 

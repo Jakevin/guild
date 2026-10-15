@@ -5,6 +5,7 @@ import {
   readFileSync,
   realpathSync,
   statSync,
+  type Dirent,
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -85,7 +86,11 @@ const SECRET_HOME_DIRS = [
   join(".config", "gcloud"),
   join(".config", "gh"),
   join(".config", "manicode"),
+  join(".config", "google-chrome"),
+  join(".config", "chromium"),
   join("Library", "Keychains"),
+  join("Library", "Application Support", "Google", "Chrome"),
+  join("AppData", "Local", "Google", "Chrome", "User Data"),
 ].map((relative) => join(HOME, relative));
 const SSH_KEY_NAME = /^(id_rsa|id_dsa|id_ecdsa|id_ed25519|id_xmss)$/i;
 const SECRET_SUFFIXES = [
@@ -131,7 +136,7 @@ function isSecretPath(abs: string): boolean {
     if (under(abs, home) && SECRET_GUILD_FILES.has(lower)) return true;
   }
   if (dirname(abs) === HOME && SECRET_HOME_FILES.has(lower)) return true;
-  if (name === ".env" || name.startsWith(".env.")) return true;
+  if (lower === ".env" || lower.startsWith(".env.")) return true;
   if (lower === "credentials.json" || lower === "service-account.json") {
     return true;
   }
@@ -142,6 +147,41 @@ function isSecretPath(abs: string): boolean {
     return true;
   }
   return false;
+}
+
+function isGuildSecretFile(abs: string): boolean {
+  const lower = basename(abs).toLowerCase();
+  for (const home of guildHomes()) {
+    let root = home;
+    try {
+      root = realpathSync(home);
+    } catch {
+      root = canonicalPath(home);
+    }
+    if (under(abs, join(root, "browser-profile"))) return true;
+    if (under(abs, join(root, "freebuff-profile"))) return true;
+    if (under(abs, join(root, "freebuff-scratch"))) return true;
+    if (under(abs, root) && SECRET_GUILD_FILES.has(lower)) return true;
+  }
+  return false;
+}
+
+/**
+ * Real path of `file` when it stays inside `root`.
+ * Null when the path escapes `root` or lands on a guild secret file.
+ * In-root skill and agent files are not run through the host-browse denylist:
+ * that list treats `~/.claude` itself as secret, which would hide every Claude skill.
+ */
+export function realpathInside(file: string, root: string): string | null {
+  try {
+    const realFile = realpathSync(file);
+    const realRoot = realpathSync(root);
+    if (!under(realFile, realRoot)) return null;
+    if (isGuildSecretFile(realFile)) return null;
+    return realFile;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -252,7 +292,7 @@ function walkTree(
   budget: { left: number },
 ): void {
   if (budget.left <= 0 || depth < 0) return;
-  let entries: ReturnType<typeof readdirSync>;
+  let entries: Dirent[];
   try {
     entries = readdirSync(root, { withFileTypes: true });
   } catch {
@@ -269,8 +309,9 @@ function walkTree(
     budget.left -= 1;
     const mark = entry.isDirectory() ? "/" : "";
     lines.push(`${prefix}${entry.name}${mark}`);
-    if (entry.isDirectory() && depth > 0) {
-      walkTree(join(root, entry.name), depth - 1, `${prefix}  `, lines, budget);
+    const childPath = join(root, entry.name);
+    if (entry.isDirectory() && depth > 0 && !isSecretPath(canonicalPath(childPath))) {
+      walkTree(childPath, depth - 1, `${prefix}  `, lines, budget);
     }
   }
 }

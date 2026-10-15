@@ -219,12 +219,12 @@ export function readModelsFile(dataDir: string): ModelsFile {
     const raw = readFileSync(modelsPath(dataDir), "utf8");
     const parsed = JSON.parse(raw) as ModelsFile;
     if (!parsed || typeof parsed !== "object" || !parsed.providers) {
-      return structuredClone(DEFAULT_MODELS);
+      return withFreeGroup(structuredClone(DEFAULT_MODELS));
     }
     if (Object.keys(parsed.providers).length === 0) return parsed;
-    return withFreeModel(withClinePass(withOpenCodeFree(parsed)));
+    return withFreeGroup(withFreeModel(withClinePass(withOpenCodeFree(parsed))));
   } catch {
-    return structuredClone(DEFAULT_MODELS);
+    return withFreeGroup(structuredClone(DEFAULT_MODELS));
   }
 }
 
@@ -299,6 +299,44 @@ function withFreeModel(file: ModelsFile): ModelsFile {
   return { ...file, providers };
 }
 
+/** One Free routing group: every OpenCode Free model, plus the Kilo auto route. */
+function withFreeGroup(file: ModelsFile): ModelsFile {
+  const builtin: ModelRef[] = [];
+  for (const model of file.providers[OPENCODE_FREE_PROVIDER_ID]?.models ?? []) {
+    const id = String(model?.id || "").trim();
+    if (id) builtin.push({ provider: OPENCODE_FREE_PROVIDER_ID, model: id });
+  }
+  if (file.providers[FREE_PROVIDER_ID]?.models.some((model) => model.id === FREE_MODEL_ID)) {
+    builtin.push({ provider: FREE_PROVIDER_ID, model: FREE_MODEL_ID });
+  }
+  if (!builtin.length) return file;
+  const groups = file.groups ?? {};
+  const key = groups.free
+    ? "free"
+    : Object.keys(groups).find(
+        (id) => String(groups[id]?.name || "").trim().toLowerCase() === "free",
+      );
+  if (!key) {
+    return {
+      ...file,
+      groups: { ...groups, free: { name: "Free", routing: "smart", members: builtin } },
+    };
+  }
+  const group = groups[key]!;
+  const have = new Set(
+    (group.members ?? []).map((member) => `${member.provider}\n${member.model}`),
+  );
+  const missing = builtin.filter((member) => !have.has(`${member.provider}\n${member.model}`));
+  if (!missing.length) return file;
+  return {
+    ...file,
+    groups: {
+      ...groups,
+      [key]: { ...group, members: [...(group.members ?? []), ...missing] },
+    },
+  };
+}
+
 function withOpenCodeFree(file: ModelsFile): ModelsFile {
   if (file.providers[OPENCODE_FREE_PROVIDER_ID]) return pinOpenCodeFree(file);
   return pinOpenCodeFree({
@@ -311,7 +349,7 @@ function withOpenCodeFree(file: ModelsFile): ModelsFile {
 }
 
 export function writeModelsFile(dataDir: string, file: ModelsFile): ModelsFile {
-  const cleaned = pinOpenCodeFree(sanitizeModels(file));
+  const cleaned = withFreeGroup(pinOpenCodeFree(sanitizeModels(file)));
   const path = modelsPath(dataDir);
   writeFileSync(path, `${JSON.stringify(cleaned, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
@@ -587,6 +625,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       ready: freebuffReady,
       models: filterShownModels(freebuffModels, freebuffShown),
     },
+    ...groupPicker(file),
   ];
   return {
     default: file.default ?? null,
@@ -608,7 +647,7 @@ export function publicModels(dataDir: string, env: NodeJS.ProcessEnv = process.e
       models: filterShownModels(antigravity.catalog, shownIdsOf(file, ANTIGRAVITY_PICKER_ID)),
     },
     webBridges,
-    picker: picker.concat(groupPicker(file)),
+    picker,
     groups: file.groups ?? {},
     freeScan: summarizeFreeScan(readFreeScan(dataDir)),
     active: target
@@ -1080,6 +1119,7 @@ export type OpenAiStreamMessage = {
 /** Join OpenAI chat-completion SSE into one assistant message. */
 export function assembleOpenAiChatStream(raw: string): OpenAiStreamMessage {
   const calls = new Map<number, { id: string; name: string; arguments: string }>();
+  const slots = new Map<number, number>();
   let content = "";
   let reasoning = "";
   for (const line of raw.split("\n")) {
@@ -1111,7 +1151,19 @@ export function assembleOpenAiChatStream(raw: string): OpenAiStreamMessage {
     if (typeof delta.reasoning_content === "string") reasoning += delta.reasoning_content;
     else if (typeof delta.reasoning === "string") reasoning += delta.reasoning;
     for (const call of delta.tool_calls ?? []) {
-      const index = call.index ?? 0;
+      const providerIndex = call.index ?? 0;
+      let index = slots.get(providerIndex) ?? providerIndex;
+      if (call.id) {
+        const currentId = calls.get(index)?.id;
+        if (currentId && currentId !== call.id) {
+          let next = index + 1000;
+          while (calls.has(next) && calls.get(next)!.id && calls.get(next)!.id !== call.id) {
+            next += 1000;
+          }
+          index = next;
+        }
+      }
+      slots.set(providerIndex, index);
       const current = calls.get(index) ?? { id: "", name: "", arguments: "" };
       if (call.id) current.id = call.id;
       if (call.function?.name) current.name += call.function.name;
@@ -1593,7 +1645,7 @@ function zenResponsesTools(
 async function postZenResponses(
   target: LlmTarget,
   body: Record<string, unknown>,
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`${target.baseUrl.replace(/\/+$/, "")}/responses`, {
     method: "POST",
@@ -1938,30 +1990,41 @@ async function readSseText(response: Response): Promise<string | null> {
   const decoder = new TextDecoder();
   let buffer = "";
   let text = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n");
-    buffer = chunks.pop() ?? "";
-    for (const line of chunks) {
-      if (!line.startsWith("data:")) continue;
-      const raw = line.slice(5).trim();
-      if (!raw || raw === "[DONE]") continue;
-      try {
-        const event = JSON.parse(raw) as {
-          type?: string;
-          delta?: string;
-          text?: string;
-        };
-        if (typeof event.delta === "string") text += event.delta;
-        else if (event.type === "response.output_text.delta" && event.text) {
-          text += event.text;
-        }
-      } catch {
-        /* ignore */
+  const consumeLine = (line: string) => {
+    if (!line.startsWith("data:")) return;
+    const raw = line.slice(5).trim();
+    if (!raw || raw === "[DONE]") return;
+    try {
+      const event = JSON.parse(raw) as {
+        type?: string;
+        delta?: string;
+        text?: string;
+      };
+      if (typeof event.delta === "string") text += event.delta;
+      else if (event.type === "response.output_text.delta" && event.text) {
+        text += event.text;
       }
+    } catch {
+      /* ignore */
     }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        buffer += decoder.decode();
+        if (buffer) {
+          for (const line of buffer.split("\n")) consumeLine(line);
+        }
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n");
+      buffer = chunks.pop() ?? "";
+      for (const line of chunks) consumeLine(line);
+    }
+  } finally {
+    reader.releaseLock();
   }
   return text.trim() || null;
 }

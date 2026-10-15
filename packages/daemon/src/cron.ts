@@ -476,6 +476,13 @@ export function executeCronjob(
     };
   }
   const action = String(args.action || args.op || "list").trim().toLowerCase();
+  if ((ctx.spawnDepth ?? 0) >= 1 && action !== "list") {
+    return {
+      text: "subagents cannot manage cron jobs",
+      isError: true,
+    };
+  }
+  const isMain = ctx.botId ? store.isMainBot(ctx.botId) : false;
   try {
     if (action === "list") {
       const roomId =
@@ -506,6 +513,9 @@ export function executeCronjob(
         throw new StoreError(400, "room_id is required");
       }
       if (!botId) throw new StoreError(400, "bot_id is required");
+      if (ctx.botId && !isMain && botId !== ctx.botId) {
+        throw new StoreError(403, "cannot schedule cron jobs for another bot");
+      }
       const job = createCronJob(store, {
         roomId,
         botId,
@@ -521,12 +531,21 @@ export function executeCronjob(
       };
     }
     const ref = String(args.job_id || args.id || args.name || "").trim();
+    const assertCanModify = (target: { botId: string }) => {
+      if (ctx.botId && !isMain && target.botId !== ctx.botId) {
+        throw new StoreError(403, "cannot modify another bot's cron job");
+      }
+    };
     if (action === "pause") {
-      const job = pauseCronJob(store, findCronJob(store, ref).id);
+      const target = findCronJob(store, ref);
+      assertCanModify(target);
+      const job = pauseCronJob(store, target.id);
       return { text: `paused ${job.id} · ${job.name}`, isError: false };
     }
     if (action === "resume") {
-      const job = resumeCronJob(store, findCronJob(store, ref).id);
+      const target = findCronJob(store, ref);
+      assertCanModify(target);
+      const job = resumeCronJob(store, target.id);
       return {
         text: `resumed ${job.id} · next ${job.nextRunAt}`,
         isError: false,
@@ -534,11 +553,14 @@ export function executeCronjob(
     }
     if (action === "remove" || action === "delete") {
       const job = findCronJob(store, ref);
+      assertCanModify(job);
       removeCronJob(store, job.id);
       return { text: `removed ${job.id} · ${job.name}`, isError: false };
     }
     if (action === "update") {
-      const job = updateCronJob(store, findCronJob(store, ref).id, {
+      const target = findCronJob(store, ref);
+      assertCanModify(target);
+      const job = updateCronJob(store, target.id, {
         name: typeof args.name === "string" ? args.name : undefined,
         prompt: typeof args.prompt === "string" ? args.prompt : undefined,
         schedule: typeof args.schedule === "string" ? args.schedule : undefined,
@@ -556,6 +578,7 @@ export function executeCronjob(
     }
     if (action === "run") {
       const job = findCronJob(store, ref);
+      assertCanModify(job);
       return fireCronJob(store, job.id, ctx.env, {}, { force: true }).then((result) => ({
         text: result.ok
           ? `ran ${job.id}`
@@ -577,7 +600,7 @@ export function runCronSlash(
   roomId: string,
   botId: string,
   text: string,
-): { text: string; isError: boolean } {
+): Promise<{ text: string; isError: boolean }> | { text: string; isError: boolean } {
   const tokens = tokenizeCronSlash(text.replace(/^\/cron\b/i, "").trim());
   const action = (tokens[0] || "list").toLowerCase();
   if (action === "list" || action === "") {

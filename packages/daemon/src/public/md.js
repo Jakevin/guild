@@ -6,6 +6,12 @@ function escapeMd(value) {
     .replace(/>/g, "&gt;");
 }
 
+function escapeAttr(value) {
+  return escapeMd(value)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function isFileCode(text) {
   const s = String(text).trim();
   if (!s || s.length > 180 || /\s/.test(s) || /^https?:/i.test(s)) return false;
@@ -92,7 +98,7 @@ function fileLinkTag(label, href) {
     '"' +
     (parsed.line ? ' data-line="' + parsed.line + '"' : "") +
     ' title="' +
-    escapeMd(title) +
+    escapeAttr(title) +
     '">' +
     text +
     "</a>"
@@ -106,7 +112,7 @@ function audioTag(src, label) {
   return (
     '<span class="md-audio-wrap">' +
     '<audio class="md-audio" controls preload="none" src="' +
-    src +
+    escapeAttr(src) +
     '"></audio>' +
     cap +
     "</span>"
@@ -123,12 +129,12 @@ function inlineMd(text) {
     const label = alt || "image";
     return (
       '<a class="md-img-link" href="' +
-      src +
+      escapeAttr(src) +
       '" target="_blank" rel="noopener noreferrer">' +
       '<img class="md-img" src="' +
-      src +
+      escapeAttr(src) +
       '" alt="' +
-      label +
+      escapeAttr(label) +
       '" loading="lazy"></a>'
     );
   });
@@ -140,7 +146,7 @@ function inlineMd(text) {
     if (!/^https?:/i.test(href)) return m;
     return (
       '<a href="' +
-      href.replace(/"/g, "") +
+      escapeAttr(href.replace(/"/g, "")) +
       '" target="_blank" rel="noopener noreferrer">' +
       label +
       "</a>"
@@ -152,7 +158,7 @@ function inlineMd(text) {
       '<a class="md-file" href="#" data-path="' +
       encodeURIComponent(code) +
       '" title="' +
-      code +
+      escapeAttr(code) +
       '">' +
       code +
       "</a>"

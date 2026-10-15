@@ -1,6 +1,14 @@
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { realpathInside } from "./host-browse.ts";
 import { parseSkillMarkdown } from "./skill-import.ts";
 
 export type HostSkill = {
@@ -45,11 +53,13 @@ function skillFilesIn(dir: string): string[] {
   const found: string[] = [];
   const direct = join(dir, "SKILL.md");
   try {
-    if (existsSync(direct) && statSync(direct).isFile()) found.push(direct);
+    if (existsSync(direct) && statSync(direct).isFile() && realpathInside(direct, dir)) {
+      found.push(direct);
+    }
   } catch {
     /* skip */
   }
-  let entries: { name: string; isDirectory: () => boolean }[] = [];
+  let entries: Dirent[] = [];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -57,17 +67,31 @@ function skillFilesIn(dir: string): string[] {
   }
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
-    if (entry.isDirectory()) {
-      const skill = join(dir, entry.name, "SKILL.md");
+    const entryPath = join(dir, entry.name);
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+    if (entry.isSymbolicLink()) {
       try {
-        if (existsSync(skill) && statSync(skill).isFile()) found.push(skill);
+        const st = statSync(entryPath);
+        isDir = st.isDirectory();
+        isFile = st.isFile();
+      } catch {
+        continue;
+      }
+    }
+    if (isDir) {
+      const skill = join(entryPath, "SKILL.md");
+      try {
+        if (existsSync(skill) && statSync(skill).isFile() && realpathInside(skill, dir)) {
+          found.push(skill);
+        }
       } catch {
         /* skip */
       }
       continue;
     }
-    if (entry.isFile() && /\.md$/i.test(entry.name) && entry.name.toLowerCase() !== "skill.md") {
-      found.push(join(dir, entry.name));
+    if (isFile && /\.md$/i.test(entry.name) && entry.name.toLowerCase() !== "skill.md") {
+      if (realpathInside(entryPath, dir)) found.push(entryPath);
     }
   }
   return found;

@@ -15,6 +15,23 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function hostIs(host: string, name: string): boolean {
+  return host === name || host.endsWith(`.${name}`);
+}
+
+export function isFreebuffChatCompletionsUrl(url: URL): boolean {
+  if (!url.pathname.endsWith("/api/v1/chat/completions")) return false;
+  const host = url.hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    hostIs(host, "codebuff.com") ||
+    hostIs(host, "freebuff.com")
+  );
+}
+
 function withSessionMetadata(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
@@ -27,7 +44,7 @@ function withSessionMetadata(
   } catch {
     return init;
   }
-  if (!url.pathname.endsWith("/api/v1/chat/completions")) return init;
+  if (!isFreebuffChatCompletionsUrl(url)) return init;
   try {
     const body: unknown = JSON.parse(init.body);
     if (!body || typeof body !== "object" || Array.isArray(body)) return init;

@@ -109,6 +109,10 @@ test("read_only refuses run/write/mcp and allows read", async () => {
   assert.equal(gateTool("spawn", { prompt: "survey the tree" }, ctx), null);
   assert.equal(gateTool("read_spawn", { agent_id: "x" }, ctx), null);
   assert.equal(gateTool("cronjob", { action: "list" }, ctx), null);
+  assert.equal(gateTool("cronjob", { op: "list" }, ctx), null);
+  const removed = gateTool("cronjob", { op: "remove", job_id: "x" }, ctx);
+  assert.equal(removed?.isError, true);
+  assert.match(removed?.text || "", /refused cronjob remove/);
 });
 
 test("mid-loop recap is kept and joined with the final reply", async () => {

@@ -99,7 +99,7 @@ function applyClockSkewFromDate(header: string | undefined): void {
   if (!header) return;
   const server = parseRfc2616Date(header);
   if (server == null) return;
-  clockSkewSeconds += server - Date.now() / 1000;
+  clockSkewSeconds = server - Date.now() / 1000;
 }
 
 export function splitBinaryFrame(data: Buffer): { path: string; body: Buffer } | null {

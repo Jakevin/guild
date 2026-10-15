@@ -69,6 +69,7 @@ const EXACT_TREE_IGNORE = new Set([
 
 export type BrowserAction =
   | "open"
+  | "navigate"
   | "snapshot"
   | "click"
   | "type"
@@ -87,6 +88,7 @@ type Session = {
 };
 
 let session: Session | null = null;
+let sessionPromise: Promise<Session> | null = null;
 
 export function realProfileEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = (env.GUILD_BROWSER_REAL_PROFILE ?? "1").trim().toLowerCase();
@@ -375,9 +377,15 @@ async function attachPage(sess: Session): Promise<void> {
   );
   const url = page?.webSocketDebuggerUrl;
   if (!url) throw new Error("Chrome has no page target for CDP");
-  if (sess.ws && sess.ws.readyState === WebSocket.OPEN) {
+  const old = sess.ws;
+  if (old && old.readyState === WebSocket.OPEN) {
+    for (const wait of sess.pending.values()) {
+      wait.reject(new Error("CDP websocket closed"));
+    }
+    sess.pending.clear();
+    sess.ws = null as unknown as WebSocket;
     try {
-      sess.ws.close();
+      old.close();
     } catch {
       /* ignore */
     }
@@ -409,7 +417,22 @@ function openWs(sess: Session, url: string): Promise<void> {
       }
     });
     ws.addEventListener("open", () => resolve());
-    ws.addEventListener("error", () => reject(new Error("CDP websocket failed")));
+    ws.addEventListener("error", () => {
+      if (sess.ws !== ws) return;
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      reject(new Error("CDP websocket failed"));
+    });
+    ws.addEventListener("close", () => {
+      if (sess.ws !== ws) return;
+      for (const wait of sess.pending.values()) {
+        wait.reject(new Error("CDP websocket closed"));
+      }
+      sess.pending.clear();
+    });
   });
 }
 
@@ -475,8 +498,16 @@ async function ensureSession(dataDir: string, env: NodeJS.ProcessEnv): Promise<S
   if (session && session.real === wantReal && session.proc.exitCode === null) {
     return session;
   }
-  await closeBrowser();
-  return launchChrome(dataDir, env);
+  if (sessionPromise) return sessionPromise;
+  sessionPromise = (async () => {
+    try {
+      await closeBrowser();
+      return await launchChrome(dataDir, env);
+    } finally {
+      sessionPromise = null;
+    }
+  })();
+  return sessionPromise;
 }
 
 type AxNode = {
@@ -527,7 +558,8 @@ async function snapshotText(sess: Session): Promise<string> {
 }
 
 function parseRef(raw: string): string {
-  return raw.trim().replace(/^@/, "");
+  const cleaned = raw.trim().replace(/^@/, "");
+  return /^e\d+$/.test(cleaned) ? cleaned : "";
 }
 
 export async function runBrowser(
@@ -553,13 +585,22 @@ export async function runBrowser(
   try {
     if (action === "close") {
       await closeBrowser();
-      return { text: "browser closed" };
+      return { text: "browser closed", isError: false };
     }
     const sess = await ensureSession(dataDir, env);
     const mode = sess.real ? "real-profile" : "ephemeral";
     if (action === "open" || action === "navigate") {
       const url = String(args.url || "").trim();
       if (!url) return { text: "browser open needs a url", isError: true };
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return { text: `invalid browser url: ${url}`, isError: true };
+      }
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return { text: `refused browser url scheme: ${parsedUrl.protocol}`, isError: true };
+      }
       await sendCdp(sess, "Page.navigate", { url });
       await new Promise((resolve) => setTimeout(resolve, 1200));
       try {
@@ -568,11 +609,11 @@ export async function runBrowser(
         /* keep existing ws */
       }
       const snap = await snapshotText(sess);
-      return { text: `[${mode}]\n${snap}` };
+      return { text: `[${mode}]\n${snap}`, isError: false };
     }
     if (action === "snapshot") {
       const snap = await snapshotText(sess);
-      return { text: `[${mode}]\n${snap}` };
+      return { text: `[${mode}]\n${snap}`, isError: false };
     }
     if (action === "click") {
       const ref = parseRef(String(args.ref || ""));
@@ -580,7 +621,7 @@ export async function runBrowser(
       await evaluate(sess, `document.querySelector('[data-guild-ref="${ref}"]')?.click()`);
       await new Promise((resolve) => setTimeout(resolve, 400));
       const snap = await snapshotText(sess);
-      return { text: `[${mode}] clicked @${ref}\n${snap}` };
+      return { text: `[${mode}] clicked @${ref}\n${snap}`, isError: false };
     }
     if (action === "type") {
       const ref = parseRef(String(args.ref || ""));
@@ -596,13 +637,13 @@ export async function runBrowser(
       })()`;
       const status = await evaluate<string>(sess, js);
       if (status === "missing") return { text: `no element @${ref}`, isError: true };
-      return { text: `[${mode}] typed into @${ref}` };
+      return { text: `[${mode}] typed into @${ref}`, isError: false };
     }
     if (action === "press") {
       const key = String(args.text || args.key || "Enter");
       await sendCdp(sess, "Input.dispatchKeyEvent", { type: "keyDown", key });
       await sendCdp(sess, "Input.dispatchKeyEvent", { type: "keyUp", key });
-      return { text: `[${mode}] pressed ${key}` };
+      return { text: `[${mode}] pressed ${key}`, isError: false };
     }
     if (action === "screenshot") {
       const result = (await sendCdp(sess, "Page.captureScreenshot", {
@@ -614,7 +655,7 @@ export async function runBrowser(
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, name), Buffer.from(result.data, "base64"));
       const publicPath = generatedPublicPath(name);
-      return { text: `[${mode}] screenshot\n![page](${publicPath})` };
+      return { text: `[${mode}] screenshot\n![page](${publicPath})`, isError: false };
     }
     return { text: `unknown browser action: ${action}`, isError: true };
   } catch (error) {

@@ -502,6 +502,7 @@ export async function generateKind(
   store: GuildStore,
   kind: string,
   prompt: string,
+  env: NodeJS.ProcessEnv = process.env,
 ) {
   if (
     kind !== "soul" &&
@@ -512,11 +513,15 @@ export async function generateKind(
   ) {
     throw new StoreError(400, "kind must be soul, agent, position, skill, or subagent");
   }
-  return generateMarkdown(kind as GenerateKind, prompt, process.env, store.dataDir);
+  return generateMarkdown(kind as GenerateKind, prompt, env, store.dataDir);
 }
 
-export async function pickBotSkills(store: GuildStore, input: SkillPickInput) {
-  return pickSkills(input, process.env, store.dataDir);
+export async function pickBotSkills(
+  store: GuildStore,
+  input: SkillPickInput,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  return pickSkills(input, env, store.dataDir);
 }
 
 function byUpdatedAtDesc<T extends { updatedAt?: string }>(a: T, b: T): number {
@@ -1176,7 +1181,8 @@ export function chatTurnForBot(
     main: store.isMainBot(botId),
     rosterHandles,
     compact: store.readCompact(roomId),
-    onCompact: (checkpoint) => store.writeCompact(roomId, checkpoint),
+    onCompact: (checkpoint: Parameters<GuildStore["writeCompact"]>[1]) =>
+      store.writeCompact(roomId, checkpoint),
   };
 }
 

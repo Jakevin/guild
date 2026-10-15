@@ -247,8 +247,16 @@ export function isLocalAuthority(raw: string): boolean {
 
 /** True when there is no Origin (curl, Node fetch, same-origin opaque) or it matches Host. */
 export function sameOrigin(req: IncomingMessage): boolean {
+  const host = headerLine(req.headers.host);
+  if (host) {
+    const wanted = hostPortOf(host);
+    if (!isLocalAuthority(wanted.host)) return false;
+  }
+  const fetchSite = headerLine(req.headers["sec-fetch-site"]).toLowerCase();
+  if (fetchSite === "cross-site") return false;
   const raw = headerLine(req.headers.origin);
   if (!raw) return true;
+  if (!host) return false;
   let origin: URL;
   try {
     origin = new URL(raw);
@@ -257,8 +265,6 @@ export function sameOrigin(req: IncomingMessage): boolean {
   }
   const secure = origin.protocol === "https:";
   if (!secure && origin.protocol !== "http:") return false;
-  const host = headerLine(req.headers.host);
-  if (!host) return false;
   const wanted = hostPortOf(host);
   // Origin == Host is not enough: DNS rebinding makes a public name resolve to
   // this machine, so both authorities must be loopback / private.
@@ -466,7 +472,7 @@ export async function handleRequest(
         return;
       }
       const body = readFileSync(file);
-      const extra = page.type.startsWith("image/")
+      const extra: Record<string, string> = page.type.startsWith("image/")
         ? { "cache-control": "public, max-age=86400" }
         : {};
       send(res, 200, page.type, body, extra);
@@ -970,7 +976,7 @@ export async function handleRequest(
     }
     const dmLive = path.match(/^\/dms\/([^/]+)\/live$/);
     if (dmLive && method === "GET") {
-      const room = resolveDm(store, decodeURIComponent(dmLive[1]));
+      const room = resolveDm(store, dmLive[1]);
       json(res, 200, getLiveTurn(store, room.id));
       return;
     }
@@ -991,7 +997,7 @@ export async function handleRequest(
     }
     const dmAbort = path.match(/^\/dms\/([^/]+)\/abort$/);
     if (dmAbort && method === "POST") {
-      const room = resolveDm(store, decodeURIComponent(dmAbort[1]));
+      const room = resolveDm(store, dmAbort[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1017,7 +1023,7 @@ export async function handleRequest(
     }
     const dmPause = path.match(/^\/dms\/([^/]+)\/pause$/);
     if (dmPause && method === "POST") {
-      const room = resolveDm(store, decodeURIComponent(dmPause[1]));
+      const room = resolveDm(store, dmPause[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1044,7 +1050,7 @@ export async function handleRequest(
     }
     const dmComputer = path.match(/^\/dms\/([^/]+)\/computer$/);
     if (dmComputer && method === "POST") {
-      const room = resolveDm(store, decodeURIComponent(dmComputer[1]));
+      const room = resolveDm(store, dmComputer[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1072,7 +1078,7 @@ export async function handleRequest(
     }
     const dmContinue = path.match(/^\/dms\/([^/]+)\/continue$/);
     if (dmContinue && method === "POST") {
-      const room = resolveDm(store, decodeURIComponent(dmContinue[1]));
+      const room = resolveDm(store, dmContinue[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1107,7 +1113,7 @@ export async function handleRequest(
     }
     const dmSteer = path.match(/^\/dms\/([^/]+)\/steer$/);
     if (dmSteer && method === "POST") {
-      const room = resolveDm(store, decodeURIComponent(dmSteer[1]));
+      const room = resolveDm(store, dmSteer[1]);
       const body = asRecord(await readJson(req));
       json(
         res,
@@ -1142,7 +1148,7 @@ export async function handleRequest(
 
     const dmMessageOne = path.match(/^\/dms\/([^/]+)\/messages\/([^/]+)$/);
     if (dmMessageOne && method === "DELETE") {
-      const room = resolveDm(store, decodeURIComponent(dmMessageOne[1]));
+      const room = resolveDm(store, dmMessageOne[1]);
       json(
         res,
         200,
@@ -1319,6 +1325,7 @@ export async function handleRequest(
         store,
         str(body, "kind"),
         str(body, "prompt"),
+        env,
       );
       json(res, 200, generated);
       return;
@@ -1333,15 +1340,19 @@ export async function handleRequest(
 
     if (method === "POST" && path === "/generate/skills") {
       const body = asRecord(await readJson(req));
-      const picked = await pickBotSkills(store, {
-        name: str(body, "name"),
-        handle: str(body, "handle"),
-        oneLiner: str(body, "oneLiner"),
-        soul: str(body, "soul"),
-        agent: str(body, "agent"),
-        position: str(body, "position"),
-        skills: skillPickCatalog(body),
-      });
+      const picked = await pickBotSkills(
+        store,
+        {
+          name: str(body, "name"),
+          handle: str(body, "handle"),
+          oneLiner: str(body, "oneLiner"),
+          soul: str(body, "soul"),
+          agent: str(body, "agent"),
+          position: str(body, "position"),
+          skills: skillPickCatalog(body),
+        },
+        env,
+      );
       json(res, 200, picked);
       return;
     }
@@ -1665,6 +1676,10 @@ export async function handleRequest(
   } catch (error) {
     if (error instanceof StoreError) {
       json(res, error.status, { error: error.message });
+      return;
+    }
+    if (error instanceof URIError) {
+      json(res, 400, { error: "invalid_url" });
       return;
     }
     console.error(error);

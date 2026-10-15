@@ -199,7 +199,7 @@ export function fitSendWithUsage<T>(
     extraTokens + messages.reduce((sum, row) => sum + tokenCost(row), 0);
   const anchored = state?.anchor
     ? anchoredContextTokens(messages, state.anchor, (delta) =>
-        delta.reduce((sum, row) => sum + tokenCost(row), 0),
+        delta.reduce<number>((sum, row) => sum + tokenCost(row), 0),
       )
     : null;
   const pressure = resolvePressure({

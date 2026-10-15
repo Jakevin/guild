@@ -518,7 +518,7 @@ export class GuildStore {
 
   endTurn(roomId: string, signal?: AbortSignal): void {
     const group = signal ? this.turnGroups.get(signal) : undefined;
-    if (group) {
+    if (group && signal) {
       this.turnGroups.delete(signal);
       const room = this.botAborts.get(roomId);
       const live = this.liveTurns.get(roomId);
@@ -886,6 +886,7 @@ export class GuildStore {
   }
 
   private readLibraryItem(kind: LibraryKind, id: string): LibraryItem | null {
+    if (!id || /[\\/]/.test(id) || id === "." || id === "..") return null;
     try {
       const raw = readFileSync(
         join(this.dataDir, "library", kind, id, "item.json"),
@@ -905,6 +906,7 @@ export class GuildStore {
   }
 
   private readBot(id: string): Bot | null {
+    if (!id || /[\\/]/.test(id) || id === "." || id === "..") return null;
     try {
       const raw = readFileSync(join(this.dataDir, "bots", id, "bot.json"), "utf8");
       return JSON.parse(raw) as Bot;
@@ -950,6 +952,9 @@ export class GuildStore {
   }
 
   cronDeskDir(jobId: string): string {
+    if (!jobId || /[\\/]/.test(jobId) || jobId.includes("..")) {
+      throw new StoreError(400, "bad job id");
+    }
     return join(this.dataDir, "cron", jobId);
   }
 

@@ -62,6 +62,9 @@ class McpSession {
     this.child.stderr.on("data", () => {
       /* MCP logs belong on stderr */
     });
+    this.child.stdin.on("error", () => {
+      /* ignore EPIPE if child exits early */
+    });
     this.child.on("error", (err) => {
       for (const wait of this.pending.values()) wait.reject(err);
       this.pending.clear();
@@ -177,27 +180,28 @@ class McpSession {
   }
 
   private takeFrame(): string | null {
-    const headerEnd = this.buf.indexOf("\r\n\r\n");
-    if (headerEnd >= 0) {
-      const header = this.buf.subarray(0, headerEnd).toString("utf8");
-      const match = header.match(/Content-Length:\s*(\d+)/i);
-      if (!match) {
-        this.buf = this.buf.subarray(headerEnd + 4);
-        return null;
+    while (true) {
+      const headerEnd = this.buf.indexOf("\r\n\r\n");
+      if (headerEnd >= 0) {
+        const header = this.buf.subarray(0, headerEnd).toString("utf8");
+        const match = header.match(/Content-Length:\s*(\d+)/i);
+        if (!match) {
+          this.buf = this.buf.subarray(headerEnd + 4);
+          return null;
+        }
+        const length = Number(match[1]);
+        const start = headerEnd + 4;
+        if (this.buf.length < start + length) return null;
+        const json = this.buf.subarray(start, start + length).toString("utf8");
+        this.buf = this.buf.subarray(start + length);
+        return json;
       }
-      const length = Number(match[1]);
-      const start = headerEnd + 4;
-      if (this.buf.length < start + length) return null;
-      const json = this.buf.subarray(start, start + length).toString("utf8");
-      this.buf = this.buf.subarray(start + length);
-      return json;
+      const nl = this.buf.indexOf("\n");
+      if (nl < 0) return null;
+      const line = this.buf.subarray(0, nl).toString("utf8").trim();
+      this.buf = this.buf.subarray(nl + 1);
+      if (line.startsWith("{")) return line;
     }
-    const nl = this.buf.indexOf("\n");
-    if (nl < 0) return null;
-    const line = this.buf.subarray(0, nl).toString("utf8").trim();
-    this.buf = this.buf.subarray(nl + 1);
-    if (!line.startsWith("{")) return this.takeFrame();
-    return line;
   }
 
   private dispatch(raw: string): void {
@@ -219,7 +223,13 @@ class McpSession {
   }
 }
 
+type InflightSession = {
+  session: McpSession;
+  ready: Promise<McpSession>;
+};
+
 const sessions = new Map<string, McpSession>();
+const pendingSessions = new Map<string, InflightSession>();
 
 const REDACTED_ENV_VALUE = "***";
 
@@ -427,26 +437,47 @@ function parseCallName(
 async function sessionFor(server: McpServer): Promise<McpSession> {
   const hit = sessions.get(server.name);
   if (hit) return hit;
+  const inflight = pendingSessions.get(server.name);
+  if (inflight) return inflight.ready;
   const session = new McpSession(server.launch);
+  let entry!: InflightSession;
+  const ready = (async () => {
+    try {
+      await session.ensure();
+    } catch (error) {
+      session.close();
+      throw error;
+    }
+    if (pendingSessions.get(server.name) !== entry) {
+      session.close();
+      throw new Error("mcp session dropped");
+    }
+    sessions.set(server.name, session);
+    return session;
+  })();
+  entry = { session, ready };
+  pendingSessions.set(server.name, entry);
   try {
-    await session.ensure();
-  } catch (error) {
-    session.close();
-    throw error;
+    return await ready;
+  } finally {
+    if (pendingSessions.get(server.name) === entry) {
+      pendingSessions.delete(server.name);
+    }
   }
-  sessions.set(server.name, session);
-  return session;
 }
 
 function dropSession(name: string): void {
+  const inflight = pendingSessions.get(name);
+  pendingSessions.delete(name);
   const hit = sessions.get(name);
-  if (!hit) return;
-  sessions.delete(name);
-  hit.close();
+  if (hit) sessions.delete(name);
+  if (inflight && inflight.session !== hit) inflight.session.close();
+  if (hit) hit.close();
 }
 
 export function closeMcpSessions(): void {
-  for (const name of [...sessions.keys()]) dropSession(name);
+  const names = new Set([...sessions.keys(), ...pendingSessions.keys()]);
+  for (const name of names) dropSession(name);
 }
 
 function asObjectSchema(

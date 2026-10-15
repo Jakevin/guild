@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ import {
   hostOpen,
   hostRead,
   hostTree,
+  realpathInside,
 } from "../src/host-browse.ts";
 import { StoreError } from "../src/store.ts";
 import { defaultWorkspace } from "../src/harness.ts";
@@ -28,6 +29,24 @@ function tempDir(): string {
   writeFileSync(join(dir, "sub", "inner.md"), "# inner\n");
   return dir;
 }
+
+test("realpathInside stays in the root and skips guild secret files", () => {
+  const root = tempDir();
+  const outside = tempDir();
+  writeFileSync(join(outside, "secret.txt"), "nope");
+  symlinkSync(join(outside, "secret.txt"), join(root, "leak.txt"));
+  assert.match(realpathInside(join(root, "note.txt"), root) || "", /[/\\]note\.txt$/);
+  assert.equal(realpathInside(join(root, "leak.txt"), root), null);
+
+  const guild = join(homedir(), ".guild");
+  const secret = ["oauth.json", "models.json", "mcp.json"]
+    .map((name) => join(guild, name))
+    .find((file) => existsSync(file));
+  if (!secret) return;
+  assert.equal(realpathInside(secret, guild), null);
+  symlinkSync(secret, join(root, "alias.json"));
+  assert.equal(realpathInside(join(root, "alias.json"), root), null);
+});
 
 test("hostList and hostRead round-trip a temp folder", () => {
   const dir = tempDir();

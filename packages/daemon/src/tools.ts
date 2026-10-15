@@ -663,6 +663,46 @@ function openaiParameters(name: string): {
       required: ["channel", "handles", "task"],
     };
   }
+  if (name === "computer") {
+    return {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "windows",
+            "ax",
+            "see",
+            "axset",
+            "press",
+            "op",
+            "shot",
+            "click",
+            "type",
+            "open",
+            "cdp",
+            "idle",
+            "hud",
+          ],
+          description: "macOS desktop action",
+        },
+        window: { type: "string", description: "Window id, owner, or title" },
+        look: { type: "string", description: "Snapshot id like L1 from ax/see" },
+        ref: { type: "string", description: "Element ref like e3" },
+        query: { type: "string", description: "Search text in ax snapshot" },
+        text: { type: "string", description: "Text to type or set" },
+        op: { type: "string", description: "AX action name for op" },
+        x: { type: "number" },
+        y: { type: "number" },
+        app: { type: "string", description: "App name or path for open" },
+        port: { type: "number", description: "CDP port" },
+        expr: { type: "string", description: "JS expression for cdp" },
+        focus: { type: "boolean" },
+        ms: { type: "number" },
+      },
+      required: ["action"],
+    };
+  }
   return {
     type: "object",
     properties: { path: { type: "string" } },
@@ -798,7 +838,7 @@ export async function builtinExecute(
     // workspace_write resolves relative paths from the workspace root, which
     // defaults to the guild checkout (same root gateTool checks against).
     const pathBase =
-      parseSandbox(ctx.sandbox) === "workspace_write"
+      parseSandbox(ctx.sandbox) !== "full_access"
         ? resolveToolPath(ctx.workspace?.trim() || defaultWorkspace())
         : HOME;
     if (name === "run") {
@@ -845,12 +885,13 @@ export async function builtinExecute(
     }
     if (name === "tts") {
       const { generateSpeech } = await import("./tts.ts");
-      return generateSpeech({
+      const out = await generateSpeech({
         text: asString(args.text),
         voice: typeof args.voice === "string" ? args.voice : "",
         dataDir: ctx.dataDir,
         signal: ctx.signal,
       });
+      return { text: out.text, isError: Boolean(out.isError) };
     }
     if (name === "cronjob") {
       return {
@@ -941,12 +982,19 @@ export async function executeToolTraced(
   };
   traces.push(row);
   emitProgress(ctx, traces, thinking);
-  const outcome = await executeTool(name, args, ctx);
-  row.text = outcome.text;
-  row.isError = outcome.isError;
-  delete row.running;
-  emitProgress(ctx, traces, thinking);
-  return outcome;
+  try {
+    const outcome = await executeTool(name, args, ctx);
+    row.text = outcome.text;
+    row.isError = outcome.isError;
+    delete row.running;
+    emitProgress(ctx, traces, thinking);
+    return outcome;
+  } catch (error) {
+    row.text = "aborted";
+    row.isError = true;
+    delete row.running;
+    throw error;
+  }
 }
 
 function asString(value: unknown, allowEmpty = false): string {
@@ -1039,6 +1087,7 @@ async function runCommand(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const cap = OUTPUT_CAP * 2;
     const take = (prev: string, chunk: Buffer | string) => {
+      if (prev.length >= cap) return prev;
       const next = prev + String(chunk);
       return next.length > cap ? next.slice(0, cap) : next;
     };
@@ -1065,6 +1114,8 @@ async function runCommand(
             /* already gone */
           }
         }
+        child.stdout?.destroy();
+        child.stderr?.destroy();
       }, 200);
     };
     const cleanup = () => {
@@ -1082,7 +1133,7 @@ async function runCommand(
     if (timeoutMs !== undefined) {
       timer = setTimeout(() => {
         timedOut = true;
-        killProcessTree(pid);
+        onAbort();
       }, timeoutMs);
     }
     child.stdout?.on("data", (chunk) => {

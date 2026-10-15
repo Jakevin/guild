@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -210,4 +210,126 @@ args = [${JSON.stringify(ECHO)}]
   assert.equal(result.isError, false);
   assert.match(result.text, /host-direct/);
   closeMcpSessions();
+});
+
+const SLOW_MCP = `import { writeFileSync } from "node:fs";
+const pidFile = process.env.MCP_PID_FILE;
+if (pidFile) writeFileSync(pidFile, String(process.pid));
+const delay = Number(process.env.MCP_INIT_DELAY_MS || "0");
+let buf = Buffer.alloc(0);
+function send(obj) {
+  const json = JSON.stringify(obj);
+  const payload = Buffer.from(json, "utf8");
+  process.stdout.write("Content-Length: " + payload.length + "\\r\\n\\r\\n");
+  process.stdout.write(payload);
+}
+process.stdin.on("data", (chunk) => {
+  buf = Buffer.concat([buf, chunk]);
+  for (;;) {
+    const idx = buf.indexOf("\\r\\n\\r\\n");
+    if (idx < 0) break;
+    const header = buf.subarray(0, idx).toString("utf8");
+    const match = header.match(/Content-Length:\\s*(\\d+)/i);
+    if (!match) {
+      buf = buf.subarray(idx + 4);
+      continue;
+    }
+    const length = Number(match[1]);
+    const start = idx + 4;
+    if (buf.length < start + length) break;
+    const msg = JSON.parse(buf.subarray(start, start + length).toString("utf8"));
+    buf = buf.subarray(start + length);
+    const reply = () => {
+      if (msg.method === "initialize") {
+        send({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            protocolVersion: "2024-11-05",
+            capabilities: { tools: {} },
+            serverInfo: { name: "slow", version: "0" },
+          },
+        });
+        return;
+      }
+      if (msg.method === "tools/list") {
+        send({
+          jsonrpc: "2.0",
+          id: msg.id,
+          result: {
+            tools: [{ name: "echo", description: "Echo", inputSchema: { type: "object", properties: {} } }],
+          },
+        });
+        return;
+      }
+      if (typeof msg.id === "number") send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    };
+    if (msg.method === "initialize" && delay > 0) setTimeout(reply, delay);
+    else reply();
+  }
+});
+`;
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitFor(pred: () => boolean, ms = 4000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (pred()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return pred();
+}
+
+test("removing an MCP server during handshake closes that child", async () => {
+  const dir = tempDir();
+  const script = join(dir, "slow-mcp.mjs");
+  const pid1 = join(dir, "pid1");
+  const pid2 = join(dir, "pid2");
+  writeFileSync(script, SLOW_MCP);
+  upsertGuildMcp(dir, "slow", {
+    command: process.execPath,
+    args: [script],
+    env: { MCP_PID_FILE: pid1, MCP_INIT_DELAY_MS: "1200" },
+  });
+  const first = listMcpToolRefs(dir, tempDir());
+  try {
+    assert.equal(await waitFor(() => existsSync(pid1)), true);
+    const oldPid = Number(readFileSync(pid1, "utf8"));
+    removeGuildMcp(dir, "slow");
+    assert.equal(await waitFor(() => !pidAlive(oldPid)), true);
+    assert.deepEqual(await first, []);
+
+    upsertGuildMcp(dir, "slow", {
+      command: process.execPath,
+      args: [script],
+      env: { MCP_PID_FILE: pid2, MCP_INIT_DELAY_MS: "0" },
+    });
+    const refs = await listMcpToolRefs(dir, tempDir());
+    assert.equal(refs.length, 1);
+    const newPid = Number(readFileSync(pid2, "utf8"));
+    assert.notEqual(newPid, oldPid);
+    assert.equal(pidAlive(oldPid), false);
+    assert.equal(pidAlive(newPid), true);
+  } finally {
+    closeMcpSessions();
+    for (const file of [pid1, pid2]) {
+      if (!existsSync(file)) continue;
+      const pid = Number(readFileSync(file, "utf8"));
+      if (pidAlive(pid)) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+  }
 });

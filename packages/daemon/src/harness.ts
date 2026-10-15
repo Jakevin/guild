@@ -182,14 +182,36 @@ export function gateTool(
     return null;
   }
 
+  // No explicit workspace means the guild checkout, never all of $HOME.
+  const workspace = input.workspace?.trim()
+    ? resolveToolPath(input.workspace)
+    : defaultWorkspace();
+
   if (sandbox === "read_only") {
+    if (name === "read" || name === "list") {
+      const raw = typeof args.path === "string" ? args.path : "";
+      if (name === "list" && !raw.trim()) return null;
+      const target = resolveToolPath(raw, workspace);
+      if (!allowedWorkspaceWritePath(target, workspace, input.dataDir)) {
+        return {
+          text: `sandbox=read_only refused ${name} outside workspace: ${target}`,
+          isError: true,
+        };
+      }
+      return null;
+    }
+    if (name === "cronjob") {
+      const action = String(args.action || args.op || "list").trim().toLowerCase();
+      if (action === "list") return null;
+      return {
+        text: `sandbox=read_only refused cronjob ${action}`,
+        isError: true,
+      };
+    }
     if (
-      name === "read" ||
-      name === "list" ||
       name === "skill" ||
       name === "spawn" ||
-      name === "read_spawn" ||
-      name === "cronjob"
+      name === "read_spawn"
     ) {
       return null;
     }
@@ -198,11 +220,6 @@ export function gateTool(
       isError: true,
     };
   }
-
-  // No explicit workspace means the guild checkout, never all of $HOME.
-  const workspace = input.workspace?.trim()
-    ? resolveToolPath(input.workspace)
-    : defaultWorkspace();
 
   if (name.startsWith("mcp__")) {
     return {
@@ -378,102 +395,107 @@ export async function runAgentLoop(input: {
     return { text, traces, thinking: thinkingOf(), beats };
   };
 
-  for (let round = 0; ; round++) {
-    throwIfAborted(input.toolCtx);
-    const native = nextToolRound(round, input.toolCtx.spawnDepth ?? 0);
-    const stalled =
-      native === "continue" &&
-      (await import("./turn-policy.ts")).stalledToolLoop(rounds);
-    const phase = native === "stop" ? "stop" : stalled ? "wrap" : native;
-    if (phase === "stop") {
-      if (!traces.length && input.nullIfNoTraces) return null;
-      return finish(exhausted, true);
-    }
-    progress();
-    const wrapPrompt =
-      phase === "wrap"
-        ? stalled
-          ? TOOL_LOOP_STALL
-          : TOOL_LOOP_WRAP
-        : null;
-    const asked = await input.ask({
-      round,
-      wrap: phase === "wrap",
-      wrapPrompt,
-      steer: takeSteers(input.toolCtx),
-    });
-    if (!asked) {
-      if (!traces.length && input.nullIfNoTraces) return null;
-      return finish(traces.length ? exhausted : emptyAfterTools, true);
-    }
-    if (asked.thinking?.trim()) {
-      thinkingChunks.push(asked.thinking.trim());
-      progress();
-    }
-    const thinking = thinkingOf();
-    if (phase === "wrap") {
-      pushText(asked.text);
-      takeSteers(input.toolCtx);
-      return finish(emptyAfterTools, true);
-    }
-    if (!asked.calls.length) {
-      const late = takeSteers(input.toolCtx);
-      if (late) {
-        input.onRetry?.(late);
-        continue;
+  try {
+    for (let round = 0; ; round++) {
+      throwIfAborted(input.toolCtx);
+      const native = nextToolRound(round, input.toolCtx.spawnDepth ?? 0);
+      const stalled =
+        native === "continue" &&
+        (await import("./turn-policy.ts")).stalledToolLoop(rounds);
+      const phase = native === "stop" ? "stop" : stalled ? "wrap" : native;
+      if (phase === "stop") {
+        if (!traces.length && input.nullIfNoTraces) return null;
+        return finish(exhausted, true);
       }
-      pushText(asked.text);
-      if (draftOf() && input.onRetry && !input.toolCtx.skipJevNudge) {
-        if (nudgeMarks.length) {
-          nudgeMarks[nudgeMarks.length - 1]!.toolsAfter = traces.length - toolsAtNudge;
-        }
-        const judge = input.nudge ?? ((snap) => jevNudgeContinue({
-          ctx: input.toolCtx,
-          assistantText: snap.text,
-          toolNames: snap.toolNames,
-          marks: snap.marks,
-        }));
-        const continued = await judge({
-          text: asked.text,
-          toolNames: traces.map((row) => row.name).filter((name) => name !== "jev"),
-          marks: nudgeMarks,
-        }).catch(() => null);
-        if (continued) {
-          traces.push({
-            name: "jev",
-            args: {},
-            text: continued.note,
-            isError: false,
-          });
-          progress();
-          nudgeMarks.push({ text: asked.text, toolsAfter: 0 });
-          toolsAtNudge = traces.length;
-          input.onRetry(NUDGE_REASON);
+      progress();
+      const wrapPrompt =
+        phase === "wrap"
+          ? stalled
+            ? TOOL_LOOP_STALL
+            : TOOL_LOOP_WRAP
+          : null;
+      const asked = await input.ask({
+        round,
+        wrap: phase === "wrap",
+        wrapPrompt,
+        steer: takeSteers(input.toolCtx),
+      });
+      if (!asked) {
+        if (!traces.length && input.nullIfNoTraces) return null;
+        return finish(traces.length ? exhausted : emptyAfterTools, true);
+      }
+      if (asked.thinking?.trim()) {
+        thinkingChunks.push(asked.thinking.trim());
+        progress();
+      }
+      const thinking = thinkingOf();
+      if (phase === "wrap") {
+        pushText(asked.text);
+        takeSteers(input.toolCtx);
+        return finish(emptyAfterTools, true);
+      }
+      if (!asked.calls.length) {
+        const late = takeSteers(input.toolCtx);
+        if (late) {
+          input.onRetry?.(late);
           continue;
         }
+        pushText(asked.text);
+        if (draftOf() && input.onRetry && !input.toolCtx.skipJevNudge) {
+          if (nudgeMarks.length) {
+            nudgeMarks[nudgeMarks.length - 1]!.toolsAfter = traces.length - toolsAtNudge;
+          }
+          const judge = input.nudge ?? ((snap) => jevNudgeContinue({
+            ctx: input.toolCtx,
+            assistantText: snap.text,
+            toolNames: snap.toolNames,
+            marks: snap.marks,
+          }));
+          const continued = await judge({
+            text: asked.text,
+            toolNames: traces.map((row) => row.name).filter((name) => name !== "jev"),
+            marks: nudgeMarks,
+          }).catch(() => null);
+          if (continued) {
+            traces.push({
+              name: "jev",
+              args: {},
+              text: continued.note,
+              isError: false,
+            });
+            progress();
+            nudgeMarks.push({ text: asked.text, toolsAfter: 0 });
+            toolsAtNudge = traces.length;
+            input.onRetry(NUDGE_REASON);
+            continue;
+          }
+        }
+        if (draftOf()) return finish("");
+        if (traces.length) return finish(emptyAfterTools, true);
+        if (input.nullIfNoTraces) return null;
+        return finish(emptyAfterTools);
       }
-      if (draftOf()) return finish("");
-      if (traces.length) return finish(emptyAfterTools, true);
-      if (input.nullIfNoTraces) return null;
-      return finish(emptyAfterTools);
-    }
-    pushText(asked.text);
-    const before = traces.length;
-    const outcomes = await Promise.all(
-      asked.calls.map((call) =>
-        executeToolTraced(
-          call.name,
-          call.args,
-          input.toolCtx,
-          traces,
-          thinking,
+      pushText(asked.text);
+      const before = traces.length;
+      const outcomes = await Promise.all(
+        asked.calls.map((call) =>
+          executeToolTraced(
+            call.name,
+            call.args,
+            input.toolCtx,
+            traces,
+            thinking,
+          ),
         ),
-      ),
-    );
-    const batch = traces.slice(before);
-    rounds.push(batch);
-    beats.push({ traces: batch });
-    progress();
-    input.onTools?.(asked.calls, outcomes);
+      );
+      const batch = traces.slice(before);
+      rounds.push(batch);
+      beats.push({ traces: batch });
+      progress();
+      input.onTools?.(asked.calls, outcomes);
+    }
+  } catch (error) {
+    abortBackgroundSpawns(input.toolCtx);
+    throw error;
   }
 }

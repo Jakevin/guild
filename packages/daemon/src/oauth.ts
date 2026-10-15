@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import {
   contentText,
   createModels,
+  type Api,
   type AssistantMessage,
   type AuthEvent,
   type AuthInteraction,
@@ -20,6 +21,7 @@ import {
   type Model,
   type MutableModels,
   type OAuthCredential,
+  type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import {
   emitProgress,
@@ -244,12 +246,13 @@ function asCredential(raw: unknown): Credential | undefined {
     (typeof rec.refresh_token === "string" ||
       typeof rec.refresh === "string" ||
       rec.auth_mode === "oidc");
-  const access =
+  const access = String(
     (typeof rec.access === "string" && rec.access) ||
-    (typeof rec.accessToken === "string" && rec.accessToken) ||
-    (typeof rec.access_token === "string" && rec.access_token) ||
-    (grokCliKey ? rec.key : "") ||
-    "";
+      (typeof rec.accessToken === "string" && rec.accessToken) ||
+      (typeof rec.access_token === "string" && rec.access_token) ||
+      (grokCliKey ? rec.key : "") ||
+      "",
+  );
   if (!access) return undefined;
   const refresh =
     (typeof rec.refresh === "string" && rec.refresh) ||
@@ -1415,7 +1418,7 @@ function userAborted(signal?: AbortSignal): Error {
 /** Pi streamSimple: Think chips only from thinking_delta, not a planted placeholder. */
 async function streamOAuthMessage(
   models: MutableModels,
-  model: Model,
+  model: Model<Api>,
   context: Parameters<MutableModels["streamSimple"]>[1],
   options: Parameters<MutableModels["streamSimple"]>[2],
   toolCtx: ToolContext,
@@ -1471,8 +1474,9 @@ async function streamOAuthMessage(
   }
 }
 
-function abortWhen(signal?: AbortSignal): Promise<never> {
-  return new Promise((_, reject) => {
+function abortWhen(signal?: AbortSignal): { promise: Promise<never>; cleanup: () => void } {
+  let cleanup = () => {};
+  const promise = new Promise<never>((_, reject) => {
     const fail = () => {
       const err = new Error("aborted");
       err.name = "AbortError";
@@ -1484,7 +1488,9 @@ function abortWhen(signal?: AbortSignal): Promise<never> {
       return;
     }
     signal.addEventListener("abort", fail, { once: true });
+    cleanup = () => signal.removeEventListener("abort", fail);
   });
+  return { promise, cleanup };
 }
 
 export async function completeOAuth(input: {
@@ -1559,7 +1565,7 @@ export async function completeOAuth(input: {
   });
   const options: {
     temperature?: number;
-    reasoning?: string;
+    reasoning?: ThinkingLevel;
     signal?: AbortSignal;
     transformHeaders?: (
       headers: Record<string, string | null>,
@@ -1567,7 +1573,7 @@ export async function completeOAuth(input: {
     onPayload?: (payload: unknown) => unknown;
   } = {
     temperature: omitTemperature ? undefined : (input.temperature ?? 0.4),
-    reasoning: input.reasoning,
+    reasoning: input.reasoning as ThinkingLevel | undefined,
   };
   if (sub.id === "xai" || sub.id === "github-copilot") {
     options.transformHeaders = (headers) => ({
@@ -1649,6 +1655,7 @@ export async function completeOAuth(input: {
       try {
         result = await withTransientRetries(
           async () => {
+            const abortGuard = abortWhen(options.signal);
             const got = await Promise.race([
               streamOAuthMessage(
                 models,
@@ -1662,8 +1669,8 @@ export async function completeOAuth(input: {
                 toolCtx,
                 traces,
               ),
-              abortWhen(options.signal),
-            ]);
+              abortGuard.promise,
+            ]).finally(() => abortGuard.cleanup());
             if (got.stopReason === "aborted") {
               const err = new Error("aborted");
               err.name = "AbortError";

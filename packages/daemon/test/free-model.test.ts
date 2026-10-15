@@ -93,6 +93,18 @@ test("a save keeps one Free model and leaves the OpenCode default", () => {
   );
   assert.equal(file.default?.provider, "opencode-free");
   assert.equal(file.default?.model, "laguna-s-2.1-free");
+  assert.equal(file.groups?.free?.name, "Free");
+  assert.equal(file.groups?.free?.routing, "smart");
+  assert.ok(
+    file.groups?.free?.members.some(
+      (member) => member.provider === FREE_PROVIDER_ID && member.model === FREE_MODEL_ID,
+    ),
+  );
+  assert.ok(
+    file.groups?.free?.members.some(
+      (member) => member.provider === "opencode-free" && member.model === "laguna-s-2.1-free",
+    ),
+  );
   const listed = publicModels(home, {});
   const provider = listed.providers.find((item) => item.id === FREE_PROVIDER_ID);
   assert.equal(provider?.stored, "empty");
@@ -120,6 +132,42 @@ test("a save keeps one Free model and leaves the OpenCode default", () => {
   assert.equal(zen?.providerId, "opencode-free");
   assert.equal(zen?.model, "space-bunny-free");
   assert.equal(zen?.baseUrl, "https://opencode.ai/zen/v1");
+});
+
+test("a group already named Free keeps its own members and gains the free routes", () => {
+  const home = tempHome();
+  mergeModelsFile(home, {
+    providers: {
+      ollama: {
+        name: "Ollama",
+        baseUrl: "http://localhost:11434/v1",
+        api: "openai-completions",
+        apiKey: "ollama",
+        models: [{ id: "llama3.1:8b" }],
+      },
+    },
+    groups: {
+      handmade: {
+        name: "Free",
+        routing: "order",
+        members: [
+          { provider: "opencode-free", model: "laguna-s-2.1-free" },
+          { provider: "commandcode", model: "meta/muse-spark-1.3-contributor" },
+        ],
+      },
+    },
+  });
+  const file = readModelsFile(home);
+  assert.equal(file.groups?.free, undefined);
+  const group = file.groups?.handmade;
+  assert.equal(group?.routing, "order");
+  assert.ok(group?.members.some((member) => member.provider === "commandcode"));
+  assert.ok(
+    group?.members.some(
+      (member) => member.provider === FREE_PROVIDER_ID && member.model === FREE_MODEL_ID,
+    ),
+  );
+  assert.equal(file.default?.provider, "opencode-free");
 });
 
 test("a Free turn calls the auto route and reports the picker id", async () => {

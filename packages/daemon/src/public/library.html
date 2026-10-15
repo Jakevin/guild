@@ -262,7 +262,7 @@
             '<div class="skill-ico" style="background:' +
             hue(skill.slug || skill.id) +
             '">' +
-            initials(skill.name) +
+            escapeHtml(initials(skill.name)) +
             "</div>" +
             '<div class="skill-meta"><strong>' +
             escapeHtml(skill.name) +
@@ -414,7 +414,7 @@
             '<div class="skill-ico" style="background:' +
             hue(agent.slug || agent.id) +
             '">' +
-            initials(agent.name) +
+            escapeHtml(initials(agent.name)) +
             "</div>" +
             '<div class="skill-meta"><strong>' +
             escapeHtml(agent.name) +

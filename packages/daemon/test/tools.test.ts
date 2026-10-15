@@ -110,6 +110,21 @@ test("run refuses mkfs", async () => {
   assert.match(result.text, /refused/);
 });
 
+test("computer schema only lists actions the daemon runs", () => {
+  const tool = openaiTools([], { sandbox: "full_access" }).find(
+    (item) => item.function.name === "computer",
+  );
+  if (!tool) return;
+  const params = tool.function.parameters as {
+    properties: { action: { enum: string[] }; keys?: unknown };
+  };
+  assert.equal(params.properties.action.enum.includes("key"), false);
+  assert.equal(params.properties.keys, undefined);
+  assert.equal(params.properties.action.enum.includes("press"), true);
+  assert.equal(params.properties.action.enum.includes("click"), true);
+  assert.equal(params.properties.action.enum.includes("type"), true);
+});
+
 test("unknown tool suggests a close builtin name", async () => {
   assert.equal(suggestToolName("Read", ["read", "write", "run"]), "read");
   assert.equal(suggestToolName("compter", ["computer", "cronjob"]), "computer");

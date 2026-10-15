@@ -408,7 +408,7 @@ export function readGenerateRound(events: unknown[]): GenerateRound {
   let text = "";
   let thinking = "";
   const calls: GenerateCall[] = [];
-  const streaming = new Map<string, GenerateCall>();
+  const streaming = new Map<string, { id: string; name: string; buf: string; args: Record<string, unknown> }>();
   for (const event of events) {
     if (!isRecord(event)) continue;
     const type = stringValue(event.type);
@@ -417,19 +417,23 @@ export function readGenerateRound(events: unknown[]): GenerateRound {
     if (type === "tool-input-start") {
       const id = stringValue(event.id);
       if (!id || streaming.has(id)) continue;
-      streaming.set(id, { id, name: stringValue(event.toolName) ?? "", args: {} });
+      streaming.set(id, { id, name: stringValue(event.toolName) ?? "", buf: "", args: {} });
     }
     if (type === "tool-input-delta") {
       const id = stringValue(event.id);
       const active = id ? streaming.get(id) : undefined;
       const delta = stringValue(event.delta);
       if (!active || !delta) continue;
-      active.args = recordOrEmpty(delta);
+      active.buf += delta;
+      const parsed = recordOrEmpty(active.buf);
+      if (Object.keys(parsed).length > 0) active.args = parsed;
     }
     if (type === "tool-call") {
       const id = stringValue(event.toolCallId) ?? stringValue(event.id) ?? "";
-      const name = stringValue(event.toolName) ?? streaming.get(id)?.name ?? "";
-      const args = recordOrEmpty(event.input ?? event.args ?? event.arguments);
+      const active = id ? streaming.get(id) : undefined;
+      const name = stringValue(event.toolName) ?? active?.name ?? "";
+      const rawArgs = event.input ?? event.args ?? event.arguments;
+      const args = rawArgs !== undefined ? recordOrEmpty(rawArgs) : (active?.args ?? {});
       streaming.delete(id);
       if (id) calls.push({ id, name, args });
     }

@@ -1,7 +1,15 @@
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseAgentFile } from "./agent-file.ts";
+import { realpathInside } from "./host-browse.ts";
 
 export type HostAgent = {
   id: string;
@@ -45,8 +53,7 @@ function agentFilesIn(dir: string): string[] {
   } catch {
     return [];
   }
-  let entries: { name: string; isFile: () => boolean; isDirectory: () => boolean }[] =
-    [];
+  let entries: Dirent[] = [];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -55,9 +62,17 @@ function agentFilesIn(dir: string): string[] {
   const found: string[] = [];
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
-    if (entry.isDirectory()) continue;
-    if (entry.isFile() && AGENT_FILE.test(entry.name)) {
-      found.push(join(dir, entry.name));
+    const entryPath = join(dir, entry.name);
+    let isFile = entry.isFile();
+    if (entry.isSymbolicLink()) {
+      try {
+        isFile = statSync(entryPath).isFile();
+      } catch {
+        continue;
+      }
+    }
+    if (isFile && AGENT_FILE.test(entry.name) && realpathInside(entryPath, dir)) {
+      found.push(entryPath);
     }
   }
   return found;

@@ -113,7 +113,9 @@ function readBody(req: IncomingMessage): Promise<string> {
     let body = "";
     req.on("data", (chunk) => {
       body += String(chunk);
-      if (body.length > LOGIN_BODY_LIMIT_BYTES) req.destroy();
+      if (body.length > LOGIN_BODY_LIMIT_BYTES) {
+        req.destroy(new Error("Request body too large"));
+      }
     });
     req.on("end", () => resolve(body));
     req.on("error", reject);
@@ -158,6 +160,12 @@ export async function startCommandCodeLogin(
     void (async () => {
       try {
         const parsed = JSON.parse(await readBody(req)) as Record<string, unknown>;
+        const gotState = typeof parsed.state === "string" ? parsed.state : "";
+        if (gotState && gotState !== state) {
+          res.writeHead(403);
+          res.end(JSON.stringify({ success: false, error: "Invalid state token" }));
+          return;
+        }
         if (parsed.error) {
           res.writeHead(200);
           res.end(JSON.stringify({ success: true }));
@@ -170,7 +178,6 @@ export async function startCommandCodeLogin(
           return;
         }
         const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey : "";
-        const gotState = typeof parsed.state === "string" ? parsed.state : "";
         const userId = typeof parsed.userId === "string" ? parsed.userId : "";
         const userName = typeof parsed.userName === "string" ? parsed.userName : "";
         const keyName = typeof parsed.keyName === "string" ? parsed.keyName : "";

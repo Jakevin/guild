@@ -172,6 +172,14 @@
         importSkills({ source: "url", url });
       });
 
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
       async function loadLibrary() {
         const list = document.getElementById("library-skills");
         try {
@@ -185,15 +193,15 @@
               const source = skill.source === "catalog" ? t("skillsAdd.catalog") : t("library.user");
               return (
                 "<li><strong>" +
-                skill.name +
+                escapeHtml(skill.name) +
                 '</strong> <span class="muted">· ' +
-                source +
+                escapeHtml(source) +
                 "</span></li>"
               );
             })
             .join("");
         } catch (err) {
-          list.innerHTML = '<li class="muted">' + err.message + "</li>";
+          list.innerHTML = '<li class="muted">' + escapeHtml(err.message) + "</li>";
         }
       }
       loadLibrary();

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -63,6 +63,28 @@ test("listHostSkills reads Claude Codex Pi Grok Cursor dirs and skips caches", (
   assert.equal(ship?.hostName, "Claude");
   assert.equal(ship?.source, "host");
   assert.match(ship?.path || "", /\.claude\/skills\/ship\/SKILL\.md$/);
+});
+
+test("host skills ignore symlinks that leave the skill directory", () => {
+  const home = tempDir("guild-host-skills-link-");
+  const outside = tempDir("guild-host-skills-outside-");
+  writeSkill(home, ".claude/skills/ship", "ship", "in-root-body");
+  symlinkSync(join(home, ".claude/skills/ship"), join(home, ".claude/skills/alias"));
+  writeSkill(outside, "stolen", "stolen", "OUTSIDE-SECRET");
+  symlinkSync(join(outside, "stolen"), join(home, ".claude/skills/stolen"));
+  writeFileSync(join(outside, "models.json"), "MODELS-SECRET");
+  symlinkSync(join(outside, "models.json"), join(home, ".claude/skills/leak.md"));
+
+  const listed = listHostSkills({ home, cwd: home });
+  assert.equal(listed.filter((item) => item.body.includes("in-root-body")).length, 1);
+  assert.equal(
+    listed.some((item) => item.body.includes("OUTSIDE-SECRET") || item.slug === "stolen"),
+    false,
+  );
+  assert.equal(
+    listed.some((item) => item.slug === "leak" || item.body.includes("MODELS-SECRET")),
+    false,
+  );
 });
 
 test("GET /library/skills/host?body=0 omits SKILL.md bodies", async () => {

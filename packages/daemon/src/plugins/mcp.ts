@@ -1,6 +1,7 @@
 import { Service, type Context } from "cordis";
 import {
   callMcpTool,
+  closeMcpSessions,
   importHostMcp,
   listGuildMcp,
   listHostMcp,
@@ -20,6 +21,7 @@ export class McpService extends Service {
       if (!dataDir) return { text: "mcp needs a dataDir", isError: true };
       return callMcpTool(dataDir, name, args, toolCtx.mcpTools ?? []);
     });
+    ctx.effect(() => () => closeMcpSessions());
   }
 
   get dataDir(): string {

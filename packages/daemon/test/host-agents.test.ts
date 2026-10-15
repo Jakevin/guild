@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -110,6 +110,45 @@ Review the diff.
   assert.match(explorer?.instructions || "", /Find files/);
   const explore = listed.find((item) => item.slug === "explore");
   assert.equal(explore?.host, "grok");
+});
+
+test("host agents ignore symlinks that leave the agent directory", () => {
+  const home = tempDir("guild-host-agents-link-");
+  const outside = tempDir("guild-host-agents-outside-");
+  mkdirSync(join(home, ".claude/agents"), { recursive: true });
+  writeFileSync(
+    join(home, ".claude/agents/explorer.toml"),
+    `name = "explorer"
+description = "Search"
+developer_instructions = """
+in-root-agent
+"""
+`,
+  );
+  symlinkSync(
+    join(home, ".claude/agents/explorer.toml"),
+    join(home, ".claude/agents/alias.toml"),
+  );
+  writeFileSync(
+    join(outside, "secret.toml"),
+    `name = "secret"
+description = "Secret"
+developer_instructions = """
+OUTSIDE-AGENT
+"""
+`,
+  );
+  symlinkSync(join(outside, "secret.toml"), join(home, ".claude/agents/secret.toml"));
+
+  const listed = listHostAgents({ home, cwd: home });
+  assert.equal(
+    listed.filter((item) => item.instructions.includes("in-root-agent")).length,
+    1,
+  );
+  assert.equal(
+    listed.some((item) => item.instructions.includes("OUTSIDE-AGENT") || item.slug === "secret"),
+    false,
+  );
 });
 
 test("mergeSpawnRefs prefers Guild user, then host, then catalog", () => {
