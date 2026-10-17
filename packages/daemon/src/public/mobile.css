@@ -130,6 +130,8 @@ textarea:focus-visible {
   .typing span,
   .typing .dot,
   .typing-dot,
+  .empty-thread,
+  .screen,
   button.loading,
   button[aria-busy="true"],
   [data-loading] {
@@ -145,6 +147,7 @@ textarea:focus-visible {
   height: var(--vvh);
   min-height: 0;
   overflow: hidden;
+  animation: empty-in 0.3s var(--ease-out, cubic-bezier(0.33, 1, 0.68, 1)) both;
 }
 .screen[hidden] { display: none !important; }
 #screen-list {
@@ -871,7 +874,7 @@ button[aria-busy="true"],
   position: fixed;
   left: 50%;
   bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(8px);
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
   background: var(--lift);
@@ -879,10 +882,13 @@ button[aria-busy="true"],
   font-size: 0.82rem;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease;
+  transition: opacity 0.35s var(--ease-out, cubic-bezier(0.33, 1, 0.68, 1)), transform 0.35s var(--ease-out, cubic-bezier(0.33, 1, 0.68, 1));
   z-index: 8;
 }
-.flash.on { opacity: 1; }
+.flash.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+@starting-style {
+  .flash.on { opacity: 0; transform: translateX(-50%) translateY(8px); }
+}
 /* Errors read as danger ink on enamel lift, never a filled red slab. */
 .flash.err {
   background: var(--lift);
@@ -927,9 +933,13 @@ button[aria-busy="true"],
   animation: bubble-in-fade 200ms var(--ease-out) both;
 }
 
-#thread:empty,
-.empty-thread {
+#thread:empty {
   animation: none;
+}
+.empty-thread { animation: empty-in 0.35s var(--ease-out, cubic-bezier(0.33, 1, 0.68, 1)) both; }
+@keyframes empty-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .msg:nth-child(1) { animation-delay: 0ms; }
@@ -995,6 +1005,16 @@ button[aria-busy="true"],
   50% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen,
+  .empty-thread { animation: none; }
+  .flash,
+  .flash.on {
+    animation: none;
+    transition: none;
+    transform: translateX(-50%);
   }
 }
 
