@@ -167,6 +167,8 @@ export function mutatingTool(name: string): boolean {
   );
 }
 
+const MASTER_TOOLS = new Set(["create_bot", "create_channel", "assign", "recall"]);
+
 export function gateTool(
   name: string,
   args: Record<string, unknown>,
@@ -174,13 +176,18 @@ export function gateTool(
     sandbox?: Sandbox;
     workspace?: string;
     dataDir?: string;
+    main?: boolean;
   } = {},
 ): SandboxRefusal | null {
+  if (input.main && !MASTER_TOOLS.has(name)) {
+    return {
+      text: "the guild master does not run a seat's tools",
+      isError: true,
+    };
+  }
   const sandbox = parseSandbox(input.sandbox);
   if (sandbox === "full_access") return null;
-  if (name === "create_bot" || name === "create_channel" || name === "assign") {
-    return null;
-  }
+  if (MASTER_TOOLS.has(name)) return null;
 
   // No explicit workspace means the guild checkout, never all of $HOME.
   const workspace = input.workspace?.trim()

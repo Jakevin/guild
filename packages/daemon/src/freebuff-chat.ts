@@ -78,14 +78,20 @@ export function buildFreebuffToolSystem(
   names: readonly string[] = DEFAULT_FREEBUFF_TOOL_NAMES,
 ): string {
   const listed = (names.length ? names : DEFAULT_FREEBUFF_TOOL_NAMES).join(", ");
+  const seat = names.includes("run");
+  const example = seat
+    ? `[{"id":"c1","name":"run","args":{"command":"df -h"}}]`
+    : `[{"id":"c1","name":"assign","args":{"channel":"ops","handles":"pm","task":"check the deploy log"}}]`;
+  const mcpLine = seat
+    ? "and any mcp__* advertised in <available_skills> / host context this turn.\n"
+    : "";
   return `${FREEBUFF_TOOL_MARKER}
 Do not emit OpenAI tool_calls, Anthropic tool_use, XML <tool>, or prose like "I'll run …".
 When you need a tool, output exactly one markdown fence and stop. No prose after the fence.
 Allowed names: ${listed},
-and any mcp__* advertised in <available_skills> / host context this turn.
-
+${mcpLine}
 \`\`\`guild_tools
-[{"id":"c1","name":"run","args":{"command":"df -h"}}]
+${example}
 \`\`\``;
 }
 
@@ -106,6 +112,7 @@ export type FreebuffLeaseParts = {
   channelMemory?: string;
   userMessage?: string;
   hallRules?: string;
+  guildIndex?: string;
 };
 
 export function withFreebuffToolSystem(
@@ -225,6 +232,7 @@ export function stableFingerprint(parts: {
   skillIds?: string[];
   channelMd?: string;
   hallRules?: string;
+  guildIndex?: string;
 }): string {
   return sha32(
     [
@@ -235,6 +243,7 @@ export function stableFingerprint(parts: {
       (parts.skillIds ?? []).join("\n"),
       parts.channelMd ?? "",
       parts.hallRules ?? "",
+      parts.guildIndex ?? "",
       hostContext(),
     ].join("\n\0"),
   );

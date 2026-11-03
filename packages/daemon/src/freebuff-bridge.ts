@@ -753,6 +753,7 @@ async function runLockedTurn(input: {
     skillIds: input.lease?.skillIds,
     channelMd: input.lease?.channelMd,
     hallRules: input.lease?.hallRules,
+    guildIndex: input.lease?.guildIndex,
   });
   const key = freebuffLeaseKey({
     roomId: input.lease?.roomId ?? toolCtx.roomId,

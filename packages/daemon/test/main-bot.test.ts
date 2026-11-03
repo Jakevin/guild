@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { buildChatSystem } from "../src/generate.ts";
-import { chatTurnSystem } from "../src/handlers.ts";
+import { chatTurnSystem, postUserMessage } from "../src/handlers.ts";
 import { gateTool } from "../src/harness.ts";
 import { createSeat, runMainTool, stageAssign } from "../src/main-bot.ts";
 import { callMainTool } from "../src/plugins/main-bot.ts";
 import { GuildStore, StoreError } from "../src/store.ts";
-import { knownToolNames } from "../src/tools.ts";
+import { guildTools, knownToolNames } from "../src/tools.ts";
 import { closeApp, listen } from "./app.ts";
 
 function tempHome(): string {
@@ -120,7 +120,7 @@ test("assign adds the seat, then writes a line-start @handle", () => {
       task: "看這次部署的 log",
     });
     assert.equal(staged.roomId, room.id);
-    assert.match(staged.body, /^@pm\n/);
+    assert.match(staged.body, /^看這次部署的 log\n\n@pm$/);
     assert.match(staged.body, /看這次部署的 log/);
     const pm = store.listBots().find((bot) => bot.handle === "pm");
     assert.ok(pm);
@@ -157,7 +157,16 @@ test("a normal seat cannot call Main Bot tools", async () => {
     assert.equal(store.listChannels().length, before);
     assert.equal(knownToolNames({}).includes("create_bot"), false);
     assert.equal(knownToolNames({ main: true }).includes("assign"), true);
+    assert.equal(knownToolNames({ main: true }).includes("run"), false);
+    assert.deepEqual(
+      guildTools([], { main: true, sandbox: "full_access" }).map((tool) => tool.name),
+      ["create_bot", "create_channel", "assign", "recall"],
+    );
     assert.equal(gateTool("create_bot", {}, { sandbox: "read_only" }), null);
+    assert.equal(
+      gateTool("run", { command: "ls" }, { main: true, sandbox: "full_access" })?.isError,
+      true,
+    );
   } finally {
     store.close();
   }
@@ -191,6 +200,230 @@ test("Main Bot prompt is the manager, a seat prompt still refuses recruiting", (
     });
     assert.match(direct, /# Guild Master/);
     assert.doesNotMatch(direct, /# Whisper/);
+    assert.match(main, /# Guild index/);
+    assert.doesNotMatch(main, /exit code/);
+  } finally {
+    store.close();
+  }
+});
+
+test("assign keeps a one-line index and recall does not return the tool log", async () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    store.createChannel("ops");
+    stageAssign(store, {
+      channel: "ops",
+      handles: ["pm"],
+      task: "看這次部署的 log",
+    });
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    assert.ok(pm);
+    const ops = store.listChannels().find((room) => room.name === "ops");
+    assert.ok(ops);
+    store.noteSeatReport(
+      ops.id,
+      pm.id,
+      "log 最後 20 行是空的\n\n$ tail deploy.log\n(full tool dump)",
+    );
+    const block = store.guildIndexBlock();
+    assert.match(block, /#ops @pm — 看這次部署的 log — reported: log 最後 20 行是空的/);
+    assert.doesNotMatch(block, /tail deploy/);
+    const id = block.match(/^- (a\d+) /m)?.[1];
+    assert.ok(id);
+    const recalled = await runMainTool(store, "recall", { id });
+    assert.equal(recalled.isError, false);
+    assert.match(recalled.text, /log 最後 20 行是空的/);
+    assert.doesNotMatch(recalled.text, /tail deploy/);
+  } finally {
+    store.close();
+  }
+});
+
+test("a follow-up that names one open seat skips the guild master", async () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    assert.ok(infra && pm);
+    store.setMainBot(infra.id);
+    const ops = store.createChannel("ops");
+    stageAssign(store, {
+      channel: "ops",
+      handles: ["pm"],
+      task: "看這次部署的 log",
+    });
+    const seen: string[] = [];
+    const dm = store.openDm(infra.id);
+    const posted = await postUserMessage(
+      store,
+      dm.id,
+      "@pm 再看最後 20 行",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      {
+        harvest: false,
+        mcp: false,
+        turn: async (input) => {
+          seen.push(input.botId || "");
+          return {
+            body: "最後 20 行是空的",
+            parts: [],
+            source: "local",
+            system: "",
+          };
+        },
+      },
+    );
+    assert.deepEqual(seen, [pm.id]);
+    assert.match(posted.replies.map((reply) => reply.body).join("\n"), /已送到 #ops/);
+    assert.match(store.guildIndexBlock(), /reported: 最後 20 行是空的/);
+    const quest = store.listMessages(ops.id).map((item) => item.body).join("\n");
+    assert.match(quest, /再看最後 20 行/);
+  } finally {
+    store.close();
+  }
+});
+
+test("a follow-up that names two seats on one quest gives both the request", async () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    const design = store.listBots().find((bot) => bot.handle === "design");
+    assert.ok(infra && pm && design);
+    store.setMainBot(infra.id);
+    store.createChannel("ops");
+    stageAssign(store, {
+      channel: "ops",
+      handles: ["pm", "design"],
+      task: "看這次部署的 log",
+    });
+    const asked = new Map<string, string>();
+    const dm = store.openDm(infra.id);
+    await postUserMessage(
+      store,
+      dm.id,
+      "請 @pm 再看 log，也跟 @design 說",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      {
+        harvest: false,
+        mcp: false,
+        turn: async (input) => {
+          asked.set(input.botId || "", input.userMessage || "");
+          return { body: "看到了", parts: [], source: "local", system: "" };
+        },
+      },
+    );
+    assert.equal(asked.has(infra.id), false);
+    assert.match(asked.get(pm.id) || "", /再看 log/);
+    assert.match(asked.get(design.id) || "", /再看 log/);
+  } finally {
+    store.close();
+  }
+});
+
+test("a deleted channel does not keep its quest", async () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    assert.ok(infra && pm);
+    store.setMainBot(infra.id);
+    const ops = store.createChannel("ops");
+    stageAssign(store, { channel: "ops", handles: ["pm"], task: "看 log" });
+    const oldId = store.guildIndexBlock().match(/^- (a\d+) /m)?.[1];
+    assert.ok(oldId);
+    store.deleteChannel(ops.id);
+    assert.match(store.guildIndexBlock(), /No assignment yet/);
+    assert.equal(store.recallAssignment(oldId), null);
+    const again = store.createChannel("ops");
+    assert.equal(again.id, ops.id);
+    store.addMember(again.id, pm.id);
+    const seen: string[] = [];
+    const dm = store.openDm(infra.id);
+    await postUserMessage(
+      store,
+      dm.id,
+      "@pm 繼續",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      {
+        harvest: false,
+        mcp: false,
+        turn: async (input) => {
+          seen.push(input.botId || "");
+          return { body: "哪個？", parts: [], source: "local", system: "" };
+        },
+      },
+    );
+    assert.deepEqual(seen, [infra.id]);
+  } finally {
+    store.close();
+  }
+});
+
+test("renaming a channel or a seat rewrites the guild index", () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    assert.ok(pm);
+    const ops = store.createChannel("ops");
+    stageAssign(store, { channel: "ops", handles: ["pm"], task: "看 log" });
+    store.renameChannel(ops.id, "ship");
+    assert.match(store.guildIndexBlock(), /#ship @pm — 看 log — open/);
+    store.updateBot(pm.id, { handle: "pmo" });
+    assert.match(store.guildIndexBlock(), /#ship @pmo — 看 log — open/);
+    assert.doesNotMatch(store.guildIndexBlock(), /@pm\b/);
+  } finally {
+    store.close();
+  }
+});
+
+test("two open quests for the same seat stay with the guild master", async () => {
+  const dir = tempHome();
+  const store = new GuildStore(dir);
+  try {
+    const infra = store.listBots().find((bot) => bot.handle === "infra");
+    const pm = store.listBots().find((bot) => bot.handle === "pm");
+    assert.ok(infra && pm);
+    store.setMainBot(infra.id);
+    store.createChannel("ops");
+    store.createChannel("raid");
+    stageAssign(store, { channel: "ops", handles: ["pm"], task: "看 log" });
+    stageAssign(store, { channel: "raid", handles: ["pm"], task: "看告警" });
+    const seen: string[] = [];
+    const dm = store.openDm(infra.id);
+    await postUserMessage(
+      store,
+      dm.id,
+      "@pm 繼續",
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      {
+        harvest: false,
+        mcp: false,
+        turn: async (input) => {
+          seen.push(input.botId || "");
+          return { body: "哪個頻道？", parts: [], source: "local", system: "" };
+        },
+      },
+    );
+    assert.deepEqual(seen, [infra.id]);
+    assert.equal(store.listMessages(store.listChannels().find((room) => room.name === "ops")!.id).length, 0);
   } finally {
     store.close();
   }

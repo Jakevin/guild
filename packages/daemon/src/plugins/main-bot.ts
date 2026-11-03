@@ -2,7 +2,7 @@ import { Service, type Context } from "cordis";
 import { runMainTool, type MainToolResult } from "../main-bot.ts";
 import type { GuildStore } from "../store.ts";
 
-const NAMES = ["create_bot", "create_channel", "assign"] as const;
+const NAMES = ["create_bot", "create_channel", "assign", "recall"] as const;
 
 export async function callMainTool(
   store: GuildStore,

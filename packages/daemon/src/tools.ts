@@ -286,10 +286,54 @@ const BASE_TOOLS: Tool[] = [
   },
 ];
 
+/** The guild master dispatches. It does not run a seat's tools. */
+function masterTools(): Tool[] {
+  return [
+    {
+      name: "create_bot",
+      description:
+        "Hire a guild seat. It joins #general. It does not become the guild master. Needs a name and a unique @handle.",
+      parameters: Type.Object({
+        name: Type.String({ description: "Display name" }),
+        handle: Type.String({ description: "Handle without @" }),
+        one_liner: Type.Optional(Type.String({ description: "One-line job" })),
+      }),
+    },
+    {
+      name: "create_channel",
+      description: "Open a channel. The roster starts empty. Cannot be named general.",
+      parameters: Type.Object({
+        name: Type.String({ description: "Channel name without #" }),
+      }),
+    },
+    {
+      name: "assign",
+      description:
+        "Add existing seats to a channel and hand them the task. Handles must already exist. This starts their turn.",
+      parameters: Type.Object({
+        channel: Type.String({ description: "Channel name or id" }),
+        handles: Type.String({
+          description: "Seat handles, separated by spaces. Example: infra pm",
+        }),
+        task: Type.String({ description: "What those seats should do" }),
+      }),
+    },
+    {
+      name: "recall",
+      description:
+        "Read one guild-index id. Returns the task and the seat's one-line conclusion. Does not return tool logs or file contents.",
+      parameters: Type.Object({
+        id: Type.String({ description: "Index id such as a1" }),
+      }),
+    },
+  ];
+}
+
 export function guildTools(
   skills: SkillRef[] = [],
   ctx: ToolContext = {},
 ): Tool[] {
+  if (ctx.main) return masterTools();
   const names = skills.map((item) => item.name).filter(Boolean);
   const available = names.length ? ` Available: ${names.join(", ")}.` : "";
   const allowWrite = ctx.allowWrite !== false;
@@ -354,40 +398,6 @@ export function guildTools(
       name: Type.String({ description: "Skill name or slug" }),
     }),
   });
-  if (ctx.main) {
-    tools.push(
-      {
-        name: "create_bot",
-        description:
-          "Hire a guild seat. It joins #general. It does not become the guild master. Needs a name and a unique @handle.",
-        parameters: Type.Object({
-          name: Type.String({ description: "Display name" }),
-          handle: Type.String({ description: "Handle without @" }),
-          one_liner: Type.Optional(Type.String({ description: "One-line job" })),
-        }),
-      },
-      {
-        name: "create_channel",
-        description:
-          "Open a channel. The roster starts empty. Cannot be named general.",
-        parameters: Type.Object({
-          name: Type.String({ description: "Channel name without #" }),
-        }),
-      },
-      {
-        name: "assign",
-        description:
-          "Add existing seats to a channel and hand them the task. Handles must already exist. This starts their turn.",
-        parameters: Type.Object({
-          channel: Type.String({ description: "Channel name or id" }),
-          handles: Type.String({
-            description: "Seat handles, separated by spaces. Example: infra pm",
-          }),
-          task: Type.String({ description: "What those seats should do" }),
-        }),
-      },
-    );
-  }
   if ((ctx.spawnDepth ?? 0) < 1) {
     const agents = ctx.subagents ?? [];
     const listed = agents
@@ -663,6 +673,15 @@ function openaiParameters(name: string): {
       required: ["channel", "handles", "task"],
     };
   }
+  if (name === "recall") {
+    return {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Index id such as a1" },
+      },
+      required: ["id"],
+    };
+  }
   if (name === "computer") {
     return {
       type: "object",
@@ -786,8 +805,8 @@ export function suggestToolName(name: string, known: string[]): string | null {
 }
 
 export function knownToolNames(ctx: ToolContext = {}): string[] {
+  if (ctx.main) return ["create_bot", "create_channel", "assign", "recall"];
   const names: string[] = [...BUILTIN_TOOL_NAMES];
-  if (ctx.main) names.push("create_bot", "create_channel", "assign");
   for (const tool of ctx.mcpTools ?? []) {
     if (tool.callName) names.push(tool.callName);
   }
