@@ -189,6 +189,8 @@ test("guild master create_bot is not collapsed to a path argument", () => {
   const assign = tools.find((tool) => tool.function.name === "assign");
   assert.ok(channel);
   assert.ok(assign);
+  assert.equal(tools.some((tool) => tool.function.name === "run"), false);
+  assert.equal(tools.some((tool) => tool.function.name === "recall"), true);
   assert.deepEqual(
     (channel.function.parameters as { required?: string[] }).required,
     ["name"],

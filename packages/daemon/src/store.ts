@@ -37,12 +37,24 @@ import {
 import {
   dismissAssign,
   mergeAssign,
+  mentionedHandles,
   parseMentionIds,
   promoteAssign,
   sanitizeMentionIds,
   sanitizeWaves,
   withoutDeferredIds,
 } from "./mention.ts";
+import {
+  dropHandle,
+  dropRoom,
+  followUpRoom,
+  formatGuildIndex,
+  recordNote,
+  renameChannelLabel,
+  renameHandle,
+  reportNote,
+  type GuildIndexNote,
+} from "./guild-index.ts";
 
 const MARKDOWN: Record<LibraryKind, string> = {
   souls: "SOUL.md",
@@ -54,6 +66,7 @@ const MARKDOWN: Record<LibraryKind, string> = {
 
 const GENERAL_CHANNEL_ID = "channel-general";
 const MAIN_BOT_META = "mainBotId";
+const GUILD_INDEX_META = "guildIndex";
 const NAV_PREVIEW_CAP = 120;
 /** Incognito whisper. kind stays dm — SCHEMA_VERSION 2 additive. */
 export const BARE_DM_PREFIX = "bare-";
@@ -694,6 +707,7 @@ export class GuildStore {
     }
     this.removeBotDir(bot.id);
     this.markRetired(bot.handle);
+    this.writeGuildNotes(dropHandle(this.readGuildNotes(), bot.handle));
     if (this.db.getMeta(MAIN_BOT_META) === id) this.db.deleteMeta(MAIN_BOT_META);
     return { ok: true, id: bot.id };
   }
@@ -750,6 +764,98 @@ export class GuildStore {
     if (prev) this.seatOnGeneral(prev);
   }
 
+  private readGuildNotes(): GuildIndexNote[] {
+    const raw = this.db.getMeta(GUILD_INDEX_META).trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item): item is GuildIndexNote => {
+        if (!item || typeof item !== "object") return false;
+        const note = item as GuildIndexNote;
+        return (
+          typeof note.id === "string" &&
+          typeof note.roomId === "string" &&
+          typeof note.channel === "string" &&
+          Array.isArray(note.handles) &&
+          typeof note.task === "string" &&
+          (note.status === "open" || note.status === "reported")
+        );
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  private writeGuildNotes(notes: GuildIndexNote[]): void {
+    this.db.setMeta(GUILD_INDEX_META, JSON.stringify(notes));
+  }
+
+  /** Notes whose seats are still on that channel. */
+  guildNotes(): GuildIndexNote[] {
+    return this.readGuildNotes().filter((note) => {
+      const room = this.getRoom(note.roomId);
+      if (!room || room.kind !== "channel") return false;
+      return note.handles.some((handle) => {
+        const bot = this.listBots().find(
+          (item) => item.handle.toLowerCase() === handle.toLowerCase(),
+        );
+        return Boolean(bot && room.memberIds.includes(bot.id));
+      });
+    });
+  }
+
+  guildIndexBlock(): string {
+    return formatGuildIndex(this.guildNotes());
+  }
+
+  recordAssignment(input: {
+    roomId: string;
+    channel: string;
+    handles: string[];
+    task: string;
+  }): void {
+    this.writeGuildNotes(recordNote(this.readGuildNotes(), input));
+  }
+
+  noteSeatReport(roomId: string, botId: string, body: string): void {
+    const handle = this.getBot(botId)?.handle;
+    if (!handle) return;
+    this.writeGuildNotes(reportNote(this.readGuildNotes(), roomId, handle, body));
+  }
+
+  /**
+   * Follow-up in the guild master's whisper that names seats already on one quest.
+   * Null when the text names nobody, a new seat, or two quests.
+   */
+  followUpTarget(text: string): { roomId: string; channel: string; handles: string[] } | null {
+    const bots = this.listBots();
+    const mentioned = mentionedHandles(
+      text,
+      bots.map((bot) => bot.handle),
+    );
+    const hit = followUpRoom(this.guildNotes(), mentioned, (roomId, handle) => {
+      const room = this.getRoom(roomId);
+      const bot = bots.find((item) => item.handle.toLowerCase() === handle);
+      return Boolean(room && bot && room.memberIds.includes(bot.id));
+    });
+    if (!hit) return null;
+    const room = this.getRoom(hit.roomId);
+    if (!room || room.kind !== "channel") return null;
+    return { roomId: room.id, channel: room.name, handles: hit.handles };
+  }
+
+  recallAssignment(id: string): string | null {
+    const key = id.trim();
+    const note = this.readGuildNotes().find((item) => item.id === key);
+    if (!note) return null;
+    const who = note.handles.map((handle) => `@${handle}`).join(" ");
+    const conclusion = note.report
+      ? `conclusion: ${note.report}`
+      : "conclusion: not reported yet";
+    return `${note.id} #${note.channel} ${who}\ntask: ${note.task}\n${conclusion}`;
+  }
+
   deleteChannel(id: string): { ok: true; id: string } {
     const room = this.getRoom(id);
     if (!room) throw new StoreError(404, "channel not found");
@@ -763,6 +869,7 @@ export class GuildStore {
       this.deleteChannel(child.id);
     }
     this.removeRoomDir(room.id);
+    this.writeGuildNotes(dropRoom(this.readGuildNotes(), room.id));
     return { ok: true, id: room.id };
   }
 
@@ -835,6 +942,9 @@ export class GuildStore {
       model: Object.hasOwn(input, "model") ? input.model ?? null : bot.model,
     };
     this.writeBot(next);
+    if (handle !== bot.handle) {
+      this.writeGuildNotes(renameHandle(this.readGuildNotes(), bot.handle, handle));
+    }
     return next;
   }
 
@@ -1136,6 +1246,7 @@ export class GuildStore {
     if (room.name === trimmed) return room;
     const next = { ...room, name: trimmed };
     this.writeRoom(next);
+    this.writeGuildNotes(renameChannelLabel(this.readGuildNotes(), room.id, trimmed));
     return next;
   }
 

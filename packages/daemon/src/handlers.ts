@@ -1180,6 +1180,7 @@ export function chatTurnForBot(
     bare: isBareDmId(roomId),
     main: store.isMainBot(botId),
     rosterHandles,
+    guildIndex: store.isMainBot(botId) ? store.guildIndexBlock() : "",
     compact: store.readCompact(roomId),
     onCompact: (checkpoint: Parameters<GuildStore["writeCompact"]>[1]) =>
       store.writeCompact(roomId, checkpoint),
@@ -1708,6 +1709,7 @@ async function generateReplies(
     }
     store.dropLiveBotTurn(roomId, botId);
     if (store.getRoom(roomId)?.kind === "channel") {
+      store.noteSeatReport(roomId, botId, generated.body);
       store.completeAssign(roomId, botId);
       store.enqueueAssign(
         roomId,
@@ -2040,9 +2042,37 @@ export async function postUserMessage(
   } catch {
     /* ignore */
   }
+  const mainId = store.mainBotId();
+  let masterDecides = false;
+  if (room.kind === "dm" && mainId && room.id === `dm-${mainId}`) {
+    const target = store.followUpTarget(text);
+    if (target) {
+      const wake = `@${target.handles.join(" @")}`;
+      const handed = `${text}\n\n${wake}`;
+      await postUserMessage(
+        store,
+        target.roomId,
+        handed,
+        env,
+        undefined,
+        undefined,
+        undefined,
+        extras,
+      );
+      const reply = store.appendMessage(
+        roomId,
+        mainId,
+        `已送到 #${target.channel}，@${target.handles.join(" @")} 接著做。`,
+      );
+      return { message, replies: [reply] };
+    }
+    masterDecides = true;
+  }
   const history = previous.map(toHistoryItem);
   const assignee = assigneeId?.trim();
-  const only = exclusiveReplyBot(store, message, parent, assignee);
+  const only = masterDecides
+    ? mainId
+    : exclusiveReplyBot(store, message, parent, assignee);
   let memberIds = only
     ? inviteAssignee(store, roomId, only)
     : inviteMentionedBots(store, roomId, message);

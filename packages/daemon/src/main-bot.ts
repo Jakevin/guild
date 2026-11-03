@@ -98,8 +98,14 @@ export function stageAssign(
     if (bot.id === main) throw new StoreError(400, "公會會長不進據點編制。");
     store.addMember(room.id, bot.id);
   }
-  const lines = input.handles.map((handle) => `@${handle}`);
-  return { roomId: room.id, body: `${lines.join("\n")}\n\n${task}` };
+  store.recordAssignment({
+    roomId: room.id,
+    channel: room.name,
+    handles: input.handles,
+    task,
+  });
+  const wake = `@${input.handles.join(" @")}`;
+  return { roomId: room.id, body: `${task}\n\n${wake}` };
 }
 
 export async function runMainTool(
@@ -121,6 +127,11 @@ export async function runMainTool(
         text: `created #${room.name} (${room.id}). The roster is empty until you assign seats.`,
         isError: false,
       };
+    }
+    if (name === "recall") {
+      const found = store.recallAssignment(asString(args.id));
+      if (!found) return { text: `no assignment ${asString(args.id)}`, isError: true };
+      return { text: found, isError: false };
     }
     if (name === "assign") {
       const staged = stageAssign(store, {

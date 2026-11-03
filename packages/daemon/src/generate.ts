@@ -357,12 +357,14 @@ function extractSkillIds(content: string): string[] | null {
 /** The guild master runs the guild. This seat is not on a roster. */
 export const MAIN_RULES = `# Guild Master
 You are the guild master (公會會長). You are not a seat on a channel roster, and you do not do a seat's job.
-You run the guild with three tools:
+You have four tools and no others. You cannot run commands, read or write files, browse, spawn, schedule, or call MCP. Seat files do not grant those tools.
 - create_bot: hire a seat. It lands on #general. It is not a second guild master.
 - create_channel: open a channel. Do not name it general.
 - assign: put existing seats on a channel and give them the task. That starts their turn.
-Do not recruit by @handle. Do not use spawn to stand in for a seat. Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act only when the latest human message already asked.
-Stay quiet. After a tool succeeds, say what you created or who you assigned. When you name this role, say 公會會長.`;
+- recall: read one guild-index id. You get the task and the seat's one-line conclusion. Tool logs stay on the quest.
+The guild index is the work list in your context. A follow-up that names a seat already on one quest is delivered to that seat before you run. You do not see that turn. If two open quests could match, ask which channel. Do not guess.
+Do not recruit by @handle. Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 waits for the human too: say so and stop. You cannot push.
+Stay quiet. After a tool succeeds, say what you created or who you assigned, in one sentence. When you name this role, say 公會會長.`;
 
 /** Seat exclusivity, spec handoffs, quiet unless blocked. */
 export const HALL_RULES = `# Hall
@@ -372,7 +374,7 @@ When another seat on this quest has to start now, put @handle at the start of a 
 Each quest keeps a 派工 list: a mention appends a work record, and finishing this turn drops that seat. Each line-start @handle of a bot already on this quest starts that seat this turn. A markdown numbered list item that leads with a teammate (1. @design) also starts them, even if the handle is wrapped in backticks. Mentions that are only commentary in a sentence do not dispatch. A bot @handle files that note into a 1:1 交辦. The next seat sees what was just said this turn, not the older quest log. The public reply still lands on this quest. Do not wait for the human to press a button.
 Do not @all unless the human did. Do not recruit extra people; the human staffs the roster with 加入 (max ${CHANNEL_ROSTER_CAP} on a quest). @handle never adds a seat.
 You may @handle any teammate on this quest's roster whose job is the next step, even if the human only named you this turn. That is how the hall continues. Do not @handle a bot who is not on this quest. Do not dump the same work on every seat. If two seats must run in order, only @ the seat that can start now. Later seats stay in prose (四席完成後由 @infra, 通過後 @marketing, 最後 @infra) — those do not start this turn. After the first wave reports, @handle the next seat with a spec. Do not write a plan and stop.
-No status theater, no "I'll start now." When you checked a number or made a decision, say that before more tools. End on the point you just made, the block, or the one question still open.
+No status theater, no "I'll start now." The message you post is the conclusion. Leave command output and file dumps in the tool trace. When you checked a number or made a decision, say that before more tools. End on the point you just made, the block, or the one question still open.
 Money, sends, and irreversible destroy wait for the human. git push / tag / 上版 / 發布 is Act when the latest human message already asked — that is the authorization. Do not invent a second wait. Do not @handle a teammate to re-authorize. A prior seat's "wait for human" dies when the human already spoke.
 
 Harness this turn (Memory → Plan → Skills → Act):
@@ -432,6 +434,7 @@ export function buildChatSystem(input: {
   bare?: boolean;
   main?: boolean;
   rosterHandles?: string[];
+  guildIndex?: string;
 }): string {
   const skills = input.skills ?? [];
   const subagents = input.subagents ?? [];
@@ -531,10 +534,11 @@ export function buildChatSystem(input: {
           ? `${WHISPER_RULES}\n\n${BARE_WHISPER_NOTE}`
           : WHISPER_RULES
         : hallRulesFor(input.rosterHandles),
-    hostContext(),
-    TOOL_SYSTEM,
-    skillLine,
-    spawnLine,
+    input.main ? input.guildIndex || "" : "",
+    input.main ? "" : hostContext(),
+    input.main ? "" : TOOL_SYSTEM,
+    input.main ? "" : skillLine,
+    input.main ? "" : spawnLine,
     channelBlock,
     botMemBlock,
     roomMemBlock,
@@ -567,6 +571,7 @@ export async function chatReply(input: {
   bare?: boolean;
   main?: boolean;
   rosterHandles?: string[];
+  guildIndex?: string;
   compact?: CompactCheckpoint | null;
   onCompact?: (checkpoint: CompactCheckpoint) => void;
   onProgress?: (update: ToolProgress) => void;
@@ -598,6 +603,7 @@ export async function chatReply(input: {
     bare: input.bare,
     main: input.main,
     rosterHandles: input.rosterHandles,
+    guildIndex: input.guildIndex,
   });
   const llm = input.dataDir
     ? await tryChatLlm(input, env, input.dataDir, input.model, input.skills ?? [])
@@ -656,6 +662,7 @@ async function tryChatLlm(
     cronRun?: boolean;
     dispatch?: ToolContext["dispatch"];
     rosterHandles?: string[];
+    guildIndex?: string;
     askComputer?: () => Promise<boolean>;
   },
   env: NodeJS.ProcessEnv,
@@ -681,6 +688,7 @@ async function tryChatLlm(
     bare: input.bare,
     main: input.main,
     rosterHandles: input.rosterHandles,
+    guildIndex: input.guildIndex,
   });
   const peek = resolveLlm(dataDir, env, "chat", prefer);
   if (peek) {
@@ -707,6 +715,7 @@ async function tryChatLlm(
       cronRun: input.cronRun,
       sandbox: policy.sandbox,
       workspace: policy.workspace,
+      ...(input.main ? { main: true } : {}),
     });
   }
   const packed = await packHistory({
@@ -741,6 +750,7 @@ async function tryChatLlm(
       : input.whisper
         ? WHISPER_RULES
         : hallRulesFor(input.rosterHandles),
+    guildIndex: input.main ? input.guildIndex || "" : "",
   };
   const result = await llmComplete({
     dataDir,

@@ -189,6 +189,41 @@ test("soul change is a lease mismatch and starts Mode A", async () => {
   assert.equal(lastFreebuffTurnForTest()?.mode, "A");
 });
 
+test("guild index change is a lease mismatch and starts Mode A", async () => {
+  const home = tempHome();
+  hookFakeSdk(home, fakeSdkPage());
+  const first = "# Guild index\nNo assignment yet.";
+  await completeFreebuffChat({
+    dataDir: home,
+    target: webBridgeTarget(),
+    system: `sys\n${first}`,
+    messages: [{ role: "user", content: "hello there" }],
+    lease: { ...lease, guildIndex: first },
+  });
+  assert.equal(lastFreebuffTurnForTest()?.mode, "A");
+  hookFakeSdk(home, fakeSdkPage({ autoReply: "same index" }));
+  await completeFreebuffChat({
+    dataDir: home,
+    target: webBridgeTarget(),
+    system: `sys\n${first}`,
+    messages: [{ role: "user", content: "still there" }],
+    lease: { ...lease, userMessage: "still there", guildIndex: first },
+  });
+  assert.equal(lastFreebuffTurnForTest()?.mode, "B");
+  const next = "# Guild index\n- a1 #ops @pm — look — open";
+  hookFakeSdk(home, fakeSdkPage({ autoReply: "new index" }));
+  await completeFreebuffChat({
+    dataDir: home,
+    target: webBridgeTarget(),
+    system: `sys\n${next}`,
+    messages: [{ role: "user", content: "what is open" }],
+    lease: { ...lease, userMessage: "what is open", guildIndex: next },
+  });
+  const turn = lastFreebuffTurnForTest();
+  assert.equal(turn?.mode, "A");
+  assert.match(turn?.paste || "", /a1 #ops @pm/);
+});
+
 test("Mode A trims an 88k packed payload to the 32k composer budget", async () => {
   const home = tempHome();
   const page = fakeSdkPage();
